@@ -54,6 +54,13 @@ serve(async (req) => {
             to: volunteer.phone,
             body: message.body,
           })
+        } else if (message.channel === 'push') {
+          await sendPush({
+            supabase,
+            volunteer_id: recipient.volunteer_id,
+            title: message.subject || 'MedVolunteer',
+            body: message.body,
+          })
         }
 
         // Mark as delivered
@@ -128,4 +135,39 @@ async function sendSms({ to, body }: { to: string; body: string }) {
     }
   )
   if (!res.ok) throw new Error(`Twilio error: ${await res.text()}`)
+}
+
+// Stub: real VAPID implementation lives in the send-push edge function (Phase 8).
+// Here we delegate to it so the push channel is wired end-to-end when that
+// function is deployed.
+async function sendPush({ supabase, volunteer_id, title, body }: {
+  supabase: ReturnType<typeof createClient>
+  volunteer_id: string
+  title: string
+  body: string
+}) {
+  const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY')
+  if (!VAPID_PUBLIC_KEY) {
+    console.log(`[STUB] Push to volunteer ${volunteer_id}: ${title}`)
+    return
+  }
+  // Fetch all subscriptions for this volunteer and dispatch via send-push function
+  const { data: subs } = await supabase
+    .from('push_subscriptions')
+    .select('endpoint, p256dh, auth')
+    .eq('volunteer_id', volunteer_id)
+
+  if (!subs || subs.length === 0) return
+
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+  const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+  await fetch(`${SUPABASE_URL}/functions/v1/send-push`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ volunteer_id, title, body }),
+  })
 }

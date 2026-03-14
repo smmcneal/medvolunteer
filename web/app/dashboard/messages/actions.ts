@@ -1,0 +1,55 @@
+'use server'
+
+import { createClient } from '@/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
+
+export async function sendMessage(data: {
+  subject: string
+  body: string
+  channel: 'email' | 'sms' | 'push'
+  recipient_type: 'individual' | 'group' | 'all'
+  recipient_volunteer_ids: string[]
+}) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id')
+    .limit(1)
+    .single()
+  if (!org) throw new Error('No organization found')
+
+  // Insert the message
+  const { data: message, error: msgErr } = await supabase
+    .from('messages')
+    .insert({
+      org_id: org.id,
+      sender_id: user.id,
+      subject: data.subject,
+      body: data.body,
+      channel: data.channel,
+      recipient_type: data.recipient_type,
+      sent_at: new Date().toISOString(),
+      status: 'sent',
+    })
+    .select('id')
+    .single()
+
+  if (msgErr || !message) throw new Error(msgErr?.message ?? 'Failed to create message')
+
+  // Insert recipient rows
+  if (data.recipient_volunteer_ids.length > 0) {
+    const { error: recErr } = await supabase.from('message_recipients').insert(
+      data.recipient_volunteer_ids.map(vid => ({
+        message_id: message.id,
+        volunteer_id: vid,
+      }))
+    )
+    if (recErr) throw new Error(recErr.message)
+  }
+
+  revalidatePath('/dashboard/messages')
+}

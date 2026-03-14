@@ -1,0 +1,392 @@
+I'm building a medical volunteer management platform. It has three parts:
+1. A Progressive Web App (Next.js, volunteer-facing, mobile-first, installable)
+2. A web admin dashboard (Next.js 14, App Router, TypeScript, Tailwind)
+3. A Supabase backend (Postgres, Auth, Storage, Edge Functions)
+
+Both the volunteer PWA and the admin dashboard live in the same Next.js
+project — volunteer routes under /app/(volunteer)/, admin under
+/app/dashboard/. They share types, Supabase client config, and edge
+functions but have completely separate layouts and auth flows.
+
+Before writing any code, output the full system architecture and
+database schema, then wait for my approval.
+
+═══════════════════════════════════════════════════════
+DATABASE SCHEMA (Supabase / Postgres)
+═══════════════════════════════════════════════════════
+
+-- ORGANIZATIONS & LOCATIONS
+organizations        id, name, logo_url, settings jsonb
+locations            id, org_id, name, address, lat, lng,
+                     geofence_radius_meters (default 100)
+
+-- VOLUNTEERS
+volunteers           id, user_id (auth), org_id, first_name,
+                     last_name, email, phone, photo_url,
+                     category (enum), status (enum),
+                     onboarding_stage_id, created_at
+volunteer_locations  volunteer_id, location_id  (many-to-many)
+
+volunteer_category: medical_professional | support_staff |
+                    admin | trainee | other
+
+volunteer_status: applicant | onboarding | active |
+                  inactive | suspended
+
+-- ONBOARDING WORKFLOWS
+onboarding_workflows  id, org_id, name, category (applies to
+                      which volunteer_category)
+onboarding_stages     id, workflow_id, name, description,
+                      order_index, stage_type (enum),
+                      required: bool, deadline_days_after_start
+onboarding_progress   id, volunteer_id, stage_id,
+                      completed_at, completed_by,
+                      notes, metadata jsonb
+
+stage_type: document_sign | background_check |
+            in_person_meeting | learning_module |
+            manual_approval | form_submission
+
+-- CREDENTIALS & DOCUMENTS
+credentials          id, volunteer_id, type, license_number,
+                     issuing_body, expiration_date,
+                     document_url, verified_at, verified_by
+documents            id, volunteer_id, name, type,
+                     status (pending|signed|expired),
+                     docusign_envelope_id, signed_at, url
+
+-- BACKGROUND CHECKS
+background_checks    id, volunteer_id, provider (checkr),
+                     external_id, status, report_url,
+                     initiated_at, completed_at, result
+
+-- SHIFTS & TIME TRACKING
+shifts               id, org_id, location_id, name,
+                     start_time, end_time, required_count,
+                     role_requirements jsonb
+shift_assignments    id, shift_id, volunteer_id, role,
+                     status (assigned|confirmed|cancelled)
+time_entries         id, volunteer_id, shift_id, location_id,
+                     clock_in, clock_out,
+                     method (geofence|manual|admin),
+                     duration_minutes (computed)
+
+-- LEARNING MANAGEMENT (LMS)
+learning_modules     id, org_id, title, description,
+                     order_index, is_required,
+                     required_for_categories jsonb
+lessons              id, module_id, title, type (video|text|quiz),
+                     content_url, duration_minutes, order_index
+lesson_completions   id, volunteer_id, lesson_id,
+                     completed_at, score (for quizzes),
+                     time_spent_seconds
+quiz_questions       id, lesson_id, question, options jsonb,
+                     correct_answer_index
+
+-- COMMUNICATIONS
+messages             id, org_id, sender_id, subject, body,
+                     channel (email|sms|push),
+                     recipient_type (individual|group|all),
+                     sent_at, status
+message_recipients   id, message_id, volunteer_id,
+                     delivered_at, read_at
+
+-- FORMS
+forms                id, org_id, name, schema jsonb (JSON Schema),
+                     is_active
+form_submissions     id, form_id, volunteer_id,
+                     data jsonb, submitted_at
+
+-- PUSH SUBSCRIPTIONS (Web Push / VAPID)
+push_subscriptions   id, volunteer_id, endpoint, p256dh, auth,
+                     user_agent, created_at
+
+═══════════════════════════════════════════════════════
+VOLUNTEER PWA — VOLUNTEER-FACING
+═══════════════════════════════════════════════════════
+
+Tech: Next.js 14 (App Router), TypeScript, Tailwind CSS,
+      Supabase JS SDK (@supabase/ssr), next-pwa (Workbox),
+      Web Push API (VAPID), Geolocation API
+
+Routes live under /app/(volunteer)/ with a shared mobile-first
+layout: bottom tab bar, safe-area insets, touch targets ≥ 44px.
+Installable via Web App Manifest (manifest.json).
+
+Tab 1: Home  (/volunteer/home)
+  - Greeting with volunteer name + status badge
+  - Next upcoming shift card (tap to view details)
+  - Onboarding checklist progress bar (if not fully onboarded)
+  - Credential expiry warnings (badges for credentials
+    expiring within 30 days)
+  - Quick clock-in button if a shift is active now
+
+Tab 2: My Shifts  (/volunteer/shifts)
+  - Upcoming shifts list with location + time
+  - Manual clock in/out button (always visible as fallback)
+  - Past shifts list with hours logged
+  - Shift detail modal: role, location map link, co-volunteers
+
+Tab 3: Learn  (/volunteer/learn)
+  - Learning modules list with progress rings
+  - Module detail: ordered lesson list, locked indicator
+    if prerequisite modules are incomplete
+  - Lesson player:
+      video → <iframe> embed (YouTube / Vimeo URL)
+      text  → markdown-rendered content
+      quiz  → one question at a time, immediate feedback,
+               score shown on completion
+  - Module completion badge on finish
+
+Tab 4: My Profile  (/volunteer/profile)
+  - Personal info display (read-only; edit via admin)
+  - Credentials list with expiry badges
+  - Documents list (tap to open signed PDF in new tab)
+  - Background check status card
+  - Log out button
+
+Tab 5: Messages  (/volunteer/messages)
+  - Inbox: messages sent through the platform
+  - Unread count badge on tab icon
+  - Tap message → full detail view (marks as read)
+  - Channel badge (email / SMS / push) on each message
+
+GEOLOCATION (Web Geolocation API + Geofence logic):
+  - On shift start window (±30 min), poll navigator.geolocation
+    every 60s in a Service Worker background sync
+  - Compare coords against assigned location lat/lng + radius
+  - On enter: auto clock-in via Supabase edge function,
+    show a Web Push notification "Clocked in to [Location]"
+  - On exit: auto clock-out, record method = 'geofence'
+  - Fallback: manual clock-in button always visible
+  - Permission prompt shown on first visit to Shifts tab
+  - iOS 16.4+: Geolocation + Web Push both supported
+    when PWA is added to Home Screen
+
+WEB PUSH NOTIFICATIONS (VAPID):
+  - Request permission on first login
+  - Store PushSubscription (endpoint, p256dh, auth) in
+    push_subscriptions table
+  - Triggers: shift reminder 30 min before start,
+    clock-in/out confirmation, onboarding stage assigned,
+    new message received
+
+PWA INSTALL:
+  - manifest.json: name, short_name, icons (192/512px),
+    theme_color (#1B2A4A), background_color (#ffffff),
+    display: standalone, start_url: /volunteer/home
+  - beforeinstallprompt: show "Add to Home Screen" banner
+    on first visit after 30 seconds
+  - Service Worker (Workbox via next-pwa):
+    cache-first for static assets + API GET responses
+    network-first for Supabase data fetches
+    offline fallback page for no-network state
+
+═══════════════════════════════════════════════════════
+WEB ADMIN DASHBOARD — COORDINATOR-FACING
+═══════════════════════════════════════════════════════
+
+Tech: Next.js 14 (App Router), TypeScript,
+      Tailwind CSS, shadcn/ui, Supabase JS SDK
+
+Sidebar nav:
+  Dashboard | Volunteers | Onboarding | Shifts |
+  Learning | Reports | Messages | Settings
+
+/dashboard
+  - KPI cards: active volunteers, hours this month,
+    open shifts, pending onboarding steps
+  - Expiring credentials table (next 30 days)
+  - Recent check-ins feed
+
+/volunteers
+  - Table: name, category, status, location(s),
+    onboarding %, last active
+  - Filters: category, status, location, onboarding stage
+  - Click volunteer → /volunteers/[id]
+    - Full profile tabs: Info | Onboarding | Credentials |
+      Hours | Learning | Documents | Background Check | Notes
+
+/volunteers/[id]/onboarding
+  - Stage pipeline (kanban-style or vertical stepper)
+  - Each stage shows: status, completion date, who approved
+  - Admin can manually mark stages complete
+  - Send reminder button per incomplete stage
+
+/onboarding
+  - Workflow builder: create/edit workflows
+  - Define stages, order, type, deadline, required flag
+  - Assign workflow to volunteer category
+
+/shifts
+  - Calendar + list view of shifts by location
+  - Create/edit shifts with role requirements
+  - Roster view: assigned vs needed, check-in status live
+  - Manual override: clock in/out any volunteer
+
+/learning
+  - Module builder: create modules, add lessons
+  - Upload video (to Supabase Storage or paste Mux/Vimeo URL)
+  - Create quiz questions
+  - Completion report per module
+
+/reports
+  - Hours report: filter by volunteer / location / date range
+    → table + exportable CSV
+  - Onboarding completion rate per workflow
+  - Background check status summary
+  - Learning completion rates
+  - Credential expiry report (30/60/90 day windows)
+
+/messages
+  - Compose: To (individual, category, location group, all),
+    Channel (Email via Resend, SMS via Twilio, Push)
+  - Message history with delivery status
+
+/settings
+  - Locations: add/edit with lat/lng and geofence radius
+  - Integrations: Checkr API key, DocuSign config,
+    Twilio credentials, Resend API key, VAPID keys
+  - Volunteer categories: customize labels
+  - Org profile
+
+═══════════════════════════════════════════════════════
+SUPABASE EDGE FUNCTIONS
+═══════════════════════════════════════════════════════
+
+clock-in         POST: volunteer_id, location_id, method
+                 → insert time_entry, send push notification
+
+clock-out        POST: volunteer_id, time_entry_id
+                 → update time_entry, compute duration
+
+send-message     POST: message_id
+                 → route to Resend (email) or Twilio (SMS)
+                 → send Web Push to push_subscriptions
+
+send-push        POST: volunteer_id, title, body, url
+                 → look up push_subscriptions, send via
+                   Web Push Protocol (VAPID)
+
+initiate-bgcheck POST: volunteer_id
+                 → call Checkr API, store external_id
+
+bgcheck-webhook  POST (Checkr webhook)
+                 → update background_checks status + result
+
+docusign-webhook POST (DocuSign webhook)
+                 → update documents.status, signed_at
+
+advance-onboarding POST: volunteer_id, stage_id
+                 → mark stage complete, check if all stages
+                   done → update volunteer status to 'active',
+                   trigger welcome email + push notification
+
+═══════════════════════════════════════════════════════
+THIRD-PARTY INTEGRATIONS (stub with interface + mock
+during build, wire real API keys at end)
+═══════════════════════════════════════════════════════
+
+Background checks : Checkr  (checkr.com/docs)
+E-signatures      : Dropbox Sign  (sign.dropbox.com/api)
+Email             : Resend  (resend.com)
+SMS               : Twilio  (twilio.com/docs/sms)
+Video hosting     : Mux (mux.com) OR Vimeo embed URLs
+Web Push          : VAPID self-hosted via web-push npm package
+
+═══════════════════════════════════════════════════════
+BUILD PHASES — implement one at a time,
+stop after each and wait for my approval
+═══════════════════════════════════════════════════════
+
+PHASE 0 — Foundation                              ✅ COMPLETE
+  [x] supabase/migrations/001_initial_schema.sql (full schema)
+  [x] Supabase RLS policies
+  [x] Seed file with realistic mock data
+  [x] Edge functions: clock-in, clock-out, send-message,
+      initiate-background-check, background-check-webhook,
+      advance-onboarding
+  [x] Shared TypeScript types (web/types/database.ts)
+
+PHASE 1 — Web Admin: Volunteers + Onboarding      ✅ COMPLETE
+  [x] Next.js scaffold with Tailwind v4, Supabase auth
+  [x] Login page (polished split-panel design)
+  [x] Dashboard layout with Sidebar
+  [x] /dashboard — KPI cards, expiring credentials, check-ins
+  [x] /volunteers — filterable + sortable table
+  [x] /volunteers/[id] — detail page with 7 tabs
+  [x] /onboarding — full workflow builder
+
+PHASE 2 — Web Admin: Shifts + Reports             ✅ COMPLETE
+  [x] /shifts — calendar + list view, roster panel,
+      assign volunteers, manual clock in/out, create/delete
+  [x] /reports — Hours (CSV), Onboarding rates,
+      Background checks, Credential expiry
+
+PHASE 3 — Web Admin: LMS + Messages               ✅ COMPLETE
+  [x] /learning — module + lesson builder, quiz builder,
+      completion stats
+  [x] /messages — compose (email/sms/push), history,
+      delivery stats
+
+PHASE 4 — Web Admin: Settings                     ✅ COMPLETE
+  [x] /settings — Org profile, Locations CRUD (lat/lng +
+      geofence radius), Integrations (Checkr, DocuSign,
+      Twilio, Resend) with show/hide secrets
+
+PHASE 5 — Volunteer PWA: Core Shell + Auth
+  [ ] next-pwa setup (Workbox service worker, manifest.json)
+  [ ] /app/(volunteer)/layout.tsx — mobile-first shell,
+      bottom tab bar (Home / Shifts / Learn / Profile / Messages)
+  [ ] Volunteer login page (/volunteer/login) — separate
+      from admin, same Supabase Auth
+  [ ] Home tab: greeting, next shift card, onboarding
+      progress bar, credential expiry warnings
+  [ ] Push notification permission prompt + store
+      PushSubscription in push_subscriptions table
+
+PHASE 6 — Volunteer PWA: Shifts + Geolocation
+  [ ] Shifts tab: upcoming/past list, shift detail modal
+  [ ] Manual clock in/out (POST to clock-in/clock-out
+      edge functions)
+  [ ] Geolocation polling in Service Worker
+      (navigator.geolocation, compare vs location radius)
+  [ ] Auto clock-in/out on geofence enter/exit
+  [ ] Web Push notification on clock-in confirmation
+  [ ] "Add to Home Screen" install prompt banner
+
+PHASE 7 — Volunteer PWA: LMS + Messages
+  [ ] Learn tab: module list with progress rings,
+      lesson player (video iframe + text + quiz),
+      immediate quiz feedback, completion tracking
+  [ ] Messages tab: inbox list, unread badge,
+      message detail (marks read via Supabase update)
+
+PHASE 8 — Polish + PWA Hardening
+  [ ] Offline fallback page (Service Worker)
+  [ ] Skeleton loaders + empty states on all PWA screens
+  [ ] Error boundaries + retry UI
+  [ ] Accessibility pass (ARIA labels, focus management,
+      contrast ratios)
+  [ ] Lighthouse PWA score ≥ 90 (all categories)
+  [ ] send-push edge function (VAPID via web-push)
+  [ ] Wire VAPID keys in Settings integrations panel
+
+═══════════════════════════════════════════════════════
+CONSTRAINTS
+═══════════════════════════════════════════════════════
+- All integrations (Checkr, Twilio, etc.) should be
+  stubbed with a clean interface during build so the
+  app works end-to-end with mock data. Wire real keys last.
+- Use Supabase RLS (Row Level Security) from day one —
+  never skip this
+- Volunteer PWA targets modern browsers (Chrome 90+,
+  Safari 16.4+). Geolocation + Web Push require HTTPS
+  in production; use localhost for dev.
+- iOS Safari 16.4+ supports Web Push only when the PWA
+  is installed to the Home Screen. Show a clear install
+  prompt for iOS users.
+- Store no PHI in plain text; treat all volunteer data
+  as sensitive
+- Ask before making assumptions about any ambiguous
+  business rule
