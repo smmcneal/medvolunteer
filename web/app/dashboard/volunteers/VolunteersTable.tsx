@@ -120,7 +120,7 @@ export default function VolunteersTable({
   return (
     <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', overflow: 'hidden' }}>
       {/* Filter bar */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0f0f0', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0f0f0', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', minWidth: 0 }}>
         <div style={{ position: 'relative', flex: '1', minWidth: '200px' }}>
           <Search style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', width: '14px', height: '14px', color: '#9ca3af' }} />
           <input type="text" placeholder="Search by name or email…" value={search} onChange={e => setSearch(e.target.value)}
@@ -166,10 +166,11 @@ export default function VolunteersTable({
           <p style={{ fontSize: '14px', color: '#9ca3af' }}>No volunteers match the current filters.</p>
         </div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
           <thead>
             <tr style={{ background: '#fafafa' }}>
-              <Th onClick={() => toggleSort('name')} label="Volunteer" sortIcon={<SortIcon col="name" />} />
+              <ThFirst onClick={() => toggleSort('name')} label="Volunteer" sortIcon={<SortIcon col="name" />} />
               <Th onClick={() => toggleSort('category')} label="Category" sortIcon={<SortIcon col="category" />} />
               <Th onClick={() => toggleSort('status')} label="Status" sortIcon={<SortIcon col="status" />} />
               <Th label="Pipeline" />
@@ -178,7 +179,7 @@ export default function VolunteersTable({
               <Th label="Location(s)" />
               <Th onClick={() => toggleSort('onboarding_pct')} label="Onboarding" sortIcon={<SortIcon col="onboarding_pct" />} />
               <Th onClick={() => toggleSort('hours_this_month')} label="Hrs (month)" sortIcon={<SortIcon col="hours_this_month" />} />
-              <th style={{ padding: '10px 24px', width: '40px' }} />
+              <th style={{ padding: '10px 16px', width: '40px' }} />
             </tr>
           </thead>
           <tbody>
@@ -187,7 +188,7 @@ export default function VolunteersTable({
               const statStyle = STATUS_COLORS[v.status] ?? STATUS_COLORS.inactive
               return (
                 <tr key={v.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #f9f9f9' }}>
-                  <td style={{ padding: '13px 24px' }}>
+                  <td style={{ padding: '13px 16px 13px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: catStyle.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: catStyle.text, flexShrink: 0 }}>
                         {initials(v.first_name, v.last_name)}
@@ -200,23 +201,23 @@ export default function VolunteersTable({
                       </div>
                     </div>
                   </td>
-                  <td style={{ padding: '13px 24px' }}>
+                  <td style={{ padding: '13px 12px' }}>
                     <span style={{ fontSize: '12px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px', background: catStyle.bg, color: catStyle.text }}>
                       {CATEGORY_LABELS[v.category]}
                     </span>
                   </td>
-                  <td style={{ padding: '13px 24px' }}>
+                  <td style={{ padding: '13px 12px' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px', background: statStyle.bg, color: statStyle.text }}>
                       <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: statStyle.dot, flexShrink: 0 }} />
                       {STATUS_LABELS[v.status]}
                     </span>
                   </td>
-                  <td style={{ padding: '13px 24px' }}>
+                  <td style={{ padding: '13px 12px' }}>
                     {(() => {
                       const step = PHASE_STEP[v.pipeline_phase]
                       const total = 6
                       return (
-                        <div style={{ minWidth: 110 }}>
+                        <div style={{ minWidth: 100 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
                             <span style={{ fontSize: '11px', fontWeight: 600, color: '#374151' }}>
                               {PHASE_LABELS[v.pipeline_phase]}
@@ -237,8 +238,8 @@ export default function VolunteersTable({
                       )
                     })()}
                   </td>
-                  <td style={{ padding: '13px 24px' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  <td style={{ padding: '13px 12px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 160 }}>
                       {v.tags.length === 0
                         ? <span style={{ fontSize: '12px', color: '#d1d5db' }}>—</span>
                         : v.tags.map(tag => (
@@ -249,12 +250,12 @@ export default function VolunteersTable({
                       }
                     </div>
                   </td>
-                  <td style={{ padding: '13px 24px' }}>
+                  <td style={{ padding: '13px 12px' }}>
                     {v.active_flags.length === 0 ? (
                       <span style={{ fontSize: '12px', color: '#d1d5db' }}>—</span>
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {v.active_flags.slice(0, 5).map(flag => {
+                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, maxWidth: 180 }}>
+                        {v.active_flags.slice(0, 3).map(flag => {
                           const dotColor = flag.severity === 'critical' ? '#dc2626' : flag.severity === 'warning' ? '#f59e0b' : '#3b82f6'
                           return (
                             <span
@@ -273,13 +274,13 @@ export default function VolunteersTable({
                             </span>
                           )
                         })}
-                        {v.active_flags.length > 5 && (
-                          <span style={{ fontSize: '11px', color: '#9ca3af' }}>+{v.active_flags.length - 5}</span>
+                        {v.active_flags.length > 3 && (
+                          <span style={{ fontSize: '11px', color: '#9ca3af' }}>+{v.active_flags.length - 3}</span>
                         )}
                       </div>
                     )}
                   </td>
-                  <td style={{ padding: '13px 24px' }}>
+                  <td style={{ padding: '13px 12px' }}>
                     {v.locations.length === 0
                       ? <span style={{ fontSize: '12px', color: '#d1d5db' }}>—</span>
                       : v.locations.map(l => (
@@ -287,19 +288,19 @@ export default function VolunteersTable({
                         ))
                     }
                   </td>
-                  <td style={{ padding: '13px 24px' }}>
+                  <td style={{ padding: '13px 12px' }}>
                     {v.total_stages === 0 ? (
                       <span style={{ fontSize: '12px', color: '#d1d5db' }}>—</span>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ flex: 1, minWidth: '80px', height: '5px', borderRadius: '3px', background: '#f3f4f6', overflow: 'hidden' }}>
+                        <div style={{ flex: 1, minWidth: '70px', height: '5px', borderRadius: '3px', background: '#f3f4f6', overflow: 'hidden' }}>
                           <div style={{ height: '100%', borderRadius: '3px', background: v.onboarding_pct === 100 ? '#22c55e' : '#1B2A4A', width: `${v.onboarding_pct}%`, transition: 'width 0.3s ease' }} />
                         </div>
                         <span style={{ fontSize: '12px', color: '#6b7280', whiteSpace: 'nowrap' }}>{v.completed_stages}/{v.total_stages}</span>
                       </div>
                     )}
                   </td>
-                  <td style={{ padding: '13px 24px' }}>
+                  <td style={{ padding: '13px 12px' }}>
                     {v.hours_this_month === 0 ? (
                       <span style={{ fontSize: '12px', color: '#d1d5db' }}>—</span>
                     ) : (
@@ -319,6 +320,7 @@ export default function VolunteersTable({
             })}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )
@@ -326,7 +328,15 @@ export default function VolunteersTable({
 
 function Th({ label, onClick, sortIcon }: { label: string; onClick?: () => void; sortIcon?: React.ReactNode }) {
   return (
-    <th onClick={onClick} style={{ padding: '10px 24px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: '#9ca3af', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: onClick ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap' }}>
+    <th onClick={onClick} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: '#9ca3af', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: onClick ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>{label}{sortIcon}</span>
+    </th>
+  )
+}
+
+function ThFirst({ label, onClick, sortIcon }: { label: string; onClick?: () => void; sortIcon?: React.ReactNode }) {
+  return (
+    <th onClick={onClick} style={{ padding: '10px 12px 10px 20px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: '#9ca3af', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: onClick ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap' }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>{label}{sortIcon}</span>
     </th>
   )
