@@ -91,29 +91,79 @@ export default function FlagsPanel({
             <button
               onClick={() => setOpen(v => !v)}
               disabled={pending}
-              style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid #e5e7eb', background: '#fff', fontSize: 12, fontWeight: 600, color: '#374151', cursor: 'pointer' }}
+              style={{
+                padding: '7px 14px', borderRadius: 7,
+                border: '1px solid #e5e7eb', background: open ? '#f9fafb' : '#fff',
+                fontSize: 13, fontWeight: 600, color: '#374151',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+              }}
             >
-              + Raise flag
+              <span style={{ fontSize: 15, lineHeight: 1 }}>⛳</span> Raise flag
             </button>
+
             {open && (
-              <div style={{ position: 'absolute', right: 0, bottom: '110%', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 50, minWidth: 200 }}>
-                {orgFlags.map(flag => {
-                  const sev = SEV_STYLES[flag.severity]
-                  return (
-                    <button
-                      key={flag.id}
-                      onClick={() => handleRaise(flag)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer' }}
-                    >
-                      <span style={{ fontSize: 14 }}>{sev.icon}</span>
-                      <div style={{ textAlign: 'left' }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{flag.name}</div>
-                        {flag.description && <div style={{ fontSize: 11, color: '#9ca3af' }}>{flag.description}</div>}
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
+              <>
+                {/* Backdrop to close on outside click */}
+                <div
+                  onClick={() => setOpen(false)}
+                  style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+                />
+                <div style={{
+                  position: 'absolute', right: 0, top: 'calc(100% + 6px)',
+                  background: '#fff', border: '1px solid #e5e7eb',
+                  borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.12)',
+                  zIndex: 50, minWidth: 240, overflow: 'hidden',
+                }}>
+                  <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid #f3f4f6' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Select a flag type
+                    </span>
+                  </div>
+                  <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                    {orgFlags.map((flag, i) => {
+                      const sev = SEV_STYLES[flag.severity]
+                      return (
+                        <button
+                          key={flag.id}
+                          onClick={() => handleRaise(flag)}
+                          style={{
+                            display: 'flex', alignItems: 'flex-start', gap: 10,
+                            width: '100%', padding: '10px 14px',
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            textAlign: 'left',
+                            borderTop: i === 0 ? 'none' : '1px solid #f9f9f9',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                        >
+                          <span style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                            background: sev.bg, border: `1px solid ${sev.border}`,
+                            fontSize: 14, marginTop: 1,
+                          }}>
+                            {sev.icon}
+                          </span>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{flag.name}</div>
+                            {flag.description && (
+                              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{flag.description}</div>
+                            )}
+                            <span style={{
+                              display: 'inline-block', marginTop: 4,
+                              fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                              letterSpacing: '0.05em', padding: '1px 6px', borderRadius: 4,
+                              background: sev.bg, color: sev.text,
+                            }}>
+                              {flag.severity}
+                            </span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}

@@ -48,23 +48,44 @@ export default function TagsPanel({
             <button
               onClick={() => setOpen(v => !v)}
               disabled={pending}
-              style={{ fontSize: 12, color: '#00897B', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+              style={{
+                fontSize: 12, color: '#00897B', background: 'none', border: 'none',
+                cursor: 'pointer', fontWeight: 600, padding: '2px 0',
+              }}
             >
               + Add tag
             </button>
             {open && (
-              <div style={{ position: 'absolute', right: 0, bottom: '110%', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 50, minWidth: 160 }}>
-                {available.map(tag => (
-                  <button
-                    key={tag.id}
-                    onClick={() => handleApply(tag)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-                  >
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: tag.color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, color: '#374151' }}>{tag.name}</span>
-                  </button>
-                ))}
-              </div>
+              <>
+                <div
+                  onClick={() => setOpen(false)}
+                  style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+                />
+                <div style={{
+                  position: 'absolute', right: 0, top: 'calc(100% + 4px)',
+                  background: '#fff', border: '1px solid #e5e7eb',
+                  borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.12)',
+                  zIndex: 50, minWidth: 180, overflow: 'hidden', maxHeight: 240, overflowY: 'auto',
+                }}>
+                  {available.map((tag, i) => (
+                    <button
+                      key={tag.id}
+                      onClick={() => handleApply(tag)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        width: '100%', padding: '9px 14px',
+                        background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+                        borderTop: i === 0 ? 'none' : '1px solid #f9f9f9',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: tag.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>{tag.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}
