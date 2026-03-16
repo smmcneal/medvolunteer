@@ -1,6 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { unstable_noStore as noStore } from 'next/cache'
 import LearningView from './LearningView'
 import type { LearningModule, Lesson, QuizQuestion, LessonCompletion, Volunteer } from '@/types/database'
+
+export const dynamic = 'force-dynamic'
 
 export interface QuizQuestionRow extends QuizQuestion {
   options: string[]
@@ -18,7 +21,8 @@ export interface ModuleWithLessons extends LearningModule {
 }
 
 async function fetchLearningData() {
-  const supabase = await createClient()
+  noStore()
+  const supabase = createAdminClient()
 
   const [
     { data: modules },

@@ -1,9 +1,12 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { unstable_noStore as noStore } from 'next/cache'
 import {
   Users, Clock, CalendarDays, ClipboardList,
   AlertTriangle, TrendingUp, MapPin, Activity
 } from 'lucide-react'
 import type { Volunteer, Credential, TimeEntry, Location } from '@/types/database'
+
+export const dynamic = 'force-dynamic'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,7 +30,8 @@ interface CheckIn extends TimeEntry {
 // ─── Data fetchers ────────────────────────────────────────────────────────────
 
 async function fetchDashboardData() {
-  const supabase = await createClient()
+  noStore()
+  const supabase = createAdminClient()
 
   const [
     volunteersRes,

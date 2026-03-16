@@ -2,16 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Next.js (web)",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["C:\\Users\\smmcn\\Desktop\\medvolunteer\\web\\node_modules\\next\\dist\\bin\\next", "dev", "C:\\Users\\smmcn\\Desktop\\medvolunteer\\web"]
+      "name": "Next.js dev",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "cd web && npm run dev"],
       "port": 3000
-    },
-    {
-      "name": "Supabase local",
-      "runtimeExecutable": "supabase",
-      "runtimeArgs": ["start"],
-      "port": 54321
     }
   ]
 }

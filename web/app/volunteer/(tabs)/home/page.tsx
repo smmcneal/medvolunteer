@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import HomeView from './HomeView'
 import type { Volunteer, Shift, Credential } from '@/types/database'
@@ -14,6 +15,7 @@ interface HomeData {
   onboardingCompleted: number
   onboardingTotal: number
   expiringCredentials: Pick<Credential, 'id' | 'type' | 'expiration_date'>[]
+  activeEntry: { id: string; clock_in: string } | null
 }
 
 async function fetchHomeData(): Promise<HomeData> {
@@ -21,7 +23,9 @@ async function fetchHomeData(): Promise<HomeData> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/volunteer/login')
 
-  const { data: volunteer } = await supabase
+  const admin = createAdminClient()
+
+  const { data: volunteer } = await admin
     .from('volunteers')
     .select('*')
     .eq('user_id', user.id)
@@ -34,7 +38,7 @@ async function fetchHomeData(): Promise<HomeData> {
   thirtyDays.setDate(thirtyDays.getDate() + 30)
 
   // Get shift IDs this volunteer is assigned to
-  const { data: assignments } = await supabase
+  const { data: assignments } = await admin
     .from('shift_assignments')
     .select('shift_id')
     .eq('volunteer_id', volunteer.id)
@@ -43,10 +47,10 @@ async function fetchHomeData(): Promise<HomeData> {
   const shiftIds = assignments?.map((a: { shift_id: string }) => a.shift_id) ?? []
 
   // Run remaining queries in parallel
-  const [shiftsResult, workflowResult, progressResult, credsResult] = await Promise.all([
+  const [shiftsResult, workflowResult, progressResult, credsResult, activeEntryResult] = await Promise.all([
     // Upcoming shifts (next 3)
     shiftIds.length > 0
-      ? supabase
+      ? admin
           .from('shifts')
           .select('*, locations(name)')
           .in('id', shiftIds)
@@ -56,7 +60,7 @@ async function fetchHomeData(): Promise<HomeData> {
       : Promise.resolve({ data: [] }),
 
     // Active onboarding workflow for this volunteer's category
-    supabase
+    admin
       .from('onboarding_workflows')
       .select('id, onboarding_stages(id)')
       .eq('applies_to_category', volunteer.category)
@@ -65,20 +69,28 @@ async function fetchHomeData(): Promise<HomeData> {
       .maybeSingle(),
 
     // Completed onboarding stages
-    supabase
+    admin
       .from('onboarding_progress')
       .select('stage_id')
       .eq('volunteer_id', volunteer.id)
       .not('completed_at', 'is', null),
 
     // Credentials expiring in the next 30 days
-    supabase
+    admin
       .from('credentials')
       .select('id, type, expiration_date')
       .eq('volunteer_id', volunteer.id)
       .gte('expiration_date', new Date().toISOString().split('T')[0])
       .lte('expiration_date', thirtyDays.toISOString().split('T')[0])
       .order('expiration_date', { ascending: true }),
+
+    // Active clock-in (no clock_out yet)
+    admin
+      .from('time_entries')
+      .select('id, clock_in')
+      .eq('volunteer_id', volunteer.id)
+      .is('clock_out', null)
+      .maybeSingle(),
   ])
 
   const totalStages = (workflowResult.data as { onboarding_stages: { id: string }[] } | null)
@@ -92,6 +104,7 @@ async function fetchHomeData(): Promise<HomeData> {
     onboardingCompleted: completedStages,
     onboardingTotal: totalStages,
     expiringCredentials: (credsResult.data ?? []) as Pick<Credential, 'id' | 'type' | 'expiration_date'>[],
+    activeEntry: activeEntryResult.data as { id: string; clock_in: string } | null,
   }
 }
 

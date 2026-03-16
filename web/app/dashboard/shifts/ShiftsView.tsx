@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation'
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List,
   MapPin, Clock, Users, Trash2, UserPlus, X,
-  LogIn, LogOut, AlertCircle, Search,
+  LogIn, LogOut, AlertCircle, Search, ArrowLeft, GraduationCap,
 } from 'lucide-react'
 import {
   createShift, deleteShift,
-  assignVolunteer, removeAssignment,
+  assignVolunteer, assignTraineeWithMentor, removeAssignment,
   manualClockIn, manualClockOut,
 } from './actions'
 import type { ShiftWithRoster } from './page'
@@ -55,12 +55,6 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
-function fmtDatetimeLocal(iso: string) {
-  const d = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
 function locationColor(locationId: string | null, locations: { id: string }[]) {
   if (!locationId) return '#9ca3af'
   const idx = locations.findIndex(l => l.id === locationId)
@@ -86,6 +80,8 @@ const EMPTY_CREATE: CreateForm = {
   name: '', location_id: '', start_time: '', end_time: '', required_count: '1', notes: '',
 }
 
+type VolunteerLike = Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'category' | 'status' | 'pipeline_phase'>
+
 export default function ShiftsView({
   shifts,
   locations,
@@ -93,33 +89,51 @@ export default function ShiftsView({
 }: {
   shifts: ShiftWithRoster[]
   locations: Pick<Location, 'id' | 'name'>[]
-  volunteers: Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'category' | 'status'>[]
+  volunteers: VolunteerLike[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
   const today = new Date()
-  const [view, setView]       = useState<'calendar' | 'list'>('calendar')
-  const [calYear, setCalYear] = useState(today.getFullYear())
+  const [view, setView]         = useState<'calendar' | 'list'>('calendar')
+  const [calYear, setCalYear]   = useState(today.getFullYear())
   const [calMonth, setCalMonth] = useState(today.getMonth())
-  const [selectedId, setSelectedId]   = useState<string | null>(null)
-  const [showCreate, setShowCreate]   = useState(false)
-  const [createForm, setCreateForm]   = useState<CreateForm>(EMPTY_CREATE)
+  const [selectedId, setSelectedId]     = useState<string | null>(null)
+  const [showCreate, setShowCreate]     = useState(false)
+  const [createForm, setCreateForm]     = useState<CreateForm>(EMPTY_CREATE)
   const [assignSearch, setAssignSearch] = useState('')
-  const [showAssign, setShowAssign]   = useState(false)
-  const [error, setError]             = useState<string | null>(null)
-  const [listFilter, setListFilter]   = useState<'upcoming' | 'past'>('upcoming')
+  const [showAssign, setShowAssign]     = useState(false)
+  const [error, setError]               = useState<string | null>(null)
+  const [listFilter, setListFilter]     = useState<'upcoming' | 'past'>('upcoming')
+
+  // New Shift modal volunteer picker state
+  const [createVolunteerIds, setCreateVolunteerIds] = useState<Set<string>>(new Set())
+  const [createVolSearch, setCreateVolSearch]       = useState('')
+
+  // Mentor-pairing state: when a trainee is selected, wait for mentor pick
+  const [pendingTrainee, setPendingTrainee] = useState<VolunteerLike | null>(null)
+  const [mentorSearch, setMentorSearch]     = useState('')
 
   const selected = shifts.find(s => s.id === selectedId) ?? null
 
-  function refresh() { router.refresh(); setError(null) }
+  // Build a volunteer lookup map for mentor name display
+  const volunteerById = useMemo(() => {
+    const map: Record<string, VolunteerLike> = {}
+    for (const v of volunteers) map[v.id] = v
+    return map
+  }, [volunteers])
 
+  // In React 18, startTransition doesn't track async work — so we await the mutation
+  // first, then wrap router.refresh() in a fresh startTransition so isPending correctly
+  // reflects the server re-fetch loading state.
   async function run(fn: () => Promise<void>) {
     setError(null)
-    startTransition(async () => {
-      try { await fn(); refresh() }
-      catch (e) { setError(e instanceof Error ? e.message : 'Something went wrong') }
-    })
+    try {
+      await fn()
+      startTransition(() => { router.refresh() })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong')
+    }
   }
 
   // ── Calendar data ──────────────────────────────────────────────
@@ -152,7 +166,7 @@ export default function ShiftsView({
     return shifts.filter(s => listFilter === 'upcoming' ? s.start_time >= now : s.start_time < now)
   }, [shifts, listFilter])
 
-  // ── Assign volunteer list (exclude already assigned) ───────────
+  // ── Assignable volunteers (exclude already assigned) ──────────
 
   const assignableVolunteers = useMemo(() => {
     if (!selected) return []
@@ -163,21 +177,48 @@ export default function ShiftsView({
     )
   }, [selected, volunteers, assignSearch])
 
+  // Volunteers available to assign during shift creation (exclude already selected)
+  const createVolunteerOptions = useMemo(() => {
+    return volunteers.filter(v =>
+      !createVolunteerIds.has(v.id) &&
+      (createVolSearch === '' || `${v.first_name} ${v.last_name}`.toLowerCase().includes(createVolSearch.toLowerCase()))
+    )
+  }, [volunteers, createVolunteerIds, createVolSearch])
+
+  // Eligible mentors for a pending trainee: active volunteers (pipeline_phase === 'active' or status === 'volunteer')
+  const eligibleMentors = useMemo(() => {
+    if (!selected || !pendingTrainee) return []
+    return volunteers.filter(v =>
+      v.id !== pendingTrainee.id &&
+      v.pipeline_phase === 'active' &&
+      (mentorSearch === '' || `${v.first_name} ${v.last_name}`.toLowerCase().includes(mentorSearch.toLowerCase()))
+    )
+  }, [selected, pendingTrainee, volunteers, mentorSearch])
+
   // ── Actions ────────────────────────────────────────────────────
 
   function handleCreate() {
     if (!createForm.name || !createForm.start_time || !createForm.end_time) return
     run(async () => {
-      await createShift({
+      const shiftDate = new Date(createForm.start_time)
+      const { shiftId } = await createShift({
         name: createForm.name,
         location_id: createForm.location_id || null,
-        start_time: new Date(createForm.start_time).toISOString(),
+        start_time: shiftDate.toISOString(),
         end_time: new Date(createForm.end_time).toISOString(),
         required_count: parseInt(createForm.required_count) || 1,
         notes: createForm.notes,
+        volunteer_ids: [...createVolunteerIds],
       })
       setCreateForm(EMPTY_CREATE)
+      setCreateVolunteerIds(new Set())
+      setCreateVolSearch('')
       setShowCreate(false)
+      // Navigate calendar to the shift's month so it's visible immediately
+      setCalYear(shiftDate.getFullYear())
+      setCalMonth(shiftDate.getMonth())
+      setView('calendar')
+      setSelectedId(shiftId)
     })
   }
 
@@ -186,13 +227,35 @@ export default function ShiftsView({
     run(async () => { await deleteShift(id); setSelectedId(null) })
   }
 
-  function handleAssign(volunteerId: string) {
+  function handlePickVolunteer(v: VolunteerLike) {
     if (!selected) return
+    if (v.pipeline_phase === 'training') {
+      // Two-step: select mentor first
+      setPendingTrainee(v)
+      setMentorSearch('')
+    } else {
+      run(async () => {
+        await assignVolunteer(selected.id, v.id)
+        setShowAssign(false)
+        setAssignSearch('')
+      })
+    }
+  }
+
+  function handleAssignWithMentor(mentorId: string) {
+    if (!selected || !pendingTrainee) return
     run(async () => {
-      await assignVolunteer(selected.id, volunteerId)
+      await assignTraineeWithMentor(selected.id, pendingTrainee.id, mentorId)
+      setPendingTrainee(null)
       setShowAssign(false)
       setAssignSearch('')
+      setMentorSearch('')
     })
+  }
+
+  function handleCancelTraineePick() {
+    setPendingTrainee(null)
+    setMentorSearch('')
   }
 
   function handleRemoveAssignment(assignmentId: string) {
@@ -342,7 +405,6 @@ export default function ShiftsView({
                       minHeight: '100px', padding: '6px',
                       position: 'relative',
                     }}>
-                      {/* Date number */}
                       <div style={{
                         width: '24px', height: '24px', borderRadius: '50%',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -354,7 +416,6 @@ export default function ShiftsView({
                         {cell.getDate()}
                       </div>
 
-                      {/* Shifts */}
                       {dayShifts.slice(0, 2).map(s => {
                         const color = locationColor(s.location_id, locations)
                         const filled = s.assignments.length
@@ -394,7 +455,6 @@ export default function ShiftsView({
 
           {view === 'list' && (
             <div>
-              {/* Filter tabs */}
               <div style={{ display: 'flex', gap: '4px', marginBottom: '16px' }}>
                 {(['upcoming', 'past'] as const).map(f => (
                   <button key={f} onClick={() => setListFilter(f)} style={{
@@ -497,7 +557,7 @@ export default function ShiftsView({
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0f0f0' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' }}>
                 <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#111827', flex: 1, marginRight: '8px' }}>{selected.name}</h3>
-                <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '2px' }}>
+                <button onClick={() => { setSelectedId(null); setShowAssign(false); setPendingTrainee(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '2px' }}>
                   <X style={{ width: '16px', height: '16px' }} />
                 </button>
               </div>
@@ -517,7 +577,6 @@ export default function ShiftsView({
                   {selected.assignments.length} / {selected.required_count} filled
                 </span>
               </div>
-              {/* Roster fill bar */}
               <div style={{ marginTop: '10px', height: '5px', background: '#f3f4f6', borderRadius: '3px', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%', borderRadius: '3px', transition: 'width 0.3s',
@@ -533,21 +592,23 @@ export default function ShiftsView({
                 <span style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                   Assigned Volunteers
                 </span>
-                <button
-                  onClick={() => { setShowAssign(!showAssign); setAssignSearch('') }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '4px',
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontSize: '12px', color: TEAL, fontWeight: 500, padding: 0,
-                  }}
-                >
-                  <UserPlus style={{ width: '13px', height: '13px' }} />
-                  Assign
-                </button>
+                {!pendingTrainee && (
+                  <button
+                    onClick={() => { setShowAssign(!showAssign); setAssignSearch('') }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      fontSize: '12px', color: TEAL, fontWeight: 500, padding: 0,
+                    }}
+                  >
+                    <UserPlus style={{ width: '13px', height: '13px' }} />
+                    Assign
+                  </button>
+                )}
               </div>
 
-              {/* Assign search */}
-              {showAssign && (
+              {/* ── Step 1: Pick volunteer ── */}
+              {showAssign && !pendingTrainee && (
                 <div style={{ marginBottom: '12px', background: '#fafafa', borderRadius: '8px', border: '1px solid #f0f0f0', overflow: 'hidden' }}>
                   <div style={{ position: 'relative', padding: '8px' }}>
                     <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', width: '13px', height: '13px', color: '#9ca3af' }} />
@@ -559,16 +620,84 @@ export default function ShiftsView({
                       autoFocus
                     />
                   </div>
+                  <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                    {assignableVolunteers.slice(0, 20).map(v => {
+                      const isTrainee = v.pipeline_phase === 'training'
+                      return (
+                        <div
+                          key={v.id}
+                          onClick={() => handlePickVolunteer(v)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            padding: '8px 12px', cursor: 'pointer', transition: 'background 0.1s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <div style={{
+                            width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+                            background: `${CAT_COLORS[v.category] ?? '#6b7280'}18`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '10px', fontWeight: 700, color: CAT_COLORS[v.category] ?? '#6b7280',
+                          }}>
+                            {initials(v.first_name, v.last_name)}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>
+                              {v.first_name} {v.last_name}
+                            </span>
+                            {isTrainee && (
+                              <span style={{ fontSize: '10px', background: '#fef3c7', color: '#92400e', padding: '1px 5px', borderRadius: '4px', marginLeft: '5px' }}>
+                                needs mentor
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {assignableVolunteers.length === 0 && (
+                      <p style={{ fontSize: '12px', color: '#9ca3af', padding: '12px', textAlign: 'center' }}>
+                        {assignSearch ? 'No matches' : 'All volunteers assigned'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 2: Pick mentor for trainee ── */}
+              {pendingTrainee && (
+                <div style={{ marginBottom: '12px', background: '#fffbeb', borderRadius: '8px', border: '1px solid #fde68a', overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 12px', borderBottom: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button onClick={handleCancelTraineePick} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', padding: '0', display: 'flex' }}>
+                      <ArrowLeft style={{ width: '13px', height: '13px' }} />
+                    </button>
+                    <div>
+                      <p style={{ fontSize: '12px', fontWeight: 600, color: '#92400e' }}>
+                        Select mentor for {pendingTrainee.first_name} {pendingTrainee.last_name}
+                      </p>
+                      <p style={{ fontSize: '11px', color: '#b45309' }}>Training-phase volunteers require a mentor</p>
+                    </div>
+                  </div>
+                  <div style={{ position: 'relative', padding: '8px' }}>
+                    <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', width: '13px', height: '13px', color: '#9ca3af' }} />
+                    <input
+                      style={{ ...inputStyle, paddingLeft: '28px' }}
+                      placeholder="Search mentors…"
+                      value={mentorSearch}
+                      onChange={e => setMentorSearch(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
                   <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
-                    {assignableVolunteers.slice(0, 20).map(v => (
+                    {eligibleMentors.slice(0, 20).map(v => (
                       <div
                         key={v.id}
-                        onClick={() => handleAssign(v.id)}
+                        onClick={() => handleAssignWithMentor(v.id)}
                         style={{
                           display: 'flex', alignItems: 'center', gap: '8px',
                           padding: '8px 12px', cursor: 'pointer', transition: 'background 0.1s',
                         }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#fef3c7')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
                         <div style={{
@@ -584,17 +713,17 @@ export default function ShiftsView({
                         </span>
                       </div>
                     ))}
-                    {assignableVolunteers.length === 0 && (
+                    {eligibleMentors.length === 0 && (
                       <p style={{ fontSize: '12px', color: '#9ca3af', padding: '12px', textAlign: 'center' }}>
-                        {assignSearch ? 'No matches' : 'All volunteers assigned'}
+                        {mentorSearch ? 'No matches' : 'No active volunteers available as mentors'}
                       </p>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Assigned volunteers */}
-              {selected.assignments.length === 0 && !showAssign ? (
+              {/* Assigned volunteers list */}
+              {selected.assignments.length === 0 && !showAssign && !pendingTrainee ? (
                 <div style={{ padding: '24px 0', textAlign: 'center' }}>
                   <Users style={{ width: '24px', height: '24px', color: '#e5e7eb', margin: '0 auto 6px' }} />
                   <p style={{ fontSize: '13px', color: '#9ca3af' }}>No volunteers assigned yet</p>
@@ -604,14 +733,16 @@ export default function ShiftsView({
                   {selected.assignments.map(a => {
                     const color = CAT_COLORS[a.volunteer.category] ?? '#6b7280'
                     const te = a.time_entry
-                    const isClockedIn = te && !te.clock_out
+                    const isClockedIn  = te && !te.clock_out
                     const isClockedOut = te && te.clock_out
+                    const isTrainee    = a.volunteer.pipeline_phase === 'training'
+                    const mentorVol    = a.mentor_id ? volunteerById[a.mentor_id] : null
                     return (
                       <div key={a.id} style={{
                         padding: '10px 12px', borderRadius: '8px',
-                        border: `1px solid ${isClockedIn ? '#d1fae5' : '#f3f4f6'}`,
-                        background: isClockedIn ? '#f0fdf4' : 'white',
-                        display: 'flex', alignItems: 'center', gap: '10px',
+                        border: `1px solid ${isClockedIn ? '#d1fae5' : isTrainee ? '#fde68a' : '#f3f4f6'}`,
+                        background: isClockedIn ? '#f0fdf4' : isTrainee ? '#fffbeb' : 'white',
+                        display: 'flex', alignItems: 'flex-start', gap: '10px',
                       }}>
                         {/* Avatar */}
                         <div style={{
@@ -623,18 +754,36 @@ export default function ShiftsView({
                           {initials(a.volunteer.first_name, a.volunteer.last_name)}
                         </div>
 
-                        {/* Name + status */}
+                        {/* Name + status + mentor info */}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>
-                            {a.volunteer.first_name} {a.volunteer.last_name}
-                          </p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                            <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>
+                              {a.volunteer.first_name} {a.volunteer.last_name}
+                            </p>
+                            {isTrainee && (
+                              <span style={{ fontSize: '10px', background: '#fef3c7', color: '#92400e', padding: '1px 5px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                <GraduationCap style={{ width: '10px', height: '10px' }} /> Trainee
+                              </span>
+                            )}
+                          </div>
+                          {/* Mentor line */}
+                          {isTrainee && mentorVol && (
+                            <p style={{ fontSize: '11px', color: '#92400e', marginTop: '2px' }}>
+                              Mentor: {mentorVol.first_name} {mentorVol.last_name}
+                            </p>
+                          )}
+                          {isTrainee && !mentorVol && (
+                            <p style={{ fontSize: '11px', color: '#dc2626', marginTop: '2px' }}>
+                              ⚠ No mentor assigned
+                            </p>
+                          )}
                           {isClockedIn && (
-                            <p style={{ fontSize: '11px', color: '#16a34a' }}>
+                            <p style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px' }}>
                               Clocked in {fmtTime(te.clock_in)}
                             </p>
                           )}
                           {isClockedOut && (
-                            <p style={{ fontSize: '11px', color: '#6b7280' }}>
+                            <p style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
                               {fmtTime(te.clock_in)} – {fmtTime(te.clock_out!)}
                               {te.duration_minutes ? ` · ${Math.floor(te.duration_minutes / 60)}h ${te.duration_minutes % 60}m` : ''}
                             </p>
@@ -737,7 +886,7 @@ export default function ShiftsView({
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
               <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#111827' }}>New Shift</h2>
-              <button onClick={() => setShowCreate(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>
+              <button onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>
                 <X style={{ width: '18px', height: '18px' }} />
               </button>
             </div>
@@ -776,13 +925,104 @@ export default function ShiftsView({
                 <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notes</label>
                 <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '56px', lineHeight: 1.5 }} value={createForm.notes} onChange={e => setCreateForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" />
               </div>
+
+              {/* Volunteer picker */}
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Assign Volunteers
+                </label>
+
+                {/* Selected volunteer chips */}
+                {createVolunteerIds.size > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '8px' }}>
+                    {[...createVolunteerIds].map(vid => {
+                      const v = volunteers.find(x => x.id === vid)
+                      if (!v) return null
+                      return (
+                        <span key={vid} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                          background: '#e0f2f1', color: '#00695c', fontSize: '12px',
+                          fontWeight: 500, padding: '3px 8px', borderRadius: '99px',
+                        }}>
+                          {v.first_name} {v.last_name}
+                          {v.pipeline_phase === 'training' && (
+                            <span style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 700 }} title="Training phase — mentor must be assigned after creation"> ★</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setCreateVolunteerIds(prev => { const next = new Set(prev); next.delete(vid); return next })}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#00897B' }}
+                          >
+                            <X style={{ width: '11px', height: '11px' }} />
+                          </button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Search input */}
+                <div style={{ position: 'relative' }}>
+                  <Search style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', width: '13px', height: '13px', color: '#9ca3af', pointerEvents: 'none' }} />
+                  <input
+                    style={{ ...inputStyle, paddingLeft: '28px' }}
+                    placeholder="Search volunteers to add…"
+                    value={createVolSearch}
+                    onChange={e => setCreateVolSearch(e.target.value)}
+                  />
+                </div>
+
+                {/* Dropdown list */}
+                {createVolSearch !== '' && (
+                  <div style={{
+                    marginTop: '4px', border: '1px solid #e5e7eb', borderRadius: '7px',
+                    background: 'white', maxHeight: '160px', overflowY: 'auto',
+                  }}>
+                    {createVolunteerOptions.length === 0 ? (
+                      <div style={{ padding: '10px 12px', fontSize: '12px', color: '#9ca3af' }}>No volunteers found</div>
+                    ) : createVolunteerOptions.slice(0, 10).map(v => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => {
+                          setCreateVolunteerIds(prev => new Set([...prev, v.id]))
+                          setCreateVolSearch('')
+                        }}
+                        style={{
+                          width: '100%', textAlign: 'left', background: 'none', border: 'none',
+                          cursor: 'pointer', padding: '8px 12px', fontSize: '13px', display: 'flex',
+                          alignItems: 'center', gap: '8px',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f9fafb' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
+                      >
+                        <span style={{
+                          width: '26px', height: '26px', borderRadius: '50%',
+                          background: CAT_COLORS[v.category] + '22',
+                          color: CAT_COLORS[v.category] ?? '#6b7280',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '10px', fontWeight: 700, flexShrink: 0,
+                        }}>
+                          {initials(v.first_name, v.last_name)}
+                        </span>
+                        <span style={{ flex: 1 }}>
+                          {v.first_name} {v.last_name}
+                          {v.pipeline_phase === 'training' && (
+                            <span style={{ marginLeft: '6px', fontSize: '10px', color: '#F59E0B', fontWeight: 600 }}>training</span>
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
               <button style={btnPrimary} onClick={handleCreate} disabled={!createForm.name || !createForm.start_time || !createForm.end_time || isPending}>
                 Create Shift
               </button>
-              <button style={btnSecondary} onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE) }}>
+              <button style={btnSecondary} onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch('') }}>
                 Cancel
               </button>
             </div>

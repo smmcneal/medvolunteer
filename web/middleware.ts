@@ -4,12 +4,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
 
-  // Pass through assets that never need auth checks
+  // Pass through assets and public pages that never need auth checks
   if (
     path.startsWith('/icons') ||
     path === '/manifest.json' ||
     path === '/sw.js' ||
-    path === '/favicon.ico'
+    path === '/favicon.ico' ||
+    path.startsWith('/apply')
   ) {
     return NextResponse.next()
   }
@@ -47,13 +48,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/volunteer/login', request.url))
   }
 
-  // ─── Redirect already-authenticated users away from login pages ─────────────
+  // ─── Redirect already-authenticated users away from admin login ─────────────
   if (user && path === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
-  if (user && isVolunteerLogin) {
-    return NextResponse.redirect(new URL('/volunteer/home', request.url))
-  }
+  // NOTE: We intentionally do NOT redirect authenticated users from
+  // /volunteer/login here. The login page is a server component that does its
+  // own auth + volunteer-record check and redirects accordingly. Doing it here
+  // would cause a redirect loop for admins who have no volunteer row.
 
   return supabaseResponse
 }

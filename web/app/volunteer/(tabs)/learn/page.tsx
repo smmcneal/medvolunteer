@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import LearnView from './LearnView'
 import type { VolunteerCategory } from '@/types/database'
 
@@ -38,7 +39,9 @@ export default async function LearnPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/volunteer/login')
 
-  const { data: volunteer } = await supabase
+  const admin = createAdminClient()
+
+  const { data: volunteer } = await admin
     .from('volunteers')
     .select('id, category')
     .eq('user_id', user.id)
@@ -49,7 +52,7 @@ export default async function LearnPage() {
   const category = volunteer.category as VolunteerCategory
 
   // Fetch active modules relevant to this volunteer's category
-  const { data: modules } = await supabase
+  const { data: modules } = await admin
     .from('learning_modules')
     .select('id, title, description, order_index, is_required, required_for_categories')
     .eq('is_active', true)
@@ -68,19 +71,19 @@ export default async function LearnPage() {
 
   // Fetch lessons + quiz questions + completions in parallel
   const [lessonsResult, questionsResult, completionsResult] = await Promise.all([
-    supabase
+    admin
       .from('lessons')
       .select('id, module_id, title, type, content_url, content_text, duration_minutes, order_index')
       .in('module_id', moduleIds)
       .eq('is_active', true)
       .order('order_index', { ascending: true }),
 
-    supabase
+    admin
       .from('quiz_questions')
       .select('id, lesson_id, question, options, correct_answer_index, order_index')
       .order('order_index', { ascending: true }),
 
-    supabase
+    admin
       .from('lesson_completions')
       .select('lesson_id, completed_at, score')
       .eq('volunteer_id', volunteer.id),

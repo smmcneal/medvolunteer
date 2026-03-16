@@ -1,13 +1,17 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { unstable_noStore as noStore } from 'next/cache'
 import WorkflowBuilder from './WorkflowBuilder'
 import type { OnboardingWorkflow, OnboardingStage } from '@/types/database'
+
+export const dynamic = 'force-dynamic'
 
 export interface WorkflowWithStages extends OnboardingWorkflow {
   stages: OnboardingStage[]
 }
 
 async function fetchWorkflows(): Promise<WorkflowWithStages[]> {
-  const supabase = await createClient()
+  noStore()
+  const supabase = createAdminClient()
 
   const { data: workflows } = await supabase
     .from('onboarding_workflows')

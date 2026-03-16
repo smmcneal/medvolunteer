@@ -1,23 +1,33 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { unstable_noStore as noStore } from 'next/cache'
 import SettingsView from './SettingsView'
-import type { Organization, Location } from '@/types/database'
+import TagsManager from './TagsManager'
+import FlagsManager from './FlagsManager'
+import type { Organization, Location, OrgTag, OrgFlag } from '@/types/database'
+
+export const dynamic = 'force-dynamic'
 
 async function fetchData() {
-  const supabase = await createClient()
+  noStore()
+  const supabase = createAdminClient()
 
-  const [{ data: org }, { data: locations }] = await Promise.all([
+  const [{ data: org }, { data: locations }, { data: tags }, { data: flags }] = await Promise.all([
     supabase.from('organizations').select('*').limit(1).single(),
     supabase.from('locations').select('*').order('created_at', { ascending: true }),
+    supabase.from('org_tags').select('*').order('name'),
+    supabase.from('org_flags').select('*').order('name'),
   ])
 
   return {
     org: org as Organization | null,
     locations: (locations ?? []) as Location[],
+    tags: (tags ?? []) as OrgTag[],
+    flags: (flags ?? []) as OrgFlag[],
   }
 }
 
 export default async function SettingsPage() {
-  const { org, locations } = await fetchData()
+  const { org, locations, tags, flags } = await fetchData()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -31,11 +41,21 @@ export default async function SettingsPage() {
           Settings
         </h1>
         <p style={{ fontSize: '13px', color: '#9ca3af' }}>
-          Manage your organization, locations, and integrations
+          Manage your organization, locations, integrations, tags, and flags
         </p>
       </div>
 
       <SettingsView org={org} locations={locations} />
+
+      {/* Tags & Flags */}
+      <div style={{ padding: '0 32px 40px' }}>
+        <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 32, marginBottom: 32 }}>
+          <TagsManager initialTags={tags} />
+        </div>
+        <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 32 }}>
+          <FlagsManager initialFlags={flags} />
+        </div>
+      </div>
     </div>
   )
 }

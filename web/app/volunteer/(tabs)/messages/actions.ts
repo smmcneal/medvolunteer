@@ -15,7 +15,7 @@ export async function markMessageRead(recipientId: string): Promise<void> {
     .eq('id', recipientId)
     .single()
 
-  const owner = (recipient?.volunteers as { user_id: string } | null)?.user_id
+  const owner = (recipient?.volunteers as unknown as { user_id: string } | null)?.user_id
   if (!recipient || owner !== user.id) throw new Error('Not found or access denied')
 
   const { error } = await supabase

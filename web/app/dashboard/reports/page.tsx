@@ -1,5 +1,8 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { unstable_noStore as noStore } from 'next/cache'
 import ReportsView from './ReportsView'
+
+export const dynamic = 'force-dynamic'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,7 +40,8 @@ export interface CredentialExpiryRow {
 // ─── Data fetchers ────────────────────────────────────────────────────────────
 
 async function fetchReportsData() {
-  const supabase = await createClient()
+  noStore()
+  const supabase = createAdminClient()
 
   const [
     timeEntriesRes,

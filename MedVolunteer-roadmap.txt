@@ -334,43 +334,224 @@ PHASE 4 — Web Admin: Settings                     ✅ COMPLETE
       geofence radius), Integrations (Checkr, DocuSign,
       Twilio, Resend) with show/hide secrets
 
-PHASE 5 — Volunteer PWA: Core Shell + Auth
-  [ ] next-pwa setup (Workbox service worker, manifest.json)
-  [ ] /app/(volunteer)/layout.tsx — mobile-first shell,
-      bottom tab bar (Home / Shifts / Learn / Profile / Messages)
-  [ ] Volunteer login page (/volunteer/login) — separate
-      from admin, same Supabase Auth
-  [ ] Home tab: greeting, next shift card, onboarding
-      progress bar, credential expiry warnings
-  [ ] Push notification permission prompt + store
-      PushSubscription in push_subscriptions table
+PHASE 5 — Volunteer PWA: Core Shell + Auth        ✅ COMPLETE
+  [x] PWA manifest.json (standalone, theme #1B2A4A,
+      start_url /volunteer/home, scope /volunteer/)
+  [x] Service worker (sw.js): push handler,
+      notificationclick routing
+  [x] Root layout: viewport-fit=cover, apple-touch-icon,
+      theme-color, manifest link
+  [x] middleware.ts: auth guard for /dashboard/* and
+      /volunteer/*, cross-login redirects
+  [x] /volunteer/login — mobile-first sign-in page
+  [x] /volunteer/(tabs)/layout.tsx — auth guard,
+      volunteer DB lookup
+  [x] VolunteerShell.tsx — bottom tab bar (5 tabs,
+      inline SVG icons, active state via usePathname),
+      SW registration, beforeinstallprompt banner,
+      iOS Safari "Add to Home Screen" hint
+  [x] /volunteer/home — greeting, next shift card,
+      onboarding progress bar, credential expiry warnings
+  [x] PushPermissionBanner: requests permission, subscribes
+      via PushManager, POSTs to /api/push-subscription
+  [x] /api/push-subscription — POST route: upserts
+      into push_subscriptions table
 
-PHASE 6 — Volunteer PWA: Shifts + Geolocation
-  [ ] Shifts tab: upcoming/past list, shift detail modal
-  [ ] Manual clock in/out (POST to clock-in/clock-out
-      edge functions)
-  [ ] Geolocation polling in Service Worker
-      (navigator.geolocation, compare vs location radius)
-  [ ] Auto clock-in/out on geofence enter/exit
-  [ ] Web Push notification on clock-in confirmation
-  [ ] "Add to Home Screen" install prompt banner
+PHASE 6 — Volunteer PWA: Shifts + Geolocation     ✅ COMPLETE
+  [x] shifts/actions.ts — volunteerClockIn (double-entry
+      guard), volunteerClockOut (ownership check,
+      duration_minutes)
+  [x] shifts/page.tsx — server component: assignments
+      with nested shift+location join, time entries by shift
+  [x] shifts/ShiftsView.tsx — watchPosition geolocation,
+      Haversine distance, auto clock-in on geofence entry
+      (autoFiredRef), upcoming/past toggle, distance badge,
+      ACTIVE NOW / Clocked in banners, clock in/out buttons
+  [x] profile/page.tsx + ProfileView.tsx — avatar initials,
+      status badge, credentials (expiry color coding),
+      documents, background check, sign out
 
-PHASE 7 — Volunteer PWA: LMS + Messages
-  [ ] Learn tab: module list with progress rings,
-      lesson player (video iframe + text + quiz),
-      immediate quiz feedback, completion tracking
-  [ ] Messages tab: inbox list, unread badge,
-      message detail (marks read via Supabase update)
+PHASE 7 — Volunteer PWA: LMS + Messages           ✅ COMPLETE
+  [x] learn/actions.ts — completeLesson (upsert score +
+      time_spent_seconds)
+  [x] learn/page.tsx — modules filtered by volunteer
+      category, lessons + quiz questions in parallel
+  [x] learn/LearnView.tsx — module progress bars,
+      collapse/expand; LessonPlayer overlay:
+        video → YouTube/Vimeo embed + raw <video>
+        text  → pre-wrap content + attachment link
+        quiz  → step-through, lettered options,
+                score screen with answer review
+  [x] messages/actions.ts — markMessageRead
+      (ownership check, no-op if already read)
+  [x] messages/page.tsx — recipients + messages join,
+      auto-marks delivered on load, sorted newest first
+  [x] messages/MessagesView.tsx — unread dot + bold,
+      teal "N new" badge, click-to-expand detail,
+      optimistic mark-read
 
-PHASE 8 — Polish + PWA Hardening
-  [ ] Offline fallback page (Service Worker)
-  [ ] Skeleton loaders + empty states on all PWA screens
-  [ ] Error boundaries + retry UI
-  [ ] Accessibility pass (ARIA labels, focus management,
-      contrast ratios)
-  [ ] Lighthouse PWA score ≥ 90 (all categories)
-  [ ] send-push edge function (VAPID via web-push)
-  [ ] Wire VAPID keys in Settings integrations panel
+PHASE 8 — Polish + PWA Hardening                  ✅ COMPLETE
+  [x] sw.js v2 — fetch handler: cache-first for static
+      assets, network-first for navigation, offline fallback
+  [x] /volunteer/offline — pre-cached offline page
+  [x] loading.tsx skeletons for all 5 tabs (pulsing
+      shimmer matching each tab's real layout)
+  [x] /volunteer/(tabs)/error.tsx — shared error boundary:
+      reset + "Go to Home", dev-mode error display
+  [x] VolunteerShell accessibility — aria-label on nav +
+      links, aria-current="page", aria-hidden on labels
+  [x] supabase/functions/send-push/index.ts — full VAPID
+      Web Push via Web Crypto (ES256 JWT + aes128gcm
+      encryption, auto-removes expired subscriptions)
+
+PHASE 8.5 — Public Pages & Entry Points
+  [x] app/page.tsx — Marketing homepage at /
+        Sticky nav (logo, Admin Login, Volunteer Portal links)
+        Hero: dark navy, animated EKG, two CTAs
+        Stats bar: key program metrics
+        Features grid: 4 cards (Volunteers, Shifts,
+          Learning, Reports)
+        Two-portal section: Admin (navy) + Volunteer (white)
+        Responsive (collapses at 768px)
+        All dashboard page.tsx files switched from
+          createClient → createAdminClient (bypasses RLS)
+  [x] app/volunteer/page.tsx — Public landing page at /volunteer/
+        Server component: auth check → redirect to /volunteer/home
+          if already signed in, else render landing page
+        Hero: "Your shifts, your schedule." headline
+        3 feature pills: shifts, clock-in, training
+        Animated EKG + heartbeat logo
+        "Sign in to your account" CTA → /volunteer/login
+        "Admin login →" subtle link at bottom
+        Mobile-first (full-height, safe-area insets, 480px max)
+
+PHASE 9 — Pre-Deployment Prep
+  [ ] Generate VAPID key pair:
+        npx web-push generate-vapid-keys
+      Copy public key → NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      Copy both keys → Settings → Integrations → Web Push
+  [ ] Create production PWA icons:
+        /public/icons/icon-192.png  (192×192)
+        /public/icons/icon-512.png  (512×512)
+        /public/icons/badge-72.png  (72×72, monochrome)
+      All must match the SVG design (navy bg, teal cross)
+  [ ] Add /public/robots.txt:
+        Disallow: /dashboard (keep admin private)
+        Disallow: /volunteer/login
+        Allow: /
+  [ ] Create web/server.js — Phusion Passenger entry
+      point (required for SiteGround Node.js app host)
+  [ ] Audit all env vars; create .env.production.example
+      with every NEXT_PUBLIC_* and secret key listed
+  [ ] next.config.js — confirm output is 'standalone'
+      so Node.js app is self-contained for upload
+  [ ] TypeScript clean build: npm run build with zero
+      type errors or warnings
+  [ ] Create production Supabase project:
+        supabase db push (run all migrations)
+        supabase functions deploy (all 8 edge functions)
+  [ ] Update Supabase Auth → Site URL to production domain
+  [ ] Update Supabase Auth → Redirect URLs to include
+      both of these (Supabase Dashboard → Auth → URL Configuration):
+        http://localhost:3000/auth/callback   (dev)
+        https://yourdomain.com/auth/callback  (prod)
+      Required for: volunteer invite magic links, password reset
+      links, and email confirmation links to work correctly
+  [ ] Create first admin account in Supabase Auth;
+      insert corresponding row in volunteers table
+      with status = 'active'
+  [ ] Set VAPID keys in org_settings via Settings page
+  [ ] Verify Supabase RLS allows admin user to read/write
+      all tables (service role key for edge functions)
+
+PHASE 10 — SiteGround Deployment
+  [ ] Purchase domain (see domain suggestions below)
+  [ ] Register domain with SiteGround or transfer DNS:
+        nameservers: ns1.siteground.net / ns2.siteground.net
+  [ ] In SiteGround cPanel → SSL/TLS → Let's Encrypt:
+        Issue free SSL for domain + www subdomain
+  [ ] Verify plan supports Node.js:
+        Requires GoGeek or Cloud Hosting plan
+        (StartUp / GrowBig are Apache-only)
+  [ ] cPanel → Setup Node.js App:
+        Node.js version: 20.x (LTS)
+        Application root: public_html (or subfolder)
+        Application URL: yourdomain.com
+        Application startup file: server.js
+        Click "Create" then "Stop App"
+  [ ] SSH into SiteGround:
+        cd ~/public_html
+        git clone https://github.com/your/repo . OR
+        upload project files via SFTP
+  [ ] SSH: cd web && npm install --production
+  [ ] SSH: npm run build
+        (output goes to .next/standalone)
+  [ ] Set env vars in cPanel Node.js App → Env Variables:
+        NEXT_PUBLIC_SUPABASE_URL
+        NEXT_PUBLIC_SUPABASE_ANON_KEY
+        SUPABASE_SERVICE_ROLE_KEY
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        NODE_ENV=production
+  [ ] cPanel Node.js App → Start App
+  [ ] Verify HTTP → HTTPS redirect is enforced
+      (SiteGround does this automatically with SSL on)
+  [ ] Add domain to Supabase Auth allowlist
+  [ ] Set VAPID keys in Admin → Settings → Web Push
+  [ ] Smoke test checklist:
+        ✓ Admin login at /login
+        ✓ Volunteer login at /volunteer/login
+        ✓ PWA install prompt (Chrome/Android)
+        ✓ Push notification permission
+        ✓ Geolocation clock-in on Shifts tab
+        ✓ Offline page when network disabled
+        ✓ Lighthouse PWA score ≥ 90
+
+═══════════════════════════════════════════════════════
+DOMAIN NAME SUGGESTIONS
+═══════════════════════════════════════════════════════
+
+Recommendation: Use a .app TLD — browsers enforce HTTPS
+on .app domains, which is required for geolocation and
+Web Push anyway. It also signals "this is a product."
+
+TIER 1 — Best fits (clear meaning, memorable, available
+          on most registrars ~$15–20/yr):
+
+  careforce.app       — mission-driven, team feel,
+                        works for any med volunteer org
+  medshift.app        — exactly describes the core
+                        function (shifts + medical)
+  medvol.app          — short form of "MedVolunteer",
+                        easy to type on mobile
+  volunteermd.org     — .org suits nonprofits/hospitals;
+                        MD signals medical credibility
+  careops.app         — "operations" implies the
+                        admin + scheduling angle
+
+TIER 2 — Strong alternates:
+
+  medcrew.app         — team-oriented, easy to remember
+  shiftmd.app         — shift-first naming
+  medready.app        — implies preparedness / compliance
+  carestaff.app       — straightforward, professional
+  volunteerhq.health  — .health TLD adds credibility;
+                        "HQ" implies the admin dashboard
+
+TIER 3 — Short / brandable (check availability):
+
+  volmd.app           — ultra-short
+  crewmd.app          — concise
+  myvol.health        — friendly, volunteer-facing feel
+
+WHAT TO AVOID:
+  - medvolunteer.com  — likely taken or expensive
+  - anything with "platform" or "pro" — generic
+  - hyphens           — harder to type on mobile
+
+RECOMMENDATION:
+  careforce.app or medshift.app — both are short,
+  HTTPS-enforced, professional, and clearly describe
+  a medical volunteer scheduling tool.
 
 ═══════════════════════════════════════════════════════
 CONSTRAINTS

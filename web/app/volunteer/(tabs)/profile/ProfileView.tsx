@@ -46,11 +46,10 @@ function categoryLabel(cat: VolunteerCategory): string {
 
 function statusColor(status: VolunteerStatus): { bg: string; text: string } {
   return {
-    active:     { bg: '#dcfce7', text: '#166534' },
-    onboarding: { bg: '#dbeafe', text: '#1d4ed8' },
-    applicant:  { bg: '#fef9c3', text: '#854d0e' },
-    inactive:   { bg: '#f3f4f6', text: '#6b7280' },
-    suspended:  { bg: '#fee2e2', text: '#991b1b' },
+    volunteer: { bg: '#dcfce7', text: '#166534' },
+    prospect:  { bg: '#dbeafe', text: '#1d4ed8' },
+    applicant: { bg: '#fef9c3', text: '#854d0e' },
+    inactive:  { bg: '#f3f4f6', text: '#6b7280' },
   }[status] ?? { bg: '#f3f4f6', text: '#6b7280' }
 }
 

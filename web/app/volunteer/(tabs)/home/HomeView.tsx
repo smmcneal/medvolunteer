@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import type { Volunteer, Shift, Credential } from '@/types/database'
+import { homeClockIn, homeClockOut } from './actions'
 
 interface ShiftWithLocation extends Shift {
   locations: { name: string } | null
@@ -14,6 +15,7 @@ interface Props {
   onboardingCompleted: number
   onboardingTotal: number
   expiringCredentials: Pick<Credential, 'id' | 'type' | 'expiration_date'>[]
+  activeEntry: { id: string; clock_in: string } | null
 }
 
 function greeting() {
@@ -36,19 +38,17 @@ function daysUntil(dateStr: string) {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  active: 'Active',
-  onboarding: 'Onboarding',
+  volunteer: 'Volunteer',
+  prospect:  'Prospect',
   applicant: 'Applicant',
-  inactive: 'Inactive',
-  suspended: 'Suspended',
+  inactive:  'Inactive',
 }
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  active:     { bg: '#dcfce7', text: '#15803d' },
-  onboarding: { bg: '#dbeafe', text: '#1e40af' },
-  applicant:  { bg: '#fef9c3', text: '#854d0e' },
-  inactive:   { bg: '#f3f4f6', text: '#6b7280' },
-  suspended:  { bg: '#fee2e2', text: '#991b1b' },
+  volunteer: { bg: '#dcfce7', text: '#15803d' },
+  prospect:  { bg: '#dbeafe', text: '#1e40af' },
+  applicant: { bg: '#fef9c3', text: '#854d0e' },
+  inactive:  { bg: '#f3f4f6', text: '#6b7280' },
 }
 
 export default function HomeView({
@@ -58,9 +58,10 @@ export default function HomeView({
   onboardingCompleted,
   onboardingTotal,
   expiringCredentials,
+  activeEntry,
 }: Props) {
   const statusColor = STATUS_COLORS[volunteer.status] ?? STATUS_COLORS.inactive
-  const showOnboarding = ['applicant', 'onboarding'].includes(volunteer.status) && onboardingTotal > 0
+  const showOnboarding = ['applicant', 'prospect'].includes(volunteer.status) && onboardingTotal > 0
 
   return (
     <div style={{ fontFamily: "'Figtree', system-ui, sans-serif" }}>
@@ -94,6 +95,9 @@ export default function HomeView({
 
       {/* Content */}
       <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+        {/* Clock in / out */}
+        <ClockCard initialEntry={activeEntry} />
 
         {/* Onboarding progress (only while not yet active) */}
         {showOnboarding && (
@@ -224,6 +228,109 @@ export default function HomeView({
   )
 }
 
+// ─── Clock in / out card ──────────────────────────────────────────────────────
+
+function ClockCard({ initialEntry }: { initialEntry: { id: string; clock_in: string } | null }) {
+  const [entry, setEntry] = useState(initialEntry)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+  const [, setTick] = useState(0)
+
+  // Re-render every minute to update elapsed time display
+  useEffect(() => {
+    if (!entry) return
+    const interval = setInterval(() => setTick(t => t + 1), 60000)
+    return () => clearInterval(interval)
+  }, [entry])
+
+  const isClockedIn = !!entry
+
+  function elapsed() {
+    if (!entry) return null
+    const mins = Math.floor((Date.now() - new Date(entry.clock_in).getTime()) / 60000)
+    const h = Math.floor(mins / 60)
+    const m = mins % 60
+    return h > 0 ? `${h}h ${m}m` : `${m}m`
+  }
+
+  function handleClock() {
+    setError(null)
+    startTransition(async () => {
+      try {
+        if (isClockedIn) {
+          await homeClockOut(entry.id)
+          setEntry(null)
+        } else {
+          const res = await homeClockIn()
+          setEntry({ id: res.entryId, clock_in: new Date().toISOString() })
+        }
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Something went wrong')
+      }
+    })
+  }
+
+  return (
+    <div style={{
+      background: isClockedIn ? '#1B2A4A' : 'white',
+      border: `1px solid ${isClockedIn ? '#1B2A4A' : '#e5e7eb'}`,
+      borderRadius: '16px',
+      padding: '20px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+        <div>
+          {isClockedIn ? (
+            <>
+              <p style={{ fontSize: '12px', fontWeight: 700, color: '#00897B', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 2px' }}>
+                ● Currently clocked in
+              </p>
+              <p style={{ fontSize: '28px', fontWeight: 800, color: 'white', margin: 0, letterSpacing: '-1px' }} suppressHydrationWarning>
+                {elapsed()}
+              </p>
+              <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', margin: '3px 0 0' }} suppressHydrationWarning>
+                Since {new Date(entry!.clock_in).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+              </p>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827', margin: '0 0 2px' }}>
+                Ready to start?
+              </p>
+              <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>
+                Tap to clock in and start tracking your hours
+              </p>
+            </>
+          )}
+        </div>
+        <button
+          onClick={handleClock}
+          disabled={pending}
+          style={{
+            flexShrink: 0,
+            padding: '14px 22px',
+            borderRadius: '12px',
+            border: 'none',
+            fontSize: '15px',
+            fontWeight: 800,
+            cursor: pending ? 'not-allowed' : 'pointer',
+            background: pending ? '#94a3b8' : isClockedIn ? '#ef4444' : '#00897B',
+            color: 'white',
+            minWidth: '110px',
+            transition: 'background 0.15s',
+          }}
+        >
+          {pending
+            ? (isClockedIn ? 'Clocking out…' : 'Clocking in…')
+            : isClockedIn ? 'Clock Out' : 'Clock In'}
+        </button>
+      </div>
+      {error && (
+        <p style={{ fontSize: '12px', color: '#fca5a5', marginTop: '10px', marginBottom: 0 }}>{error}</p>
+      )}
+    </div>
+  )
+}
+
 // ─── Push permission banner ────────────────────────────────────────────────────
 
 function PushPermissionBanner({ volunteerId }: { volunteerId: string }) {
@@ -262,7 +369,7 @@ function PushPermissionBanner({ volunteerId }: { volunteerId: string }) {
 
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        applicationServerKey: urlBase64ToUint8Array(vapidKey).buffer as ArrayBuffer,
       })
 
       const json = sub.toJSON()

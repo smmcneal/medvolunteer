@@ -134,7 +134,6 @@ export default function MessagesView({ inbox, unreadCount: initialUnread }: Prop
                     fontFamily: 'inherit',
                     transition: 'background 0.15s',
                   }}
-                  onClick={() => openMessage(item)}
                 >
                   {/* Unread dot */}
                   <div style={{

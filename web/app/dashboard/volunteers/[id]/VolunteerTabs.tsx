@@ -1,31 +1,36 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Circle, Clock, AlertTriangle, FileText, ShieldCheck, BookOpen, StickyNote } from 'lucide-react'
+import { CheckCircle2, Circle, Clock, AlertTriangle, FileText, ShieldCheck, BookOpen } from 'lucide-react'
 import type {
   Volunteer, Credential, Document, BackgroundCheck,
   TimeEntry, LessonCompletion,
+  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote,
 } from '@/types/database'
 import type { VolunteerDetail, OnboardingStageWithProgress } from './page'
+import PipelinePhaseBar from './PipelinePhaseBar'
+import TagsPanel from './TagsPanel'
+import FlagsPanel from './FlagsPanel'
+import NotesPanel from './NotesPanel'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STAGE_LABELS: Record<string, string> = {
-  document_sign:    'Document Sign',
-  background_check: 'Background Check',
-  in_person_meeting:'In-Person Meeting',
-  learning_module:  'Learning Module',
-  manual_approval:  'Manual Approval',
-  form_submission:  'Form Submission',
+  document_sign:     'Document Sign',
+  background_check:  'Background Check',
+  in_person_meeting: 'In-Person Meeting',
+  learning_module:   'Learning Module',
+  manual_approval:   'Manual Approval',
+  form_submission:   'Form Submission',
 }
 
 const STAGE_ICONS: Record<string, React.ElementType> = {
-  document_sign:    FileText,
-  background_check: ShieldCheck,
-  in_person_meeting:Clock,
-  learning_module:  BookOpen,
-  manual_approval:  CheckCircle2,
-  form_submission:  FileText,
+  document_sign:     FileText,
+  background_check:  ShieldCheck,
+  in_person_meeting: Clock,
+  learning_module:   BookOpen,
+  manual_approval:   CheckCircle2,
+  form_submission:   FileText,
 }
 
 const BG_RESULT_COLORS: Record<string, { bg: string; text: string }> = {
@@ -35,7 +40,7 @@ const BG_RESULT_COLORS: Record<string, { bg: string; text: string }> = {
   pending:   { bg: '#eff6ff', text: '#1d4ed8' },
 }
 
-const TABS = ['Info', 'Onboarding', 'Credentials', 'Hours', 'Documents', 'Background Check', 'Notes'] as const
+const TABS = ['Info', 'Pipeline', 'Credentials', 'Hours', 'Documents', 'Background Check', 'Flags', 'Notes'] as const
 type Tab = typeof TABS[number]
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -48,6 +53,12 @@ export default function VolunteerTabs({
   timeEntries,
   onboardingStages,
   lessonCompletions,
+  notes,
+  appliedTags,
+  activeFlags,
+  resolvedFlags,
+  orgTags,
+  orgFlags,
 }: {
   volunteer: VolunteerDetail
   credentials: Credential[]
@@ -56,36 +67,53 @@ export default function VolunteerTabs({
   timeEntries: (TimeEntry & { location: { name: string } | null })[]
   onboardingStages: OnboardingStageWithProgress[]
   lessonCompletions: LessonCompletion[]
+  notes: VolunteerNote[]
+  appliedTags: OrgTag[]
+  activeFlags: (VolunteerFlag & { flag: OrgFlag })[]
+  resolvedFlags: (VolunteerFlag & { flag: OrgFlag })[]
+  orgTags: OrgTag[]
+  orgFlags: OrgFlag[]
 }) {
   const [activeTab, setActiveTab] = useState<Tab>('Info')
 
-  const completed = onboardingStages.filter(s => s.progress?.completed_at).length
+  const completed  = onboardingStages.filter(s => s.progress?.completed_at).length
   const totalHours = timeEntries.reduce((sum, e) => sum + (e.duration_minutes ?? 0), 0) / 60
 
   return (
-    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', overflow: 'hidden' }}>
+    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
+
       {/* Tab bar */}
-      <div style={{
-        display: 'flex', gap: '0', borderBottom: '1px solid #f0f0f0',
-        padding: '0 8px', overflowX: 'auto',
-      }}>
-        {TABS.map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              padding: '14px 16px',
-              border: 'none', background: 'none',
-              fontSize: '13px', fontWeight: activeTab === tab ? 600 : 400,
-              color: activeTab === tab ? '#1B2A4A' : '#6b7280',
-              cursor: 'pointer', whiteSpace: 'nowrap',
-              borderBottom: activeTab === tab ? '2px solid #1B2A4A' : '2px solid transparent',
-              transition: 'all 0.15s',
-            }}
-          >
-            {tab}
-          </button>
-        ))}
+      <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid #f0f0f0', padding: '0 8px', overflowX: 'auto' }}>
+        {TABS.map(tab => {
+          const badge = tab === 'Flags' && activeFlags.length > 0 ? activeFlags.length : null
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                padding: '14px 16px',
+                border: 'none', background: 'none',
+                fontSize: '13px', fontWeight: activeTab === tab ? 600 : 400,
+                color: activeTab === tab ? '#1B2A4A' : '#6b7280',
+                cursor: 'pointer', whiteSpace: 'nowrap',
+                borderBottom: activeTab === tab ? '2px solid #1B2A4A' : '2px solid transparent',
+                transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: '6px',
+              }}
+            >
+              {tab}
+              {badge !== null && (
+                <span style={{
+                  fontSize: '10px', fontWeight: 700, lineHeight: 1,
+                  padding: '2px 5px', borderRadius: 99,
+                  background: '#fef2f2', color: '#dc2626',
+                }}>
+                  {badge}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* Tab content */}
@@ -93,43 +121,54 @@ export default function VolunteerTabs({
 
         {/* ── Info ── */}
         {activeTab === 'Info' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            {[
-              { label: 'First Name',        value: volunteer.first_name },
-              { label: 'Last Name',         value: volunteer.last_name },
-              { label: 'Email',             value: volunteer.email },
-              { label: 'Phone',             value: volunteer.phone ?? '—' },
-              { label: 'Category',          value: volunteer.category.replace(/_/g, ' ') },
-              { label: 'Status',            value: volunteer.status },
-              { label: 'Emergency Contact', value: volunteer.emergency_contact_name ?? '—' },
-              { label: 'Emergency Phone',   value: volunteer.emergency_contact_phone ?? '—' },
-            ].map(({ label, value }) => (
-              <div key={label} style={{
-                padding: '14px 16px', background: '#fafafa', borderRadius: '8px',
-                border: '1px solid #f3f4f6',
-              }}>
-                <p style={{ fontSize: '11px', fontWeight: 500, color: '#9ca3af', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {label}
-                </p>
-                <p style={{ fontSize: '14px', color: '#111827', fontWeight: 500 }}>{value}</p>
-              </div>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              {[
+                { label: 'First Name',        value: volunteer.first_name },
+                { label: 'Last Name',         value: volunteer.last_name },
+                { label: 'Email',             value: volunteer.email },
+                { label: 'Phone',             value: volunteer.phone ?? '—' },
+                { label: 'Category',          value: volunteer.category.replace(/_/g, ' ') },
+                { label: 'Status',            value: volunteer.status },
+                { label: 'Emergency Contact', value: volunteer.emergency_contact_name ?? '—' },
+                { label: 'Emergency Phone',   value: volunteer.emergency_contact_phone ?? '—' },
+              ].map(({ label, value }) => (
+                <div key={label} style={{
+                  padding: '14px 16px', background: '#fafafa', borderRadius: '8px',
+                  border: '1px solid #f3f4f6',
+                }}>
+                  <p style={{ fontSize: '11px', fontWeight: 500, color: '#9ca3af', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {label}
+                  </p>
+                  <p style={{ fontSize: '14px', color: '#111827', fontWeight: 500 }}>{value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Tags section */}
+            <div>
+              <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
+                Tags
+              </p>
+              <TagsPanel volunteerId={volunteer.id} appliedTags={appliedTags} orgTags={orgTags} />
+            </div>
           </div>
         )}
 
-        {/* ── Onboarding ── */}
-        {activeTab === 'Onboarding' && (
-          <div>
-            {onboardingStages.length === 0 ? (
-              <p style={{ fontSize: '14px', color: '#9ca3af', textAlign: 'center', padding: '32px 0' }}>
-                No onboarding workflow assigned
-              </p>
-            ) : (
-              <>
-                {/* Progress summary */}
+        {/* ── Pipeline ── */}
+        {activeTab === 'Pipeline' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            <PipelinePhaseBar volunteerId={volunteer.id} currentPhase={volunteer.pipeline_phase} />
+
+            {/* Onboarding stage checklist */}
+            {onboardingStages.length > 0 && (
+              <div>
+                <p style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '14px' }}>
+                  Workflow Stages
+                </p>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: '12px',
-                  marginBottom: '24px', padding: '14px 16px',
+                  marginBottom: '16px', padding: '14px 16px',
                   background: '#fafafa', borderRadius: '8px', border: '1px solid #f3f4f6',
                 }}>
                   <div style={{ flex: 1, height: '6px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
@@ -145,7 +184,6 @@ export default function VolunteerTabs({
                   </span>
                 </div>
 
-                {/* Stage list */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {onboardingStages.map((stage, i) => {
                     const done = !!stage.progress?.completed_at
@@ -165,10 +203,7 @@ export default function VolunteerTabs({
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '12px', color: '#9ca3af' }}>{i + 1}.</span>
                             <span style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{stage.name}</span>
-                            <span style={{
-                              fontSize: '11px', padding: '2px 7px', borderRadius: '5px',
-                              background: '#f3f4f6', color: '#6b7280',
-                            }}>
+                            <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '5px', background: '#f3f4f6', color: '#6b7280' }}>
                               {STAGE_LABELS[stage.stage_type]}
                             </span>
                           </div>
@@ -200,7 +235,13 @@ export default function VolunteerTabs({
                     )
                   })}
                 </div>
-              </>
+              </div>
+            )}
+
+            {onboardingStages.length === 0 && (
+              <p style={{ fontSize: '14px', color: '#9ca3af', textAlign: 'center', padding: '16px 0' }}>
+                No onboarding workflow assigned to this volunteer.
+              </p>
             )}
           </div>
         )}
@@ -261,12 +302,10 @@ export default function VolunteerTabs({
         {/* ── Hours ── */}
         {activeTab === 'Hours' && (
           <div>
-            <div style={{
-              display: 'flex', gap: '16px', marginBottom: '20px',
-            }}>
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
               {[
                 { label: 'Total Hours', value: totalHours.toFixed(1) },
-                { label: 'Sessions', value: timeEntries.length },
+                { label: 'Sessions',   value: timeEntries.length },
                 { label: 'Avg Session', value: timeEntries.length ? `${(totalHours / timeEntries.length * 60).toFixed(0)}m` : '—' },
               ].map(({ label, value }) => (
                 <div key={label} style={{
@@ -374,10 +413,10 @@ export default function VolunteerTabs({
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {[
-                  { label: 'Provider',    value: backgroundCheck.provider },
-                  { label: 'Status',      value: backgroundCheck.status },
-                  { label: 'Initiated',   value: new Date(backgroundCheck.initiated_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) },
-                  { label: 'Completed',   value: backgroundCheck.completed_at ? new Date(backgroundCheck.completed_at).toLocaleDateString() : '—' },
+                  { label: 'Provider',  value: backgroundCheck.provider },
+                  { label: 'Status',    value: backgroundCheck.status },
+                  { label: 'Initiated', value: new Date(backgroundCheck.initiated_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) },
+                  { label: 'Completed', value: backgroundCheck.completed_at ? new Date(backgroundCheck.completed_at).toLocaleDateString() : '—' },
                 ].map(({ label, value }) => (
                   <div key={label} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -405,32 +444,19 @@ export default function VolunteerTabs({
           </div>
         )}
 
+        {/* ── Flags ── */}
+        {activeTab === 'Flags' && (
+          <FlagsPanel
+            volunteerId={volunteer.id}
+            activeFlags={activeFlags}
+            resolvedFlags={resolvedFlags}
+            orgFlags={orgFlags}
+          />
+        )}
+
         {/* ── Notes ── */}
         {activeTab === 'Notes' && (
-          <div>
-            <textarea
-              defaultValue={volunteer.notes ?? ''}
-              placeholder="Add notes about this volunteer…"
-              style={{
-                width: '100%', minHeight: '200px',
-                padding: '14px', borderRadius: '8px',
-                border: '1px solid #e5e7eb', fontSize: '14px',
-                color: '#374151', fontFamily: 'inherit',
-                resize: 'vertical', outline: 'none',
-                boxSizing: 'border-box', lineHeight: 1.6,
-              }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-              <button style={{
-                padding: '8px 16px', borderRadius: '8px',
-                background: '#1B2A4A', color: 'white',
-                border: 'none', cursor: 'pointer',
-                fontSize: '13px', fontWeight: 600,
-              }}>
-                Save Notes
-              </button>
-            </div>
-          </div>
+          <NotesPanel volunteerId={volunteer.id} initialNotes={notes} />
         )}
 
       </div>

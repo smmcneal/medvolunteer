@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import MessagesView from './MessagesView'
 
 export type InboxItem = {
@@ -18,7 +19,9 @@ export default async function MessagesPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/volunteer/login')
 
-  const { data: volunteer } = await supabase
+  const admin = createAdminClient()
+
+  const { data: volunteer } = await admin
     .from('volunteers')
     .select('id')
     .eq('user_id', user.id)
@@ -27,7 +30,7 @@ export default async function MessagesPage() {
   if (!volunteer) redirect('/volunteer/login')
 
   // Fetch message_recipients with message details, ordered newest first
-  const { data: recipients } = await supabase
+  const { data: recipients } = await admin
     .from('message_recipients')
     .select(`
       id,
@@ -41,7 +44,7 @@ export default async function MessagesPage() {
   // Mark any undelivered messages as delivered
   const undelivered = (recipients ?? []).filter(r => !r.delivered_at)
   if (undelivered.length > 0) {
-    await supabase
+    await admin
       .from('message_recipients')
       .update({ delivered_at: new Date().toISOString() })
       .in('id', undelivered.map(r => r.id))
@@ -49,7 +52,7 @@ export default async function MessagesPage() {
 
   const inbox: InboxItem[] = (recipients ?? [])
     .map(r => {
-      const msg = r.messages as {
+      const msg = r.messages as unknown as {
         id: string
         subject: string | null
         body: string

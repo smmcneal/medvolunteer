@@ -1,6 +1,10 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { unstable_noStore as noStore } from 'next/cache'
 import ShiftsView from './ShiftsView'
 import type { Location, Volunteer, TimeEntry } from '@/types/database'
+
+// Force dynamic rendering so router.refresh() always re-runs this page
+export const dynamic = 'force-dynamic'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -9,7 +13,8 @@ export interface AssignmentWithVolunteer {
   volunteer_id: string
   role: string | null
   status: string
-  volunteer: Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'category'>
+  mentor_id: string | null
+  volunteer: Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'category' | 'pipeline_phase'>
   time_entry: TimeEntry | null
 }
 
@@ -28,7 +33,8 @@ export interface ShiftWithRoster {
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
 async function fetchShiftsData() {
-  const supabase = await createClient()
+  noStore() // opt out of per-request fetch cache
+  const supabase = createAdminClient()
 
   // Fetch 6-month window: 1 month back to 4 months ahead
   const rangeStart = new Date()
@@ -45,8 +51,8 @@ async function fetchShiftsData() {
         id, name, location_id, start_time, end_time, required_count, notes,
         location:locations(id, name),
         shift_assignments(
-          id, role, status, volunteer_id,
-          volunteer:volunteers(id, first_name, last_name, category)
+          id, role, status, volunteer_id, mentor_id,
+          volunteer:volunteers!volunteer_id(id, first_name, last_name, category, pipeline_phase)
         )
       `)
       .gte('start_time', rangeStart.toISOString())
@@ -61,8 +67,8 @@ async function fetchShiftsData() {
 
     supabase
       .from('volunteers')
-      .select('id, first_name, last_name, category, status')
-      .in('status', ['active', 'onboarding'])
+      .select('id, first_name, last_name, category, status, pipeline_phase')
+      .in('status', ['volunteer', 'prospect'])
       .order('first_name'),
   ])
 
@@ -100,7 +106,7 @@ async function fetchShiftsData() {
   return {
     shifts,
     locations: (locationsRes.data ?? []) as Pick<Location, 'id' | 'name'>[],
-    volunteers: (volunteersRes.data ?? []) as Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'category' | 'status'>[],
+    volunteers: (volunteersRes.data ?? []) as Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'category' | 'status' | 'pipeline_phase'>[],
   }
 }
 

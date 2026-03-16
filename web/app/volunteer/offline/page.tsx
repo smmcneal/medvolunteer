@@ -1,3 +1,5 @@
+'use client'
+
 // This page is pre-cached by the service worker and served when the user
 // tries to navigate while offline.
 export default function OfflinePage() {
@@ -60,7 +62,7 @@ export default function OfflinePage() {
         </p>
 
         <button
-          onclick="window.location.reload()"
+          onClick={() => window.location.reload()}
           style={{
             padding: '14px 28px',
             background: '#1B2A4A',
@@ -80,7 +82,7 @@ export default function OfflinePage() {
         </button>
 
         <button
-          onclick="window.history.back()"
+          onClick={() => window.history.back()}
           style={{
             padding: '14px 28px',
             background: '#f3f4f6',

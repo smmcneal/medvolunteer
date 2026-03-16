@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import ShiftsView from './ShiftsView'
 
@@ -44,7 +45,9 @@ export default async function ShiftsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/volunteer/login')
 
-  const { data: volunteer } = await supabase
+  const admin = createAdminClient()
+
+  const { data: volunteer } = await admin
     .from('volunteers')
     .select('id')
     .eq('user_id', user.id)
@@ -53,7 +56,7 @@ export default async function ShiftsPage() {
   if (!volunteer) redirect('/volunteer/login')
 
   // Fetch all non-cancelled assignments with shift + location
-  const { data: rawAssignments } = await supabase
+  const { data: rawAssignments } = await admin
     .from('shift_assignments')
     .select('id, shift_id, status, shifts(id, name, start_time, end_time, location_id, notes, locations(id, name, lat, lng, geofence_radius_meters))')
     .eq('volunteer_id', volunteer.id)
@@ -64,7 +67,7 @@ export default async function ShiftsPage() {
 
   // Fetch all time entries for these shifts in one query
   const timeEntries: TimeEntryRow[] = shiftIds.length > 0
-    ? ((await supabase
+    ? ((await admin
         .from('time_entries')
         .select('id, volunteer_id, shift_id, clock_in, clock_out, duration_minutes, method')
         .eq('volunteer_id', volunteer.id)
@@ -82,7 +85,8 @@ export default async function ShiftsPage() {
   }
 
   // Enrich assignments
-  const enriched: AssignmentWithShift[] = assignments.map((a: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const enriched: AssignmentWithShift[] = (assignments as any[]).map((a: {
     id: string
     shift_id: string
     status: string

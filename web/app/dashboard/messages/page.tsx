@@ -1,6 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { unstable_noStore as noStore } from 'next/cache'
 import MessagesView from './MessagesView'
 import type { Message, MessageRecipient, Volunteer } from '@/types/database'
+
+export const dynamic = 'force-dynamic'
 
 export interface MessageWithRecipients extends Message {
   recipient_count: number
@@ -9,7 +12,8 @@ export interface MessageWithRecipients extends Message {
 }
 
 async function fetchData() {
-  const supabase = await createClient()
+  noStore()
+  const supabase = createAdminClient()
 
   const [
     { data: messages },

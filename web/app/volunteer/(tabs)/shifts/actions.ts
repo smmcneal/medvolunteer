@@ -65,7 +65,7 @@ export async function volunteerClockOut(timeEntryId: string): Promise<void> {
     .eq('id', timeEntryId)
     .single()
 
-  const owner = (entry?.volunteers as { user_id: string } | null)?.user_id
+  const owner = (entry?.volunteers as unknown as { user_id: string } | null)?.user_id
   if (!entry || owner !== user.id) throw new Error('Entry not found or access denied')
 
   const clockOut = new Date().toISOString()

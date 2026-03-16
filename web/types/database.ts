@@ -10,10 +10,19 @@ export type VolunteerCategory =
 
 export type VolunteerStatus =
   | 'applicant'
-  | 'onboarding'
-  | 'active'
+  | 'prospect'
+  | 'volunteer'
   | 'inactive'
-  | 'suspended'
+
+export type PipelinePhase =
+  | 'intake'
+  | 'orientation'
+  | 'review'
+  | 'training'
+  | 'active'
+  | 'offboarding'
+
+export type FlagSeverity = 'info' | 'warning' | 'critical'
 
 export type StageType =
   | 'document_sign'
@@ -63,8 +72,8 @@ export interface Volunteer {
   photo_url: string | null
   category: VolunteerCategory
   status: VolunteerStatus
+  pipeline_phase: PipelinePhase
   onboarding_workflow_id: string | null
-  notes: string | null
   emergency_contact_name: string | null
   emergency_contact_phone: string | null
   created_at: string
@@ -159,6 +168,51 @@ export interface ShiftAssignment {
   volunteer_id: string
   role: string | null
   status: 'assigned' | 'confirmed' | 'cancelled'
+  mentor_id: string | null
+  created_at: string
+}
+
+export interface OrgTag {
+  id: string
+  org_id: string
+  name: string
+  color: string
+  created_at: string
+}
+
+export interface VolunteerTag {
+  volunteer_id: string
+  tag_id: string
+  applied_at: string
+  tag?: OrgTag
+}
+
+export interface OrgFlag {
+  id: string
+  org_id: string
+  name: string
+  description: string | null
+  severity: FlagSeverity
+  color: string
+  created_at: string
+}
+
+export interface VolunteerFlag {
+  id: string
+  volunteer_id: string
+  flag_id: string
+  notes: string | null
+  raised_at: string
+  resolved_at: string | null
+  resolved_by: string | null
+  flag?: OrgFlag
+}
+
+export interface VolunteerNote {
+  id: string
+  volunteer_id: string
+  content: string
+  created_by: string | null
   created_at: string
 }
 
@@ -276,6 +330,7 @@ export interface VolunteerRow extends Volunteer {
   onboarding_pct?: number
   last_active?: string | null
   locations?: string[]
+  tags?: Pick<OrgTag, 'id' | 'name' | 'color'>[]
 }
 
 export interface ExpiringCredential extends Credential {
