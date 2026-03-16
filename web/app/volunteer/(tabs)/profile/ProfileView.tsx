@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { Volunteer, Credential, Document, BackgroundCheck, VolunteerStatus, VolunteerCategory, BackgroundCheckResult } from '@/types/database'
+import VolunteerDocumentsSection from './VolunteerDocumentsSection'
+import type { Volunteer, Credential, Document, VolunteerUpload, VolunteerStatus, VolunteerCategory } from '@/types/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,7 +17,7 @@ interface Props {
   volunteer: VolunteerProfile
   credentials: Credential[]
   documents: Document[]
-  backgroundCheck: BackgroundCheck | null
+  uploads: VolunteerUpload[]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -62,31 +63,13 @@ function expiryColor(days: number | null): { border: string; badge: { bg: string
   return               { border: '#e5e7eb', badge: { bg: '#f3f4f6', text: '#374151' } }
 }
 
-function docStatusStyle(status: string): { bg: string; text: string } {
-  return {
-    signed:  { bg: '#dcfce7', text: '#166534' },
-    pending: { bg: '#fef9c3', text: '#854d0e' },
-    expired: { bg: '#fee2e2', text: '#991b1b' },
-  }[status] ?? { bg: '#f3f4f6', text: '#6b7280' }
-}
-
-function bgResultStyle(result: BackgroundCheckResult | null): { bg: string; text: string; label: string } {
-  if (!result) return { bg: '#f3f4f6', text: '#6b7280', label: 'Pending' }
-  return {
-    clear:     { bg: '#dcfce7', text: '#166534', label: 'Clear' },
-    consider:  { bg: '#fef3c7', text: '#92400e', label: 'Consider' },
-    suspended: { bg: '#fee2e2', text: '#991b1b', label: 'Suspended' },
-    pending:   { bg: '#f3f4f6', text: '#6b7280', label: 'Pending' },
-  }[result] ?? { bg: '#f3f4f6', text: '#6b7280', label: result }
-}
-
 function initials(first: string, last: string): string {
   return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase()
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function ProfileView({ volunteer, credentials, documents, backgroundCheck }: Props) {
+export default function ProfileView({ volunteer, credentials, documents, uploads }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [signOutError, setSignOutError] = useState<string | null>(null)
@@ -107,15 +90,10 @@ export default function ProfileView({ volunteer, credentials, documents, backgro
   const statusStyle = statusColor(volunteer.status)
   const memberSince = new Date(volunteer.created_at).getFullYear()
 
-  // Split credentials into active vs expired
-  const activeCredentials = credentials.filter(c => {
-    const days = daysUntilExpiry(c.expiration_date)
-    return days === null || days >= 0
-  })
-  const expiredCredentials = credentials.filter(c => {
-    const days = daysUntilExpiry(c.expiration_date)
-    return days !== null && days < 0
-  })
+  const activeCredentials  = credentials.filter(c => { const d = daysUntilExpiry(c.expiration_date); return d === null || d >= 0 })
+  const expiredCredentials = credentials.filter(c => { const d = daysUntilExpiry(c.expiration_date); return d !== null && d < 0 })
+
+  const docCount = uploads.length + documents.length
 
   return (
     <div style={{ paddingBottom: '24px', fontFamily: "'Figtree', system-ui, sans-serif" }}>
@@ -129,48 +107,27 @@ export default function ProfileView({ volunteer, credentials, documents, backgro
         alignItems: 'center',
         gap: '12px',
       }}>
-        {/* Avatar */}
         <div style={{
-          width: '72px',
-          height: '72px',
-          borderRadius: '50%',
+          width: '72px', height: '72px', borderRadius: '50%',
           background: '#00897B',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '26px',
-          fontWeight: 800,
-          color: 'white',
-          letterSpacing: '1px',
-          flexShrink: 0,
-          border: '3px solid rgba(255,255,255,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '26px', fontWeight: 800, color: 'white', letterSpacing: '1px',
+          flexShrink: 0, border: '3px solid rgba(255,255,255,0.2)',
         }}>
           {initials(volunteer.first_name, volunteer.last_name)}
         </div>
 
         <div style={{ textAlign: 'center' }}>
-          <h1 style={{
-            fontSize: '20px',
-            fontWeight: 800,
-            color: 'white',
-            margin: '0 0 4px',
-            letterSpacing: '-0.3px',
-          }}>
+          <h1 style={{ fontSize: '20px', fontWeight: 800, color: 'white', margin: '0 0 4px', letterSpacing: '-0.3px' }}>
             {volunteer.first_name} {volunteer.last_name}
           </h1>
           <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', margin: '0 0 8px' }}>
             {categoryLabel(volunteer.category)} · Member since {memberSince}
           </p>
           <span style={{
-            display: 'inline-block',
-            padding: '3px 10px',
-            borderRadius: '999px',
-            fontSize: '11px',
-            fontWeight: 700,
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase',
-            background: statusStyle.bg,
-            color: statusStyle.text,
+            display: 'inline-block', padding: '3px 10px', borderRadius: '999px',
+            fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+            background: statusStyle.bg, color: statusStyle.text,
           }}>
             {volunteer.status}
           </span>
@@ -186,7 +143,7 @@ export default function ProfileView({ volunteer, credentials, documents, backgro
         </Section>
 
         {/* ── Credentials ── */}
-        <Section title={`Credentials ${credentials.length > 0 ? `(${credentials.length})` : ''}`}>
+        <Section title={`Credentials${credentials.length > 0 ? ` (${credentials.length})` : ''}`}>
           {credentials.length === 0 ? (
             <EmptyState message="No credentials on file" />
           ) : (
@@ -195,13 +152,12 @@ export default function ProfileView({ volunteer, credentials, documents, backgro
               {expiredCredentials.length > 0 && (
                 <>
                   <div style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: '#9ca3af',
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    padding: '4px 0 2px',
-                  }}>Expired</div>
+                    fontSize: '11px', fontWeight: 700, color: '#9ca3af',
+                    letterSpacing: '0.08em', textTransform: 'uppercase',
+                    padding: '4px 16px 2px',
+                  }}>
+                    Expired
+                  </div>
                   {expiredCredentials.map(cred => <CredentialCard key={cred.id} cred={cred} />)}
                 </>
               )}
@@ -210,34 +166,23 @@ export default function ProfileView({ volunteer, credentials, documents, backgro
         </Section>
 
         {/* ── Documents ── */}
-        <Section title={`Documents ${documents.length > 0 ? `(${documents.length})` : ''}`}>
-          {documents.length === 0 ? (
-            <EmptyState message="No documents on file" />
-          ) : (
-            documents.map(doc => <DocumentCard key={doc.id} doc={doc} />)
-          )}
-        </Section>
-
-        {/* ── Background Check ── */}
-        <Section title="Background Check">
-          {backgroundCheck ? (
-            <BackgroundCheckCard check={backgroundCheck} />
-          ) : (
-            <EmptyState message="No background check on file" />
-          )}
+        <Section title={`Documents${docCount > 0 ? ` (${docCount})` : ''}`} noPadding>
+          <div style={{ padding: '16px' }}>
+            <VolunteerDocumentsSection
+              volunteerId={volunteer.id}
+              uploads={uploads}
+              signedDocuments={documents}
+            />
+          </div>
         </Section>
 
         {/* ── Sign Out ── */}
         <div style={{ paddingTop: '8px' }}>
           {signOutError && (
             <p style={{
-              fontSize: '13px',
-              color: '#991b1b',
-              background: '#fee2e2',
-              border: '1px solid #fca5a5',
-              borderRadius: '8px',
-              padding: '10px 12px',
-              marginBottom: '12px',
+              fontSize: '13px', color: '#991b1b',
+              background: '#fee2e2', border: '1px solid #fca5a5',
+              borderRadius: '8px', padding: '10px 12px', marginBottom: '12px',
             }}>
               {signOutError}
             </p>
@@ -246,20 +191,13 @@ export default function ProfileView({ volunteer, credentials, documents, backgro
             onClick={handleSignOut}
             disabled={isPending}
             style={{
-              width: '100%',
-              padding: '14px',
-              borderRadius: '12px',
-              border: '1.5px solid #e5e7eb',
-              background: 'white',
+              width: '100%', padding: '14px', borderRadius: '12px',
+              border: '1.5px solid #e5e7eb', background: 'white',
               color: isPending ? '#9ca3af' : '#374151',
-              fontSize: '15px',
-              fontWeight: 600,
+              fontSize: '15px', fontWeight: 600,
               cursor: isPending ? 'default' : 'pointer',
               fontFamily: 'inherit',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
               transition: 'all 0.15s',
             }}
           >
@@ -275,24 +213,19 @@ export default function ProfileView({ volunteer, credentials, documents, backgro
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, noPadding }: { title: string; children: React.ReactNode; noPadding?: boolean }) {
   return (
     <div>
       <h2 style={{
-        fontSize: '13px',
-        fontWeight: 700,
-        color: '#6b7280',
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
+        fontSize: '13px', fontWeight: 700, color: '#6b7280',
+        letterSpacing: '0.06em', textTransform: 'uppercase',
         margin: '0 0 8px 4px',
       }}>
         {title}
       </h2>
       <div style={{
-        background: 'white',
-        borderRadius: '14px',
-        border: '1px solid #f0f0f0',
-        overflow: 'hidden',
+        background: 'white', borderRadius: '14px',
+        border: '1px solid #f0f0f0', overflow: 'hidden',
         boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
       }}>
         {children}
@@ -304,11 +237,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function InfoRow({ icon: Icon, label, value }: { icon: React.FC; label: string; value: string }) {
   return (
     <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '12px',
-      padding: '14px 16px',
-      borderBottom: '1px solid #f9fafb',
+      display: 'flex', alignItems: 'center', gap: '12px',
+      padding: '14px 16px', borderBottom: '1px solid #f9fafb',
     }}>
       <div style={{ color: '#9ca3af', flexShrink: 0 }}><Icon /></div>
       <div>
@@ -320,12 +250,12 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.FC; label: string; 
 }
 
 function CredentialCard({ cred }: { cred: Credential }) {
-  const days = daysUntilExpiry(cred.expiration_date)
+  const days   = daysUntilExpiry(cred.expiration_date)
   const colors = expiryColor(days)
 
   let expiryLabel = '—'
   if (days !== null) {
-    if (days < 0) expiryLabel = `Expired ${Math.abs(days)}d ago`
+    if (days < 0)      expiryLabel = `Expired ${Math.abs(days)}d ago`
     else if (days === 0) expiryLabel = 'Expires today'
     else if (days <= 30) expiryLabel = `Expires in ${days}d`
     else expiryLabel = `Exp: ${formatDate(cred.expiration_date)}`
@@ -333,31 +263,19 @@ function CredentialCard({ cred }: { cred: Credential }) {
 
   return (
     <div style={{
-      padding: '14px 16px',
-      borderBottom: '1px solid #f9fafb',
+      padding: '14px 16px', borderBottom: '1px solid #f9fafb',
       borderLeft: `3px solid ${colors.border}`,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827', marginBottom: '2px' }}>
-            {cred.type}
-          </div>
-          {cred.license_number && (
-            <div style={{ fontSize: '12px', color: '#6b7280' }}>#{cred.license_number}</div>
-          )}
-          {cred.issuing_body && (
-            <div style={{ fontSize: '12px', color: '#9ca3af' }}>{cred.issuing_body}</div>
-          )}
+          <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827', marginBottom: '2px' }}>{cred.type}</div>
+          {cred.license_number && <div style={{ fontSize: '12px', color: '#6b7280' }}>#{cred.license_number}</div>}
+          {cred.issuing_body    && <div style={{ fontSize: '12px', color: '#9ca3af' }}>{cred.issuing_body}</div>}
         </div>
         <span style={{
-          padding: '3px 8px',
-          borderRadius: '6px',
-          fontSize: '11px',
-          fontWeight: 700,
-          whiteSpace: 'nowrap',
-          background: colors.badge.bg,
-          color: colors.badge.text,
-          flexShrink: 0,
+          padding: '3px 8px', borderRadius: '6px',
+          fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap',
+          background: colors.badge.bg, color: colors.badge.text, flexShrink: 0,
         }}>
           {expiryLabel}
         </span>
@@ -369,105 +287,6 @@ function CredentialCard({ cred }: { cred: Credential }) {
             Verified {formatDate(cred.verified_at)}
           </span>
         </div>
-      )}
-    </div>
-  )
-}
-
-function DocumentCard({ doc }: { doc: Document }) {
-  const style = docStatusStyle(doc.status)
-  return (
-    <div style={{
-      padding: '14px 16px',
-      borderBottom: '1px solid #f9fafb',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: '8px',
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: '14px',
-          fontWeight: 600,
-          color: '#111827',
-          marginBottom: '2px',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}>
-          {doc.name}
-        </div>
-        <div style={{ fontSize: '12px', color: '#9ca3af' }}>
-          {doc.signed_at ? `Signed ${formatDate(doc.signed_at)}` : `Added ${formatDate(doc.created_at)}`}
-        </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-        <span style={{
-          padding: '3px 8px',
-          borderRadius: '6px',
-          fontSize: '11px',
-          fontWeight: 700,
-          background: style.bg,
-          color: style.text,
-        }}>
-          {doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}
-        </span>
-        {doc.url && (
-          <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: '#00897B' }}>
-            <ExternalLinkIcon />
-          </a>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function BackgroundCheckCard({ check }: { check: BackgroundCheck }) {
-  const style = bgResultStyle(check.result)
-  return (
-    <div style={{ padding: '16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <div>
-          <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>
-            {check.provider}
-          </div>
-          <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
-            Initiated {formatDate(check.initiated_at)}
-          </div>
-        </div>
-        <span style={{
-          padding: '4px 10px',
-          borderRadius: '8px',
-          fontSize: '12px',
-          fontWeight: 700,
-          background: style.bg,
-          color: style.text,
-        }}>
-          {style.label}
-        </span>
-      </div>
-      {check.completed_at && (
-        <div style={{ fontSize: '12px', color: '#6b7280' }}>
-          Completed {formatDate(check.completed_at)}
-        </div>
-      )}
-      {check.report_url && (
-        <a
-          href={check.report_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            marginTop: '10px',
-            fontSize: '13px',
-            fontWeight: 600,
-            color: '#00897B',
-          }}
-        >
-          View Report <ExternalLinkIcon />
-        </a>
       )}
     </div>
   )
@@ -514,16 +333,6 @@ function VerifiedIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="#16a34a">
       <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-    </svg>
-  )
-}
-
-function ExternalLinkIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-      <polyline points="15 3 21 3 21 9"/>
-      <line x1="10" y1="14" x2="21" y2="3"/>
     </svg>
   )
 }

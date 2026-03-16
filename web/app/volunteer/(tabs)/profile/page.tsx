@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import ProfileView from './ProfileView'
-import type { Credential, Document, BackgroundCheck } from '@/types/database'
+import type { Credential, Document, VolunteerUpload } from '@/types/database'
 
 export default async function ProfilePage() {
   const supabase = await createClient()
@@ -19,7 +19,7 @@ export default async function ProfilePage() {
 
   if (!volunteer) redirect('/volunteer/login')
 
-  const [credResult, docResult, bgResult] = await Promise.all([
+  const [credResult, docResult, uploadsResult] = await Promise.all([
     admin
       .from('credentials')
       .select('*')
@@ -33,11 +33,10 @@ export default async function ProfilePage() {
       .order('created_at', { ascending: false }),
 
     admin
-      .from('background_checks')
+      .from('volunteer_uploads')
       .select('*')
       .eq('volunteer_id', volunteer.id)
-      .order('initiated_at', { ascending: false })
-      .limit(1),
+      .order('uploaded_at', { ascending: false }),
   ])
 
   return (
@@ -45,7 +44,7 @@ export default async function ProfilePage() {
       volunteer={volunteer}
       credentials={(credResult.data ?? []) as Credential[]}
       documents={(docResult.data ?? []) as Document[]}
-      backgroundCheck={(bgResult.data?.[0] ?? null) as BackgroundCheck | null}
+      uploads={(uploadsResult.data ?? []) as VolunteerUpload[]}
     />
   )
 }
