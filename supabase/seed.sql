@@ -6,6 +6,7 @@
 
 insert into auth.users (
   id, instance_id, email, encrypted_password, email_confirmed_at,
+  confirmation_token, recovery_token, email_change_token_new, email_change,
   raw_app_meta_data, raw_user_meta_data, aud, role, created_at, updated_at
 ) values
   -- Dashboard admin
@@ -15,6 +16,7 @@ insert into auth.users (
     'admin@medvolunteer.org',
     crypt('admin123', gen_salt('bf')),
     now(),
+    '', '', '', '',
     '{"provider":"email","providers":["email"]}', '{}',
     'authenticated', 'authenticated', now(), now()
   ),
@@ -25,6 +27,7 @@ insert into auth.users (
     'alice@example.com',
     crypt('volunteer123', gen_salt('bf')),
     now(),
+    '', '', '', '',
     '{"provider":"email","providers":["email"]}', '{}',
     'authenticated', 'authenticated', now(), now()
   ),
@@ -35,6 +38,7 @@ insert into auth.users (
     'ben@example.com',
     crypt('volunteer123', gen_salt('bf')),
     now(),
+    '', '', '', '',
     '{"provider":"email","providers":["email"]}', '{}',
     'authenticated', 'authenticated', now(), now()
   ),
@@ -45,6 +49,7 @@ insert into auth.users (
     'cora@example.com',
     crypt('volunteer123', gen_salt('bf')),
     now(),
+    '', '', '', '',
     '{"provider":"email","providers":["email"]}', '{}',
     'authenticated', 'authenticated', now(), now()
   )
