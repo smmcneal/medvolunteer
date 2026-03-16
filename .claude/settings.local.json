@@ -46,7 +46,14 @@
       "Bash(cmd /c \"cd C:\\\\Users\\\\smmcn\\\\Desktop\\\\medvolunteer\\\\web && npx tsc --noEmit\")",
       "Bash(cmd /c \"cd /d C:\\\\Users\\\\smmcn\\\\Desktop\\\\medvolunteer\\\\web && npx tsc --noEmit 2>&1\")",
       "Bash(cmd /c \"C: && cd C:\\\\Users\\\\smmcn\\\\Desktop\\\\medvolunteer\\\\web && npx tsc --noEmit 2>&1\")",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(cmd.exe /c \"cd C:\\\\Users\\\\smmcn\\\\Desktop\\\\medvolunteer\\\\web && npx tsc --noEmit 2>&1\")",
+      "Bash(cmd.exe /c \"git add -A && git status\")",
+      "Bash(git -C \"C:/Users/smmcn/Desktop/medvolunteer\" add -A)",
+      "Bash(git -C \"C:/Users/smmcn/Desktop/medvolunteer\" status)",
+      "Bash(git -C:*)"
     ]
   }
 }

@@ -321,6 +321,17 @@ export interface PushSubscription {
 
 // ─── Joined / view types ──────────────────────────────────────────────────────
 
+export interface VolunteerUpload {
+  id: string
+  volunteer_id: string
+  name: string
+  mime_type: string
+  size_bytes: number
+  storage_path: string
+  uploaded_by: string | null
+  uploaded_at: string
+}
+
 export interface VolunteerWithLocation extends Volunteer {
   volunteer_locations: { location: Location }[]
 }

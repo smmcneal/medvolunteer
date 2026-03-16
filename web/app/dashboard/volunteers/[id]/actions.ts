@@ -122,6 +122,100 @@ export async function resolveFlag(flagAssignmentId: string): Promise<{ error?: s
   return {}
 }
 
+// ─── File uploads ─────────────────────────────────────────────────────────────
+
+export async function uploadVolunteerDocument(
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const file = formData.get('file') as File | null
+  const volunteerId = formData.get('volunteerId') as string | null
+
+  if (!file || !volunteerId) return { error: 'Missing file or volunteer ID.' }
+  if (file.size > 52_428_800) return { error: 'File must be under 50 MB.' }
+
+  const admin = createAdminClient()
+
+  // Ensure the bucket exists (creates it on first use if the migration hasn't been applied yet)
+  const { error: bucketError } = await admin.storage.createBucket('volunteer-documents', {
+    public: false,
+    fileSizeLimit: 52_428_800,
+    allowedMimeTypes: [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'text/plain',
+    ],
+  })
+  // Ignore "already exists" errors; surface anything else
+  if (bucketError && !bucketError.message.toLowerCase().includes('already exists')) {
+    return { error: bucketError.message }
+  }
+
+  // Derive a unique storage path
+  const ext = file.name.includes('.') ? file.name.split('.').pop() : ''
+  const safeName = `${crypto.randomUUID()}${ext ? `.${ext}` : ''}`
+  const path = `${volunteerId}/${safeName}`
+
+  const bytes = await file.arrayBuffer()
+  const { error: storageError } = await admin.storage
+    .from('volunteer-documents')
+    .upload(path, bytes, { contentType: file.type || 'application/octet-stream', upsert: false })
+
+  if (storageError) return { error: storageError.message }
+
+  // Record who uploaded it
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const { error: dbError } = await admin.from('volunteer_uploads').insert({
+    volunteer_id: volunteerId,
+    name: file.name,
+    mime_type: file.type || 'application/octet-stream',
+    size_bytes: file.size,
+    storage_path: path,
+    uploaded_by: user?.id ?? null,
+  })
+
+  if (dbError) {
+    // Clean up storage if DB insert fails
+    await admin.storage.from('volunteer-documents').remove([path])
+    return { error: dbError.message }
+  }
+
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
+  return {}
+}
+
+export async function deleteVolunteerUpload(
+  uploadId: string,
+  storagePath: string,
+  volunteerId: string,
+): Promise<{ error?: string }> {
+  const admin = createAdminClient()
+
+  await admin.storage.from('volunteer-documents').remove([storagePath])
+
+  const { error } = await admin.from('volunteer_uploads').delete().eq('id', uploadId)
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
+  return {}
+}
+
+export async function getUploadSignedUrl(
+  storagePath: string,
+): Promise<{ url?: string; error?: string }> {
+  const admin = createAdminClient()
+  const { data, error } = await admin.storage
+    .from('volunteer-documents')
+    .createSignedUrl(storagePath, 3600) // 1-hour expiry
+
+  if (error) return { error: error.message }
+  return { url: data.signedUrl }
+}
+
 // ─── Clock in / out ───────────────────────────────────────────────────────────
 
 export async function clockIn(

@@ -8,7 +8,7 @@ import type {
   Volunteer, Credential, Document, BackgroundCheck,
   OnboardingStage, OnboardingProgress, TimeEntry,
   LessonCompletion, Location,
-  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote,
+  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload,
 } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -30,7 +30,7 @@ async function fetchVolunteer(id: string) {
   const supabase = createAdminClient()
 
   const [volunteerRes, credsRes, docsRes, bgCheckRes, timeRes, learningRes,
-         notesRes, volTagsRes, volFlagsRes, orgTagsRes, orgFlagsRes] = await Promise.all([
+         notesRes, volTagsRes, volFlagsRes, orgTagsRes, orgFlagsRes, uploadsRes] = await Promise.all([
     supabase
       .from('volunteers')
       .select('*, volunteer_locations(location:locations(*))')
@@ -46,6 +46,7 @@ async function fetchVolunteer(id: string) {
     supabase.from('volunteer_flags').select('*, flag:org_flags(*)').eq('volunteer_id', id).order('raised_at', { ascending: false }),
     supabase.from('org_tags').select('*').order('name'),
     supabase.from('org_flags').select('*').order('name'),
+    supabase.from('volunteer_uploads').select('*').eq('volunteer_id', id).order('uploaded_at', { ascending: false }),
   ])
 
   if (!volunteerRes.data) return null
@@ -85,6 +86,7 @@ async function fetchVolunteer(id: string) {
     volunteer,
     credentials:       (credsRes.data ?? []) as Credential[],
     documents:         (docsRes.data ?? []) as Document[],
+    uploads:           (uploadsRes.data ?? []) as VolunteerUpload[],
     backgroundCheck:   bgCheckRes.data as BackgroundCheck | null,
     timeEntries:       (timeRes.data ?? []) as (TimeEntry & { location: { name: string } | null })[],
     onboardingStages,
@@ -130,7 +132,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
   if (!data) notFound()
 
   const {
-    volunteer, credentials, documents, backgroundCheck,
+    volunteer, credentials, documents, uploads, backgroundCheck,
     timeEntries, onboardingStages, lessonCompletions,
     notes, appliedTags, activeFlags, resolvedFlags, orgTags, orgFlags,
   } = data
@@ -228,6 +230,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
         volunteer={volunteer}
         credentials={credentials}
         documents={documents}
+        uploads={uploads}
         backgroundCheck={backgroundCheck}
         timeEntries={timeEntries}
         onboardingStages={onboardingStages}

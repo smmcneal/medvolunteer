@@ -5,13 +5,14 @@ import { CheckCircle2, Circle, Clock, AlertTriangle, FileText, ShieldCheck, Book
 import type {
   Volunteer, Credential, Document, BackgroundCheck,
   TimeEntry, LessonCompletion,
-  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote,
+  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload,
 } from '@/types/database'
 import type { VolunteerDetail, OnboardingStageWithProgress } from './page'
 import PipelinePhaseBar from './PipelinePhaseBar'
 import TagsPanel from './TagsPanel'
 import FlagsPanel from './FlagsPanel'
 import NotesPanel from './NotesPanel'
+import DocumentsPanel from './DocumentsPanel'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ export default function VolunteerTabs({
   volunteer,
   credentials,
   documents,
+  uploads,
   backgroundCheck,
   timeEntries,
   onboardingStages,
@@ -63,6 +65,7 @@ export default function VolunteerTabs({
   volunteer: VolunteerDetail
   credentials: Credential[]
   documents: Document[]
+  uploads: VolunteerUpload[]
   backgroundCheck: BackgroundCheck | null
   timeEntries: (TimeEntry & { location: { name: string } | null })[]
   onboardingStages: OnboardingStageWithProgress[]
@@ -362,36 +365,11 @@ export default function VolunteerTabs({
 
         {/* ── Documents ── */}
         {activeTab === 'Documents' && (
-          <div>
-            {documents.length === 0 ? (
-              <p style={{ fontSize: '14px', color: '#9ca3af', textAlign: 'center', padding: '32px 0' }}>No documents on file</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {documents.map(d => (
-                  <div key={d.id} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '14px 16px', borderRadius: '10px',
-                    border: '1px solid #f3f4f6', background: 'white',
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <FileText style={{ width: '20px', height: '20px', color: '#9ca3af' }} />
-                      <div>
-                        <p style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{d.name}</p>
-                        {d.signed_at && <p style={{ fontSize: '12px', color: '#16a34a' }}>Signed {new Date(d.signed_at).toLocaleDateString()}</p>}
-                      </div>
-                    </div>
-                    <span style={{
-                      fontSize: '12px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px',
-                      background: d.status === 'signed' ? '#f0fdf4' : d.status === 'expired' ? '#fef2f2' : '#f3f4f6',
-                      color: d.status === 'signed' ? '#15803d' : d.status === 'expired' ? '#dc2626' : '#6b7280',
-                    }}>
-                      {d.status.charAt(0).toUpperCase() + d.status.slice(1)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <DocumentsPanel
+            volunteerId={volunteer.id}
+            uploads={uploads}
+            signedDocuments={documents}
+          />
         )}
 
         {/* ── Background Check ── */}
