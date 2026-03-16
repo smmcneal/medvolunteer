@@ -70,8 +70,17 @@ export default function TagsPanel({
         )}
       </div>
 
+      {orgTags.length === 0 && (
+        <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>
+          No tags defined yet.{' '}
+          <a href="/dashboard/settings" style={{ color: '#14b8a6', textDecoration: 'none', fontWeight: 600 }}>
+            Create tags in Settings →
+          </a>
+        </p>
+      )}
+
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {applied.length === 0 && (
+        {applied.length === 0 && orgTags.length > 0 && (
           <span style={{ fontSize: 13, color: '#9ca3af' }}>No tags applied.</span>
         )}
         {applied.map(tag => (

@@ -145,7 +145,16 @@ export default function FlagsPanel({
 
       {/* Active flags */}
       {active.length === 0 && !raisingFlag && (
-        <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 16 }}>No active flags.</p>
+        <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 16 }}>
+          {orgFlags.length === 0 ? (
+            <>
+              No flag types defined yet.{' '}
+              <a href="/dashboard/settings" style={{ color: '#14b8a6', textDecoration: 'none', fontWeight: 600 }}>
+                Create flags in Settings →
+              </a>
+            </>
+          ) : 'No active flags.'}
+        </p>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
         {active.map(vf => {

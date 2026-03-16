@@ -151,17 +151,7 @@ Tab 5: Messages  (/volunteer/messages)
   - Tap message → full detail view (marks as read)
   - Channel badge (email / SMS / push) on each message
 
-GEOLOCATION (Web Geolocation API + Geofence logic):
-  - On shift start window (±30 min), poll navigator.geolocation
-    every 60s in a Service Worker background sync
-  - Compare coords against assigned location lat/lng + radius
-  - On enter: auto clock-in via Supabase edge function,
-    show a Web Push notification "Clocked in to [Location]"
-  - On exit: auto clock-out, record method = 'geofence'
-  - Fallback: manual clock-in button always visible
-  - Permission prompt shown on first visit to Shifts tab
-  - iOS 16.4+: Geolocation + Web Push both supported
-    when PWA is added to Home Screen
+
 
 WEB PUSH NOTIFICATIONS (VAPID):
   - Request permission on first login
