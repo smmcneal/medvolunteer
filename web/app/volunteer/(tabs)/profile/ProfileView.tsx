@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import VolunteerDocumentsSection from './VolunteerDocumentsSection'
+import { updateContactInfo } from './actions'
 import type { Volunteer, Credential, Document, VolunteerUpload, VolunteerStatus, VolunteerCategory } from '@/types/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -71,8 +72,48 @@ function initials(first: string, last: string): string {
 
 export default function ProfileView({ volunteer, credentials, documents, uploads }: Props) {
   const router = useRouter()
-  const [isPending, startTransition] = useTransition()
+  const [isPending, startTransition]   = useTransition()
   const [signOutError, setSignOutError] = useState<string | null>(null)
+
+  // ── Contact edit state ─────────────────────────────────────────────────────
+  const [editingContact, setEditingContact] = useState(false)
+  const [contactEmail, setContactEmail]     = useState(volunteer.email)
+  const [contactPhone, setContactPhone]     = useState(volunteer.phone ?? '')
+  const [contactSaving, setContactSaving]   = useState(false)
+  const [contactError, setContactError]     = useState<string | null>(null)
+  const [contactSaved, setContactSaved]     = useState(false)
+  // Local display values (updated optimistically on save)
+  const [displayEmail, setDisplayEmail] = useState(volunteer.email)
+  const [displayPhone, setDisplayPhone] = useState(volunteer.phone ?? '')
+
+  function startEditContact() {
+    setContactEmail(displayEmail)
+    setContactPhone(displayPhone)
+    setContactError(null)
+    setContactSaved(false)
+    setEditingContact(true)
+  }
+
+  function cancelEditContact() {
+    setEditingContact(false)
+    setContactError(null)
+  }
+
+  async function saveContactInfo() {
+    setContactSaving(true)
+    setContactError(null)
+    const result = await updateContactInfo(volunteer.id, contactEmail, contactPhone)
+    setContactSaving(false)
+    if (result.error) {
+      setContactError(result.error)
+      return
+    }
+    setDisplayEmail(contactEmail.trim().toLowerCase())
+    setDisplayPhone(contactPhone.trim())
+    setEditingContact(false)
+    setContactSaved(true)
+    setTimeout(() => setContactSaved(false), 3000)
+  }
 
   function handleSignOut() {
     startTransition(async () => {
@@ -137,10 +178,103 @@ export default function ProfileView({ volunteer, credentials, documents, uploads
       <div style={{ padding: '20px 16px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
         {/* ── Contact Info ── */}
-        <Section title="Contact Information">
-          <InfoRow icon={EmailIcon} label="Email" value={volunteer.email} />
-          <InfoRow icon={PhoneIcon} label="Phone" value={volunteer.phone ?? '—'} />
-        </Section>
+        <div>
+          {/* Section header row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', padding: '0 4px' }}>
+            <h2 style={{ fontSize: '13px', fontWeight: 700, color: '#6b7280', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>
+              Contact Information
+            </h2>
+            {!editingContact && (
+              <button
+                onClick={startEditContact}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#00897B', fontFamily: 'inherit', padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <PencilIcon /> Edit
+              </button>
+            )}
+            {editingContact && (
+              <button
+                onClick={cancelEditContact}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: '#9ca3af', fontFamily: 'inherit', padding: 0 }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+
+          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #f0f0f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+            {editingContact ? (
+              /* ── Edit mode ── */
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {contactError && (
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', background: '#fef2f2', border: '1px solid #fecaca', fontSize: '13px', color: '#dc2626' }}>
+                    {contactError}
+                  </div>
+                )}
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '5px' }}>
+                    Email address
+                  </label>
+                  <input
+                    type="email"
+                    value={contactEmail}
+                    onChange={e => setContactEmail(e.target.value)}
+                    autoComplete="email"
+                    style={{
+                      width: '100%', padding: '11px 13px', borderRadius: '10px',
+                      border: '1.5px solid #e5e7eb', fontSize: '15px', color: '#111827',
+                      background: '#fafafa', outline: 'none', boxSizing: 'border-box',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '5px' }}>
+                    Phone number
+                  </label>
+                  <input
+                    type="tel"
+                    value={contactPhone}
+                    onChange={e => setContactPhone(e.target.value)}
+                    autoComplete="tel"
+                    placeholder="—"
+                    style={{
+                      width: '100%', padding: '11px 13px', borderRadius: '10px',
+                      border: '1.5px solid #e5e7eb', fontSize: '15px', color: '#111827',
+                      background: '#fafafa', outline: 'none', boxSizing: 'border-box',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={saveContactInfo}
+                  disabled={contactSaving}
+                  style={{
+                    width: '100%', padding: '13px', borderRadius: '10px', border: 'none',
+                    background: contactSaving ? '#9ca3af' : '#1B2A4A',
+                    color: 'white', fontSize: '15px', fontWeight: 700,
+                    cursor: contactSaving ? 'default' : 'pointer',
+                    fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  {contactSaving ? <><MiniSpinner /> Saving…</> : 'Save changes'}
+                </button>
+              </div>
+            ) : (
+              /* ── Read mode ── */
+              <>
+                <InfoRow icon={EmailIcon} label="Email" value={displayEmail || '—'} />
+                <InfoRow icon={PhoneIcon} label="Phone" value={displayPhone || '—'} />
+                {contactSaved && (
+                  <div style={{ padding: '10px 16px', fontSize: '13px', color: '#16a34a', background: '#f0fdf4', borderTop: '1px solid #dcfce7', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <CheckIcon /> Contact info updated
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
 
         {/* ── Credentials ── */}
         <Section title={`Credentials${credentials.length > 0 ? ` (${credentials.length})` : ''}`}>
@@ -333,6 +467,33 @@ function VerifiedIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="#16a34a">
       <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+    </svg>
+  )
+}
+
+function PencilIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  )
+}
+
+function MiniSpinner() {
+  return (
+    <svg style={{ animation: 'spin 0.85s linear infinite' }} width="15" height="15" viewBox="0 0 24 24" fill="none">
+      <style suppressHydrationWarning>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+      <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5"/>
+      <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
     </svg>
   )
 }

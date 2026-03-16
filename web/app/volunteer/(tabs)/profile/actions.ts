@@ -82,6 +82,46 @@ export async function deleteVolunteerUpload(
   return {}
 }
 
+// ─── Update contact info ──────────────────────────────────────────────────────
+
+export async function updateContactInfo(
+  volunteerId: string,
+  email: string,
+  phone: string,
+): Promise<{ error?: string }> {
+  const emailTrimmed = email.trim().toLowerCase()
+  const phoneTrimmed = phone.trim()
+
+  if (!emailTrimmed) return { error: 'Email is required.' }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) return { error: 'Enter a valid email address.' }
+
+  // Verify the caller owns this volunteer record
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  const admin = createAdminClient()
+
+  // Confirm user_id matches
+  const { data: vol } = await admin
+    .from('volunteers')
+    .select('id')
+    .eq('id', volunteerId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!vol) return { error: 'Permission denied.' }
+
+  const { error } = await admin
+    .from('volunteers')
+    .update({ email: emailTrimmed, phone: phoneTrimmed || null })
+    .eq('id', volunteerId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/volunteer/profile')
+  return {}
+}
+
 // ─── Signed URL ───────────────────────────────────────────────────────────────
 
 export async function getUploadSignedUrl(
