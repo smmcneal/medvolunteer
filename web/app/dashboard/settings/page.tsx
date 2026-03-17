@@ -1,8 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_noStore as noStore } from 'next/cache'
 import SettingsView from './SettingsView'
-import TagsManager from './TagsManager'
-import FlagsManager from './FlagsManager'
 import type { Organization, Location, OrgTag, OrgFlag } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -45,17 +43,7 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <SettingsView org={org} locations={locations} />
-
-      {/* Tags & Flags */}
-      <div style={{ padding: '0 32px 40px' }}>
-        <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 32, marginBottom: 32 }}>
-          <TagsManager initialTags={tags} />
-        </div>
-        <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 32 }}>
-          <FlagsManager initialFlags={flags} />
-        </div>
-      </div>
+      <SettingsView org={org} locations={locations} initialTags={tags} initialFlags={flags} />
     </div>
   )
 }

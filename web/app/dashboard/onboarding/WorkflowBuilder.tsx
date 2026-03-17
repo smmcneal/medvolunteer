@@ -6,35 +6,46 @@ import {
   Plus, Trash2, ChevronUp, ChevronDown,
   FileText, ShieldCheck, Users, BookOpen,
   CheckSquare, ClipboardList, Pencil, Check, X,
-  ToggleLeft, ToggleRight, AlertCircle,
+  ToggleLeft, ToggleRight, AlertCircle, ChevronRight,
+  ListChecks, Circle,
 } from 'lucide-react'
 import {
   createWorkflow, updateWorkflow, deleteWorkflow,
   createStage, updateStage, deleteStage, reorderStages,
+  updateStageChecklist,
 } from './actions'
 import type { WorkflowWithStages } from './page'
 import type { StageType, VolunteerCategory, OnboardingStage } from '@/types/database'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+const PIPELINE_PHASES = [
+  { key: 'intake',       label: 'Intake' },
+  { key: 'orientation',  label: 'Orientation' },
+  { key: 'review',       label: 'Review' },
+  { key: 'training',     label: 'Training' },
+  { key: 'active',       label: 'Active' },
+  { key: 'offboarding',  label: 'Offboarding' },
+]
+
 const STAGE_TYPES: { value: StageType; label: string; icon: React.ElementType; color: string }[] = [
-  { value: 'form_submission',   label: 'Form Submission',    icon: ClipboardList, color: '#6366f1' },
-  { value: 'background_check', label: 'Background Check',   icon: ShieldCheck,   color: '#f59e0b' },
-  { value: 'document_sign',    label: 'Document Sign',      icon: FileText,      color: '#3b82f6' },
-  { value: 'in_person_meeting',label: 'In-Person Meeting',  icon: Users,         color: '#00897B' },
-  { value: 'learning_module',  label: 'Learning Module',    icon: BookOpen,      color: '#8b5cf6' },
-  { value: 'manual_approval',  label: 'Manual Approval',    icon: CheckSquare,   color: '#1B2A4A' },
+  { value: 'form_submission',    label: 'Form Submission',   icon: ClipboardList, color: '#6366f1' },
+  { value: 'background_check',  label: 'Background Check',  icon: ShieldCheck,   color: '#f59e0b' },
+  { value: 'document_sign',     label: 'Document Sign',     icon: FileText,      color: '#3b82f6' },
+  { value: 'in_person_meeting', label: 'In-Person Meeting', icon: Users,         color: '#00897B' },
+  { value: 'learning_module',   label: 'Learning Module',   icon: BookOpen,      color: '#8b5cf6' },
+  { value: 'manual_approval',   label: 'Manual Approval',   icon: CheckSquare,   color: '#1B2A4A' },
 ]
 
 const STAGE_TYPE_MAP = Object.fromEntries(STAGE_TYPES.map(t => [t.value, t]))
 
 const CATEGORIES: { value: VolunteerCategory | ''; label: string }[] = [
-  { value: '',                   label: 'All categories' },
+  { value: '',                     label: 'All categories' },
   { value: 'medical_professional', label: 'Medical Professional' },
-  { value: 'support_staff',      label: 'Support Staff' },
-  { value: 'admin',              label: 'Admin' },
-  { value: 'trainee',            label: 'Trainee' },
-  { value: 'other',              label: 'Other' },
+  { value: 'support_staff',        label: 'Support Staff' },
+  { value: 'admin',                label: 'Admin' },
+  { value: 'trainee',              label: 'Trainee' },
+  { value: 'other',                label: 'Other' },
 ]
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
@@ -48,7 +59,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
 const NAVY = '#1B2A4A'
 const TEAL = '#00897B'
 
-// ─── Empty stage form defaults ────────────────────────────────────────────────
+// ─── Stage form types ─────────────────────────────────────────────────────────
 
 interface StageForm {
   name: string
@@ -59,11 +70,8 @@ interface StageForm {
 }
 
 const EMPTY_STAGE_FORM: StageForm = {
-  name: '',
-  description: '',
-  stage_type: 'form_submission',
-  is_required: true,
-  deadline_days_after_start: '',
+  name: '', description: '', stage_type: 'form_submission',
+  is_required: true, deadline_days_after_start: '',
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -83,51 +91,73 @@ export default function WorkflowBuilder({
   const [newWorkflowName, setNewWorkflowName] = useState('')
   const [newWorkflowCategory, setNewWorkflowCategory] = useState<VolunteerCategory | ''>('')
 
-  // Stage editing state
+  // Stage editing
   const [editingStageId, setEditingStageId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<StageForm>(EMPTY_STAGE_FORM)
   const [showAddStage, setShowAddStage] = useState(false)
   const [addForm, setAddForm] = useState<StageForm>(EMPTY_STAGE_FORM)
 
-  // Workflow name inline edit
+  // Workflow name edit
   const [editingWorkflowName, setEditingWorkflowName] = useState(false)
   const [workflowNameDraft, setWorkflowNameDraft] = useState('')
   const nameInputRef = useRef<HTMLInputElement>(null)
 
-  // Error state
+  // Stage accordion
+  const [expandedStageIds, setExpandedStageIds] = useState<Set<string>>(new Set())
+
+  // Checklist item inputs (stageId -> current draft text)
+  const [checklistInputs, setChecklistInputs] = useState<Record<string, string>>({})
+
   const [error, setError] = useState<string | null>(null)
 
   const selected = initialWorkflows.find(w => w.id === selectedId) ?? null
 
-  function refresh() {
-    router.refresh()
-    setError(null)
-  }
+  function refresh() { router.refresh(); setError(null) }
 
   async function run(fn: () => Promise<void>) {
     setError(null)
     startTransition(async () => {
-      try {
-        await fn()
-        refresh()
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Something went wrong')
-      }
+      try { await fn(); refresh() }
+      catch (e) { setError(e instanceof Error ? e.message : 'Something went wrong') }
     })
   }
 
-  // ── Workflow actions ────────────────────────────────────────────
+  // ── Accordion ───────────────────────────────────────────────────
+
+  function toggleExpand(stageId: string) {
+    setExpandedStageIds(prev => {
+      const next = new Set(prev)
+      if (next.has(stageId)) next.delete(stageId)
+      else next.add(stageId)
+      return next
+    })
+  }
+
+  // ── Checklist ───────────────────────────────────────────────────
+
+  function getChecklistItems(stage: OnboardingStage): string[] {
+    return (stage.metadata?.checklist_items as string[] | undefined) ?? []
+  }
+
+  function handleAddChecklistItem(stage: OnboardingStage) {
+    const text = checklistInputs[stage.id]?.trim()
+    if (!text) return
+    run(() => updateStageChecklist(stage.id, [...getChecklistItems(stage), text]))
+    setChecklistInputs(prev => ({ ...prev, [stage.id]: '' }))
+  }
+
+  function handleRemoveChecklistItem(stage: OnboardingStage, idx: number) {
+    const updated = getChecklistItems(stage).filter((_, i) => i !== idx)
+    run(() => updateStageChecklist(stage.id, updated))
+  }
+
+  // ── Workflow actions ─────────────────────────────────────────────
 
   function handleCreateWorkflow() {
     if (!newWorkflowName.trim()) return
     run(async () => {
-      await createWorkflow({
-        name: newWorkflowName.trim(),
-        applies_to_category: newWorkflowCategory || null,
-      })
-      setNewWorkflowName('')
-      setNewWorkflowCategory('')
-      setShowNewWorkflow(false)
+      await createWorkflow({ name: newWorkflowName.trim(), applies_to_category: newWorkflowCategory || null })
+      setNewWorkflowName(''); setNewWorkflowCategory(''); setShowNewWorkflow(false)
     })
   }
 
@@ -154,7 +184,7 @@ export default function WorkflowBuilder({
     run(() => updateWorkflow(selected.id, { applies_to_category: cat || null }))
   }
 
-  // ── Stage actions ───────────────────────────────────────────────
+  // ── Stage actions ────────────────────────────────────────────────
 
   function handleAddStage() {
     if (!selected || !addForm.name.trim()) return
@@ -165,23 +195,18 @@ export default function WorkflowBuilder({
         description: addForm.description.trim(),
         stage_type: addForm.stage_type,
         is_required: addForm.is_required,
-        deadline_days_after_start: addForm.deadline_days_after_start
-          ? parseInt(addForm.deadline_days_after_start)
-          : null,
+        deadline_days_after_start: addForm.deadline_days_after_start ? parseInt(addForm.deadline_days_after_start) : null,
         order_index: selected.stages.length + 1,
       })
-      setAddForm(EMPTY_STAGE_FORM)
-      setShowAddStage(false)
+      setAddForm(EMPTY_STAGE_FORM); setShowAddStage(false)
     })
   }
 
   function handleStartEditStage(stage: OnboardingStage) {
     setEditingStageId(stage.id)
     setEditForm({
-      name: stage.name,
-      description: stage.description ?? '',
-      stage_type: stage.stage_type,
-      is_required: stage.is_required,
+      name: stage.name, description: stage.description ?? '',
+      stage_type: stage.stage_type, is_required: stage.is_required,
       deadline_days_after_start: stage.deadline_days_after_start?.toString() ?? '',
     })
     setShowAddStage(false)
@@ -190,13 +215,9 @@ export default function WorkflowBuilder({
   function handleSaveStage(stageId: string) {
     run(async () => {
       await updateStage(stageId, {
-        name: editForm.name.trim(),
-        description: editForm.description.trim(),
-        stage_type: editForm.stage_type,
-        is_required: editForm.is_required,
-        deadline_days_after_start: editForm.deadline_days_after_start
-          ? parseInt(editForm.deadline_days_after_start)
-          : null,
+        name: editForm.name.trim(), description: editForm.description.trim(),
+        stage_type: editForm.stage_type, is_required: editForm.is_required,
+        deadline_days_after_start: editForm.deadline_days_after_start ? parseInt(editForm.deadline_days_after_start) : null,
       })
       setEditingStageId(null)
     })
@@ -212,18 +233,16 @@ export default function WorkflowBuilder({
     const target = index + dir
     if (target < 0 || target >= newStages.length) return
     ;[newStages[index], newStages[target]] = [newStages[target], newStages[index]]
-    const reordered = newStages.map((s, i) => ({ id: s.id, order_index: i + 1 }))
-    run(() => reorderStages(reordered))
+    run(() => reorderStages(newStages.map((s, i) => ({ id: s.id, order_index: i + 1 }))))
   }
 
-  // ── Shared styles ───────────────────────────────────────────────
+  // ── Styles ───────────────────────────────────────────────────────
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '8px 10px',
     border: '1px solid #e5e7eb', borderRadius: '7px',
     fontSize: '13px', color: '#374151', outline: 'none',
-    fontFamily: 'inherit', boxSizing: 'border-box',
-    background: 'white',
+    fontFamily: 'inherit', boxSizing: 'border-box', background: 'white',
   }
 
   const selectStyle: React.CSSProperties = {
@@ -232,9 +251,8 @@ export default function WorkflowBuilder({
 
   const btnPrimary: React.CSSProperties = {
     padding: '7px 14px', borderRadius: '7px',
-    background: NAVY, color: 'white',
-    border: 'none', cursor: 'pointer',
-    fontSize: '13px', fontWeight: 600,
+    background: NAVY, color: 'white', border: 'none',
+    cursor: 'pointer', fontSize: '13px', fontWeight: 600,
     opacity: isPending ? 0.6 : 1,
   }
 
@@ -245,136 +263,69 @@ export default function WorkflowBuilder({
     fontSize: '13px', fontWeight: 500,
   }
 
-  // ── Render stage form (shared between add + edit) ──────────────
+  // ── Stage form fields (shared) ────────────────────────────────────
 
-  function StageFormFields({
-    form, setForm,
-  }: {
-    form: StageForm
-    setForm: (f: StageForm) => void
-  }) {
+  function StageFormFields({ form, setForm }: { form: StageForm; setForm: (f: StageForm) => void }) {
     const TypeIcon = STAGE_TYPE_MAP[form.stage_type]?.icon ?? ClipboardList
     const typeColor = STAGE_TYPE_MAP[form.stage_type]?.color ?? '#6b7280'
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          {/* Name */}
           <div>
             <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Stage Name *
             </label>
-            <input
-              style={inputStyle}
-              value={form.name}
-              onChange={e => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. Background Check"
-              autoFocus
-            />
+            <input style={inputStyle} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Background Check" autoFocus />
           </div>
-
-          {/* Type */}
           <div>
             <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Stage Type *
             </label>
             <div style={{ position: 'relative' }}>
-              <div style={{
-                position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)',
-                display: 'flex', alignItems: 'center', pointerEvents: 'none',
-              }}>
+              <div style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
                 <TypeIcon style={{ width: '13px', height: '13px', color: typeColor }} />
               </div>
-              <select
-                style={{ ...selectStyle, paddingLeft: '28px' }}
-                value={form.stage_type}
-                onChange={e => setForm({ ...form, stage_type: e.target.value as StageType })}
-              >
-                {STAGE_TYPES.map(t => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
+              <select style={{ ...selectStyle, paddingLeft: '28px' }} value={form.stage_type} onChange={e => setForm({ ...form, stage_type: e.target.value as StageType })}>
+                {STAGE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
           </div>
         </div>
 
-        {/* Description */}
         <div>
-          <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Description
-          </label>
-          <textarea
-            style={{ ...inputStyle, resize: 'vertical', minHeight: '56px', lineHeight: 1.5 }}
-            value={form.description}
-            onChange={e => setForm({ ...form, description: e.target.value })}
-            placeholder="Optional description shown to coordinators"
-          />
+          <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Description</label>
+          <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '56px', lineHeight: 1.5 }} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Optional description shown to coordinators" />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          {/* Required */}
           <div>
-            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Required
-            </label>
-            <div
-              onClick={() => setForm({ ...form, is_required: !form.is_required })}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: '7px',
-                cursor: 'pointer', userSelect: 'none',
-                background: form.is_required ? '#f0fdf4' : 'white',
-              }}
-            >
-              {form.is_required
-                ? <ToggleRight style={{ width: '18px', height: '18px', color: '#22c55e' }} />
-                : <ToggleLeft  style={{ width: '18px', height: '18px', color: '#d1d5db' }} />
-              }
-              <span style={{ fontSize: '13px', color: form.is_required ? '#15803d' : '#6b7280', fontWeight: 500 }}>
-                {form.is_required ? 'Required' : 'Optional'}
-              </span>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Required</label>
+            <div onClick={() => setForm({ ...form, is_required: !form.is_required })} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: '7px', cursor: 'pointer', userSelect: 'none', background: form.is_required ? '#f0fdf4' : 'white' }}>
+              {form.is_required ? <ToggleRight style={{ width: '18px', height: '18px', color: '#22c55e' }} /> : <ToggleLeft style={{ width: '18px', height: '18px', color: '#d1d5db' }} />}
+              <span style={{ fontSize: '13px', color: form.is_required ? '#15803d' : '#6b7280', fontWeight: 500 }}>{form.is_required ? 'Required' : 'Optional'}</span>
             </div>
           </div>
-
-          {/* Deadline */}
           <div>
-            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Deadline (days from start)
-            </label>
-            <input
-              style={inputStyle}
-              type="number"
-              min="1"
-              value={form.deadline_days_after_start}
-              onChange={e => setForm({ ...form, deadline_days_after_start: e.target.value })}
-              placeholder="e.g. 14"
-            />
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Deadline (days from start)</label>
+            <input style={inputStyle} type="number" min="1" value={form.deadline_days_after_start} onChange={e => setForm({ ...form, deadline_days_after_start: e.target.value })} placeholder="e.g. 14" />
           </div>
         </div>
       </div>
     )
   }
 
-  // ── Main render ─────────────────────────────────────────────────
+  // ── Main render ──────────────────────────────────────────────────
 
   return (
     <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
       {/* ── Left: Workflow list ──────────────────────────────────── */}
-      <div style={{
-        width: '280px', borderRight: '1px solid #f0f0f0',
-        display: 'flex', flexDirection: 'column',
-        background: '#fafafa', flexShrink: 0,
-        overflowY: 'auto',
-      }}>
+      <div style={{ width: '280px', borderRight: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column', background: '#fafafa', flexShrink: 0, overflowY: 'auto' }}>
         <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0' }}>
           <button
             onClick={() => { setShowNewWorkflow(true); setSelectedId(null) }}
-            style={{
-              ...btnPrimary,
-              width: '100%', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', gap: '6px', padding: '9px 14px',
-            }}
+            style={{ ...btnPrimary, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '9px 14px' }}
           >
             <Plus style={{ width: '14px', height: '14px' }} />
             New Workflow
@@ -383,59 +334,28 @@ export default function WorkflowBuilder({
 
         <div style={{ flex: 1, padding: '8px' }}>
           {initialWorkflows.length === 0 && !showNewWorkflow && (
-            <p style={{ fontSize: '13px', color: '#9ca3af', textAlign: 'center', padding: '24px 8px' }}>
-              No workflows yet. Create your first one.
-            </p>
+            <p style={{ fontSize: '13px', color: '#9ca3af', textAlign: 'center', padding: '24px 8px' }}>No workflows yet.</p>
           )}
-
           {initialWorkflows.map(w => {
             const isSelected = selectedId === w.id
             const catStyle = w.applies_to_category
               ? (CATEGORY_COLORS[w.applies_to_category] ?? { bg: '#f3f4f6', text: '#374151' })
               : { bg: '#f3f4f6', text: '#6b7280' }
-
             return (
               <div
                 key={w.id}
                 onClick={() => { setSelectedId(w.id); setShowNewWorkflow(false); setShowAddStage(false); setEditingStageId(null) }}
-                style={{
-                  padding: '12px', borderRadius: '8px', cursor: 'pointer',
-                  marginBottom: '4px',
-                  background: isSelected ? NAVY : 'white',
-                  border: `1px solid ${isSelected ? NAVY : '#f0f0f0'}`,
-                  transition: 'all 0.15s',
-                }}
+                style={{ padding: '12px', borderRadius: '8px', cursor: 'pointer', marginBottom: '4px', background: isSelected ? NAVY : 'white', border: `1px solid ${isSelected ? NAVY : '#f0f0f0'}`, transition: 'all 0.15s' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{
-                    fontSize: '13px', fontWeight: 600,
-                    color: isSelected ? 'white' : '#111827',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
-                  }}>
-                    {w.name}
-                  </span>
-                  <span style={{
-                    width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0, marginLeft: '8px',
-                    background: w.is_active
-                      ? (isSelected ? '#86efac' : '#22c55e')
-                      : (isSelected ? 'rgba(255,255,255,0.3)' : '#d1d5db'),
-                  }} />
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: isSelected ? 'white' : '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{w.name}</span>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0, marginLeft: '8px', background: w.is_active ? (isSelected ? '#86efac' : '#22c55e') : (isSelected ? 'rgba(255,255,255,0.3)' : '#d1d5db') }} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{
-                    fontSize: '11px', padding: '2px 6px', borderRadius: '4px',
-                    background: isSelected ? 'rgba(255,255,255,0.15)' : catStyle.bg,
-                    color: isSelected ? 'rgba(255,255,255,0.8)' : catStyle.text,
-                    fontWeight: 500,
-                  }}>
-                    {w.applies_to_category
-                      ? CATEGORIES.find(c => c.value === w.applies_to_category)?.label ?? w.applies_to_category
-                      : 'All categories'
-                    }
+                  <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: isSelected ? 'rgba(255,255,255,0.15)' : catStyle.bg, color: isSelected ? 'rgba(255,255,255,0.8)' : catStyle.text, fontWeight: 500 }}>
+                    {w.applies_to_category ? CATEGORIES.find(c => c.value === w.applies_to_category)?.label ?? w.applies_to_category : 'All categories'}
                   </span>
-                  <span style={{ fontSize: '11px', color: isSelected ? 'rgba(255,255,255,0.5)' : '#9ca3af' }}>
-                    {w.stages.length} stage{w.stages.length !== 1 ? 's' : ''}
-                  </span>
+                  <span style={{ fontSize: '11px', color: isSelected ? 'rgba(255,255,255,0.5)' : '#9ca3af' }}>{w.stages.length} stage{w.stages.length !== 1 ? 's' : ''}</span>
                 </div>
               </div>
             )
@@ -448,12 +368,7 @@ export default function WorkflowBuilder({
 
         {/* Error banner */}
         {error && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '10px 14px', borderRadius: '8px',
-            background: '#fef2f2', border: '1px solid #fecaca',
-            color: '#dc2626', fontSize: '13px', marginBottom: '20px',
-          }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderRadius: '8px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '13px', marginBottom: '20px' }}>
             <AlertCircle style={{ width: '14px', height: '14px', flexShrink: 0 }} />
             {error}
           </div>
@@ -461,50 +376,23 @@ export default function WorkflowBuilder({
 
         {/* New workflow form */}
         {showNewWorkflow && (
-          <div style={{
-            background: 'white', borderRadius: '12px',
-            border: '1px solid #e5e7eb', padding: '24px',
-            maxWidth: '560px',
-          }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#111827', marginBottom: '20px' }}>
-              Create New Workflow
-            </h2>
+          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '24px', maxWidth: '560px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#111827', marginBottom: '20px' }}>Create New Workflow</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
               <div>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Workflow Name *
-                </label>
-                <input
-                  style={inputStyle}
-                  value={newWorkflowName}
-                  onChange={e => setNewWorkflowName(e.target.value)}
-                  placeholder="e.g. Medical Professional Onboarding"
-                  autoFocus
-                  onKeyDown={e => e.key === 'Enter' && handleCreateWorkflow()}
-                />
+                <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Workflow Name *</label>
+                <input style={inputStyle} value={newWorkflowName} onChange={e => setNewWorkflowName(e.target.value)} placeholder="e.g. Medical Professional Onboarding" autoFocus onKeyDown={e => e.key === 'Enter' && handleCreateWorkflow()} />
               </div>
               <div>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Applies To Category
-                </label>
-                <select
-                  style={selectStyle}
-                  value={newWorkflowCategory}
-                  onChange={e => setNewWorkflowCategory(e.target.value as VolunteerCategory | '')}
-                >
-                  {CATEGORIES.map(c => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
+                <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Applies To Category</label>
+                <select style={selectStyle} value={newWorkflowCategory} onChange={e => setNewWorkflowCategory(e.target.value as VolunteerCategory | '')}>
+                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button style={btnPrimary} onClick={handleCreateWorkflow} disabled={!newWorkflowName.trim() || isPending}>
-                Create Workflow
-              </button>
-              <button style={btnSecondary} onClick={() => { setShowNewWorkflow(false); setSelectedId(initialWorkflows[0]?.id ?? null) }}>
-                Cancel
-              </button>
+              <button style={btnPrimary} onClick={handleCreateWorkflow} disabled={!newWorkflowName.trim() || isPending}>Create Workflow</button>
+              <button style={btnSecondary} onClick={() => { setShowNewWorkflow(false); setSelectedId(initialWorkflows[0]?.id ?? null) }}>Cancel</button>
             </div>
           </div>
         )}
@@ -513,94 +401,60 @@ export default function WorkflowBuilder({
         {selected && !showNewWorkflow && (
           <div style={{ maxWidth: '720px' }}>
 
-            {/* Workflow settings bar */}
-            <div style={{
-              background: 'white', borderRadius: '12px',
-              border: '1px solid #f0f0f0', padding: '18px 20px',
-              display: 'flex', alignItems: 'center', gap: '14px',
-              marginBottom: '20px', flexWrap: 'wrap',
-            }}>
-              {/* Name */}
+            {/* ── Pipeline Phases (static reference) ── */}
+            <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', padding: '18px 20px', marginBottom: '20px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '14px' }}>
+                Pipeline Phases
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto' }}>
+                {PIPELINE_PHASES.map((p, i) => (
+                  <div key={p.key} style={{ display: 'flex', alignItems: 'center', flex: i < PIPELINE_PHASES.length - 1 ? '1' : undefined }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 60 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: '2px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af' }}>{i + 1}</span>
+                      </div>
+                      <span style={{ fontSize: 10, fontWeight: 500, color: '#9ca3af', whiteSpace: 'nowrap' }}>{p.label}</span>
+                    </div>
+                    {i < PIPELINE_PHASES.length - 1 && (
+                      <div style={{ flex: 1, height: 2, background: '#e5e7eb', margin: '0 4px', marginBottom: 18 }} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Workflow settings bar ── */}
+            <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px', flexWrap: 'wrap' }}>
               {editingWorkflowName ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: '200px' }}>
-                  <input
-                    ref={nameInputRef}
-                    style={{ ...inputStyle, fontSize: '15px', fontWeight: 600 }}
-                    value={workflowNameDraft}
-                    onChange={e => setWorkflowNameDraft(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleSaveWorkflowName(); if (e.key === 'Escape') setEditingWorkflowName(false) }}
-                    autoFocus
-                  />
-                  <button onClick={handleSaveWorkflowName} style={{ ...btnPrimary, padding: '7px 10px' }}>
-                    <Check style={{ width: '14px', height: '14px' }} />
-                  </button>
-                  <button onClick={() => setEditingWorkflowName(false)} style={{ ...btnSecondary, padding: '7px 10px' }}>
-                    <X style={{ width: '14px', height: '14px' }} />
-                  </button>
+                  <input ref={nameInputRef} style={{ ...inputStyle, fontSize: '15px', fontWeight: 600 }} value={workflowNameDraft} onChange={e => setWorkflowNameDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveWorkflowName(); if (e.key === 'Escape') setEditingWorkflowName(false) }} autoFocus />
+                  <button onClick={handleSaveWorkflowName} style={{ ...btnPrimary, padding: '7px 10px' }}><Check style={{ width: '14px', height: '14px' }} /></button>
+                  <button onClick={() => setEditingWorkflowName(false)} style={{ ...btnSecondary, padding: '7px 10px' }}><X style={{ width: '14px', height: '14px' }} /></button>
                 </div>
               ) : (
-                <div
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, cursor: 'pointer' }}
-                  onClick={() => { setEditingWorkflowName(true); setWorkflowNameDraft(selected.name) }}
-                >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, cursor: 'pointer' }} onClick={() => { setEditingWorkflowName(true); setWorkflowNameDraft(selected.name) }}>
                   <span style={{ fontSize: '16px', fontWeight: 700, color: '#111827' }}>{selected.name}</span>
                   <Pencil style={{ width: '12px', height: '12px', color: '#9ca3af' }} />
                 </div>
               )}
 
-              {/* Category */}
-              <select
-                style={{ ...selectStyle, width: 'auto', minWidth: '160px' }}
-                value={selected.applies_to_category ?? ''}
-                onChange={e => handleCategoryChange(e.target.value as VolunteerCategory | '')}
-              >
-                {CATEGORIES.map(c => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
+              <select style={{ ...selectStyle, width: 'auto', minWidth: '160px' }} value={selected.applies_to_category ?? ''} onChange={e => handleCategoryChange(e.target.value as VolunteerCategory | '')}>
+                {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
 
-              {/* Active toggle */}
-              <div
-                onClick={() => handleToggleActive(selected)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  cursor: 'pointer', padding: '6px 10px', borderRadius: '7px',
-                  border: '1px solid #e5e7eb', userSelect: 'none',
-                  background: selected.is_active ? '#f0fdf4' : '#f9fafb',
-                }}
-              >
-                {selected.is_active
-                  ? <ToggleRight style={{ width: '18px', height: '18px', color: '#22c55e' }} />
-                  : <ToggleLeft  style={{ width: '18px', height: '18px', color: '#d1d5db' }} />
-                }
-                <span style={{ fontSize: '12px', fontWeight: 500, color: selected.is_active ? '#15803d' : '#6b7280' }}>
-                  {selected.is_active ? 'Active' : 'Inactive'}
-                </span>
+              <div onClick={() => handleToggleActive(selected)} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '6px 10px', borderRadius: '7px', border: '1px solid #e5e7eb', userSelect: 'none', background: selected.is_active ? '#f0fdf4' : '#f9fafb' }}>
+                {selected.is_active ? <ToggleRight style={{ width: '18px', height: '18px', color: '#22c55e' }} /> : <ToggleLeft style={{ width: '18px', height: '18px', color: '#d1d5db' }} />}
+                <span style={{ fontSize: '12px', fontWeight: 500, color: selected.is_active ? '#15803d' : '#6b7280' }}>{selected.is_active ? 'Active' : 'Inactive'}</span>
               </div>
 
-              {/* Delete workflow */}
-              <button
-                onClick={() => handleDeleteWorkflow(selected.id)}
-                style={{
-                  padding: '7px 10px', borderRadius: '7px',
-                  background: 'white', border: '1px solid #fecaca',
-                  cursor: 'pointer', color: '#dc2626', marginLeft: 'auto',
-                }}
-                title="Delete workflow"
-              >
+              <button onClick={() => handleDeleteWorkflow(selected.id)} style={{ padding: '7px 10px', borderRadius: '7px', background: 'white', border: '1px solid #fecaca', cursor: 'pointer', color: '#dc2626', marginLeft: 'auto' }} title="Delete workflow">
                 <Trash2 style={{ width: '14px', height: '14px' }} />
               </button>
             </div>
 
-            {/* Stages section */}
-            <div style={{
-              background: 'white', borderRadius: '12px',
-              border: '1px solid #f0f0f0', overflow: 'hidden',
-            }}>
-              <div style={{
-                padding: '16px 20px', borderBottom: '1px solid #f0f0f0',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              }}>
+            {/* ── Stages section ── */}
+            <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', overflow: 'hidden' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <span style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>Stages</span>
                   <span style={{ fontSize: '12px', color: '#9ca3af', marginLeft: '8px' }}>
@@ -608,211 +462,216 @@ export default function WorkflowBuilder({
                   </span>
                 </div>
                 {!showAddStage && (
-                  <button
-                    onClick={() => { setShowAddStage(true); setEditingStageId(null); setAddForm(EMPTY_STAGE_FORM) }}
-                    style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px' }}
-                  >
+                  <button onClick={() => { setShowAddStage(true); setEditingStageId(null); setAddForm(EMPTY_STAGE_FORM) }} style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px' }}>
                     <Plus style={{ width: '13px', height: '13px' }} />
                     Add Stage
                   </button>
                 )}
               </div>
 
-              {/* Stage list */}
-              <div>
-                {selected.stages.length === 0 && !showAddStage && (
-                  <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-                    <ClipboardList style={{ width: '32px', height: '32px', color: '#e5e7eb', margin: '0 auto 10px' }} />
-                    <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '4px' }}>No stages yet</p>
-                    <p style={{ fontSize: '12px', color: '#d1d5db' }}>Add your first stage to define the onboarding steps</p>
-                  </div>
-                )}
+              {/* Empty state */}
+              {selected.stages.length === 0 && !showAddStage && (
+                <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+                  <ClipboardList style={{ width: '32px', height: '32px', color: '#e5e7eb', margin: '0 auto 10px' }} />
+                  <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '4px' }}>No stages yet</p>
+                  <p style={{ fontSize: '12px', color: '#d1d5db' }}>Add your first stage to define the onboarding steps</p>
+                </div>
+              )}
 
-                {selected.stages.map((stage, i) => {
-                  const meta = STAGE_TYPE_MAP[stage.stage_type]
-                  const StageIcon = meta?.icon ?? ClipboardList
-                  const iconColor = meta?.color ?? '#6b7280'
-                  const isEditing = editingStageId === stage.id
+              {/* Stage cards */}
+              {selected.stages.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '16px 20px' }}>
+                  {selected.stages.map((stage, i) => {
+                    const meta = STAGE_TYPE_MAP[stage.stage_type]
+                    const StageIcon = meta?.icon ?? ClipboardList
+                    const iconColor = meta?.color ?? '#6b7280'
+                    const isExpanded = expandedStageIds.has(stage.id)
+                    const isEditing = editingStageId === stage.id
+                    const checklistItems = getChecklistItems(stage)
 
-                  return (
-                    <div key={stage.id} style={{
-                      borderTop: i === 0 ? 'none' : '1px solid #f9f9f9',
-                    }}>
-                      {/* Stage row */}
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: '12px',
-                        padding: '14px 20px',
-                        background: isEditing ? '#fafafa' : 'white',
-                      }}>
-                        {/* Order + reorder buttons */}
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
-                          <button
-                            onClick={() => handleMoveStage(selected.stages, i, -1)}
-                            disabled={i === 0 || isPending}
-                            style={{ background: 'none', border: 'none', cursor: i === 0 ? 'not-allowed' : 'pointer', padding: '1px', color: i === 0 ? '#e5e7eb' : '#9ca3af' }}
-                          >
-                            <ChevronUp style={{ width: '14px', height: '14px' }} />
-                          </button>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#d1d5db', width: '16px', textAlign: 'center' }}>{i + 1}</span>
-                          <button
-                            onClick={() => handleMoveStage(selected.stages, i, 1)}
-                            disabled={i === selected.stages.length - 1 || isPending}
-                            style={{ background: 'none', border: 'none', cursor: i === selected.stages.length - 1 ? 'not-allowed' : 'pointer', padding: '1px', color: i === selected.stages.length - 1 ? '#e5e7eb' : '#9ca3af' }}
-                          >
-                            <ChevronDown style={{ width: '14px', height: '14px' }} />
-                          </button>
-                        </div>
+                    return (
+                      <div key={stage.id} style={{ borderRadius: '10px', border: `1px solid ${isExpanded ? '#e0e7f0' : '#f3f4f6'}`, background: 'white', overflow: 'hidden' }}>
 
-                        {/* Type icon */}
-                        <div style={{
-                          width: '36px', height: '36px', borderRadius: '9px',
-                          background: `${iconColor}15`,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                        }}>
-                          <StageIcon style={{ width: '16px', height: '16px', color: iconColor }} />
-                        </div>
+                        {/* Stage header row */}
+                        <div
+                          style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px', cursor: 'pointer', background: isExpanded ? '#fafbff' : 'white' }}
+                          onClick={() => !isEditing && toggleExpand(stage.id)}
+                        >
+                          {/* Circle (like Onboarding tab) */}
+                          <Circle style={{ width: '18px', height: '18px', color: '#d1d5db', flexShrink: 0 }} />
 
-                        {/* Name + meta */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: '14px', fontWeight: 600, color: '#111827', marginBottom: '3px' }}>
-                            {stage.name}
-                          </p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                            <span style={{
-                              fontSize: '11px', padding: '2px 7px', borderRadius: '4px',
-                              background: `${iconColor}12`, color: iconColor, fontWeight: 500,
-                            }}>
-                              {meta?.label ?? stage.stage_type}
-                            </span>
-                            {stage.is_required && (
-                              <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: '#fef3c7', color: '#92400e', fontWeight: 500 }}>
-                                Required
+                          {/* Reorder */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                            <button onClick={() => handleMoveStage(selected.stages, i, -1)} disabled={i === 0 || isPending} style={{ background: 'none', border: 'none', cursor: i === 0 ? 'not-allowed' : 'pointer', padding: '1px', color: i === 0 ? '#e5e7eb' : '#9ca3af' }}>
+                              <ChevronUp style={{ width: '12px', height: '12px' }} />
+                            </button>
+                            <button onClick={() => handleMoveStage(selected.stages, i, 1)} disabled={i === selected.stages.length - 1 || isPending} style={{ background: 'none', border: 'none', cursor: i === selected.stages.length - 1 ? 'not-allowed' : 'pointer', padding: '1px', color: i === selected.stages.length - 1 ? '#e5e7eb' : '#9ca3af' }}>
+                              <ChevronDown style={{ width: '12px', height: '12px' }} />
+                            </button>
+                          </div>
+
+                          {/* Type icon */}
+                          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: `${iconColor}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <StageIcon style={{ width: '14px', height: '14px', color: iconColor }} />
+                          </div>
+
+                          {/* Name + badges */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '11px', color: '#9ca3af' }}>{i + 1}.</span>
+                              <span style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{stage.name}</span>
+                              <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '5px', background: `${iconColor}12`, color: iconColor, fontWeight: 500 }}>
+                                {meta?.label ?? stage.stage_type}
                               </span>
-                            )}
-                            {stage.deadline_days_after_start && (
-                              <span style={{ fontSize: '11px', color: '#9ca3af' }}>
-                                Due in {stage.deadline_days_after_start}d
-                              </span>
-                            )}
-                            {stage.description && (
-                              <span style={{ fontSize: '12px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '240px' }}>
-                                {stage.description}
-                              </span>
+                              {stage.is_required && (
+                                <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '5px', background: '#fef3c7', color: '#92400e', fontWeight: 500 }}>Required</span>
+                              )}
+                              {checklistItems.length > 0 && (
+                                <span style={{ fontSize: '11px', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <ListChecks style={{ width: '11px', height: '11px' }} />
+                                  {checklistItems.length} item{checklistItems.length !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </div>
+                            {stage.description && !isExpanded && (
+                              <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stage.description}</p>
                             )}
                           </div>
-                        </div>
 
-                        {/* Actions */}
-                        <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                          <button
-                            onClick={() => isEditing ? setEditingStageId(null) : handleStartEditStage(stage)}
-                            style={{
-                              padding: '6px 10px', borderRadius: '6px', border: '1px solid #e5e7eb',
-                              background: isEditing ? '#f3f4f6' : 'white', cursor: 'pointer',
-                              color: '#374151', fontSize: '12px', fontWeight: 500,
-                              display: 'flex', alignItems: 'center', gap: '4px',
-                            }}
-                          >
-                            {isEditing ? <X style={{ width: '12px', height: '12px' }} /> : <Pencil style={{ width: '12px', height: '12px' }} />}
-                            {isEditing ? 'Cancel' : 'Edit'}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteStage(stage.id)}
-                            style={{
-                              padding: '6px 8px', borderRadius: '6px',
-                              border: '1px solid #fecaca', background: 'white',
-                              cursor: 'pointer', color: '#dc2626',
-                            }}
-                          >
-                            <Trash2 style={{ width: '12px', height: '12px' }} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Inline edit form */}
-                      {isEditing && (
-                        <div style={{
-                          margin: '0 20px 16px', padding: '18px',
-                          background: 'white', borderRadius: '10px',
-                          border: '1px solid #e5e7eb',
-                        }}>
-                          <StageFormFields form={editForm} setForm={setEditForm} />
-                          <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+                          {/* Edit / delete */}
+                          <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                             <button
-                              style={btnPrimary}
-                              onClick={() => handleSaveStage(stage.id)}
-                              disabled={!editForm.name.trim() || isPending}
+                              onClick={() => isEditing ? setEditingStageId(null) : handleStartEditStage(stage)}
+                              style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid #e5e7eb', background: isEditing ? '#f3f4f6' : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px', color: '#374151' }}
                             >
-                              Save Changes
+                              {isEditing ? <X style={{ width: '11px', height: '11px' }} /> : <Pencil style={{ width: '11px', height: '11px' }} />}
                             </button>
-                            <button style={btnSecondary} onClick={() => setEditingStageId(null)}>
-                              Cancel
+                            <button onClick={() => handleDeleteStage(stage.id)} style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid #fecaca', background: 'white', cursor: 'pointer', color: '#dc2626' }}>
+                              <Trash2 style={{ width: '11px', height: '11px' }} />
                             </button>
                           </div>
+
+                          {/* Expand chevron */}
+                          <ChevronRight style={{ width: '14px', height: '14px', color: '#9ca3af', flexShrink: 0, transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
                         </div>
-                      )}
-                    </div>
-                  )
-                })}
 
-                {/* Add stage form */}
-                {showAddStage && (
-                  <div style={{
-                    borderTop: selected.stages.length > 0 ? '1px solid #f0f0f0' : 'none',
-                    padding: '16px 20px',
-                  }}>
-                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '14px' }}>
-                      New Stage
-                    </p>
-                    <StageFormFields form={addForm} setForm={setAddForm} />
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-                      <button
-                        style={btnPrimary}
-                        onClick={handleAddStage}
-                        disabled={!addForm.name.trim() || isPending}
-                      >
-                        Add Stage
-                      </button>
-                      <button style={btnSecondary} onClick={() => setShowAddStage(false)}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
+                        {/* Expanded body */}
+                        {isExpanded && (
+                          <div style={{ padding: '4px 16px 16px', borderTop: '1px solid #f0f0f0' }}>
 
-                {/* Add stage footer button */}
-                {!showAddStage && selected.stages.length > 0 && (
-                  <div style={{ padding: '12px 20px', borderTop: '1px solid #f9f9f9' }}>
-                    <button
-                      onClick={() => { setShowAddStage(true); setEditingStageId(null); setAddForm(EMPTY_STAGE_FORM) }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '6px',
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        fontSize: '13px', color: TEAL, fontWeight: 500, padding: 0,
-                      }}
-                    >
-                      <Plus style={{ width: '14px', height: '14px' }} />
-                      Add another stage
-                    </button>
+                            {/* Edit stage form */}
+                            {isEditing && (
+                              <div style={{ marginTop: '12px', padding: '16px', background: '#fafafa', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                                <StageFormFields form={editForm} setForm={setEditForm} />
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                                  <button style={btnPrimary} onClick={() => handleSaveStage(stage.id)} disabled={!editForm.name.trim() || isPending}>Save Changes</button>
+                                  <button style={btnSecondary} onClick={() => setEditingStageId(null)}>Cancel</button>
+                                </div>
+                              </div>
+                            )}
+
+                            {!isEditing && (
+                              <>
+                                {/* Description */}
+                                {stage.description && (
+                                  <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '12px' }}>{stage.description}</p>
+                                )}
+
+                                {/* Deadline */}
+                                {stage.deadline_days_after_start && (
+                                  <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '5px' }}>
+                                    Due within {stage.deadline_days_after_start} days of start
+                                  </p>
+                                )}
+
+                                {/* Checklist items */}
+                                <div style={{ marginTop: '14px' }}>
+                                  <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <ListChecks style={{ width: '11px', height: '11px' }} />
+                                    Checklist Items
+                                  </p>
+
+                                  {checklistItems.length === 0 && (
+                                    <p style={{ fontSize: '12px', color: '#d1d5db', marginBottom: '8px' }}>No checklist items yet — add sub-tasks volunteers must complete for this stage.</p>
+                                  )}
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: checklistItems.length > 0 ? '10px' : '0' }}>
+                                    {checklistItems.map((item, idx) => (
+                                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '6px', background: '#fafafa', border: '1px solid #f3f4f6' }}>
+                                        <Circle style={{ width: '13px', height: '13px', color: '#d1d5db', flexShrink: 0 }} />
+                                        <span style={{ flex: 1, fontSize: '13px', color: '#374151' }}>{item}</span>
+                                        <button
+                                          onClick={() => handleRemoveChecklistItem(stage, idx)}
+                                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fca5a5', padding: '2px', display: 'flex', alignItems: 'center' }}
+                                          title="Remove item"
+                                        >
+                                          <X style={{ width: '12px', height: '12px' }} />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  {/* Add checklist item input */}
+                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                    <input
+                                      style={{ ...inputStyle, flex: 1, fontSize: '12px', padding: '6px 10px' }}
+                                      placeholder="Add a checklist item…"
+                                      value={checklistInputs[stage.id] ?? ''}
+                                      onChange={e => setChecklistInputs(prev => ({ ...prev, [stage.id]: e.target.value }))}
+                                      onKeyDown={e => e.key === 'Enter' && handleAddChecklistItem(stage)}
+                                    />
+                                    <button
+                                      onClick={() => handleAddChecklistItem(stage)}
+                                      disabled={!(checklistInputs[stage.id]?.trim()) || isPending}
+                                      style={{ ...btnPrimary, padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                    >
+                                      <Plus style={{ width: '12px', height: '12px' }} />
+                                      Add
+                                    </button>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Add stage form */}
+              {showAddStage && (
+                <div style={{ borderTop: selected.stages.length > 0 ? '1px solid #f0f0f0' : 'none', padding: '16px 20px' }}>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '14px' }}>New Stage</p>
+                  <StageFormFields form={addForm} setForm={setAddForm} />
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+                    <button style={btnPrimary} onClick={handleAddStage} disabled={!addForm.name.trim() || isPending}>Add Stage</button>
+                    <button style={btnSecondary} onClick={() => setShowAddStage(false)}>Cancel</button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+
+              {/* Footer add button */}
+              {!showAddStage && selected.stages.length > 0 && (
+                <div style={{ padding: '12px 20px', borderTop: '1px solid #f9f9f9' }}>
+                  <button onClick={() => { setShowAddStage(true); setEditingStageId(null); setAddForm(EMPTY_STAGE_FORM) }} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: TEAL, fontWeight: 500, padding: 0 }}>
+                    <Plus style={{ width: '14px', height: '14px' }} />
+                    Add another stage
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Empty state (no workflows at all) */}
+        {/* Empty state */}
         {!selected && !showNewWorkflow && initialWorkflows.length === 0 && (
           <div style={{ textAlign: 'center', padding: '80px 32px' }}>
             <ClipboardList style={{ width: '40px', height: '40px', color: '#e5e7eb', margin: '0 auto 12px' }} />
             <p style={{ fontSize: '16px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>No workflows yet</p>
-            <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '20px' }}>
-              Create your first onboarding workflow to get started
-            </p>
-            <button
-              onClick={() => setShowNewWorkflow(true)}
-              style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
+            <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '20px' }}>Create your first onboarding workflow to get started</p>
+            <button onClick={() => setShowNewWorkflow(true)} style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <Plus style={{ width: '14px', height: '14px' }} />
               New Workflow
             </button>

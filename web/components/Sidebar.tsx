@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -32,18 +33,58 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-60 flex flex-col border-r border-gray-200 bg-white shrink-0">
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-100">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-          style={{ backgroundColor: '#1B2A4A' }}>
-          <Heart className="w-4 h-4 text-white" />
+    <aside style={{
+      width: '232px',
+      display: 'flex',
+      flexDirection: 'column',
+      borderRight: '1px solid #f0f0f0',
+      background: 'white',
+      flexShrink: 0,
+    }}>
+      {/* ── Logo ── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        padding: '18px 20px 16px',
+        borderBottom: '1px solid #f5f5f5',
+      }}>
+        <Image
+          src="/icons/hummingbird.svg"
+          alt="MedVolunteer"
+          width={40}
+          height={40}
+          style={{ flexShrink: 0 }}
+          unoptimized
+          priority
+        />
+        <div>
+          <span style={{
+            display: 'block',
+            fontWeight: 800,
+            fontSize: '14px',
+            color: '#111827',
+            lineHeight: 1.2,
+            letterSpacing: '-0.01em',
+          }}>
+            MedVolunteer
+          </span>
+          <span style={{
+            display: 'block',
+            fontSize: '10px',
+            color: '#9ca3af',
+            fontWeight: 500,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            marginTop: '1px',
+          }}>
+            Admin Portal
+          </span>
         </div>
-        <span className="font-bold text-gray-900 text-sm">MedVolunteer</span>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
+      {/* ── Nav ── */}
+      <nav style={{ flex: 1, padding: '10px 10px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
         {nav.map(({ href, label, icon: Icon }) => {
           const active = pathname === href ||
             (href !== '/dashboard' && pathname.startsWith(href))
@@ -51,29 +92,57 @@ export default function Sidebar() {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm
-                transition-colors font-medium
-                ${active
-                  ? 'text-white'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              style={active ? { backgroundColor: '#1B2A4A' } : {}}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: active ? 600 : 500,
+                color: active ? 'white' : '#6b7280',
+                background: active ? '#1B2A4A' : 'transparent',
+                textDecoration: 'none',
+                transition: 'all 0.12s',
+              }}
             >
-              <Icon className="w-4 h-4 shrink-0" />
+              <Icon style={{ width: '15px', height: '15px', flexShrink: 0 }} />
               {label}
             </Link>
           )
         })}
       </nav>
 
-      {/* Sign out */}
-      <div className="px-3 py-4 border-t border-gray-100">
+      {/* ── Sign out ── */}
+      <div style={{ padding: '10px', borderTop: '1px solid #f5f5f5' }}>
         <button
           onClick={handleSignOut}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm
-            text-gray-600 hover:bg-gray-100 hover:text-gray-900 w-full transition-colors"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontWeight: 500,
+            color: '#9ca3af',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            width: '100%',
+            transition: 'all 0.12s',
+            fontFamily: 'inherit',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = '#f9fafb'
+            e.currentTarget.style.color = '#374151'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'none'
+            e.currentTarget.style.color = '#9ca3af'
+          }}
         >
-          <LogOut className="w-4 h-4" />
+          <LogOut style={{ width: '15px', height: '15px' }} />
           Sign out
         </button>
       </div>

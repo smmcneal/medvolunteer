@@ -4,12 +4,12 @@ import { useState } from 'react'
 import { CheckCircle2, Circle, Clock, AlertTriangle, FileText, ShieldCheck, BookOpen } from 'lucide-react'
 import type {
   Volunteer, Credential, Document, BackgroundCheck,
-  TimeEntry, LessonCompletion,
+  TimeEntry, LessonCompletion, Location,
   OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload,
 } from '@/types/database'
 import type { VolunteerDetail, OnboardingStageWithProgress } from './page'
 import PipelinePhaseBar from './PipelinePhaseBar'
-import TagsPanel from './TagsPanel'
+import InfoTab from './InfoTab'
 import FlagsPanel from './FlagsPanel'
 import NotesPanel from './NotesPanel'
 import DocumentsPanel from './DocumentsPanel'
@@ -41,7 +41,7 @@ const BG_RESULT_COLORS: Record<string, { bg: string; text: string }> = {
   pending:   { bg: '#eff6ff', text: '#1d4ed8' },
 }
 
-const TABS = ['Info', 'Pipeline', 'Credentials', 'Hours', 'Documents', 'Background Check', 'Flags', 'Notes'] as const
+const TABS = ['Info', 'Onboarding', 'Credentials', 'Hours', 'Documents', 'Background Check', 'Flags', 'Notes'] as const
 type Tab = typeof TABS[number]
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -61,6 +61,7 @@ export default function VolunteerTabs({
   resolvedFlags,
   orgTags,
   orgFlags,
+  orgLocations,
 }: {
   volunteer: VolunteerDetail
   credentials: Credential[]
@@ -76,6 +77,7 @@ export default function VolunteerTabs({
   resolvedFlags: (VolunteerFlag & { flag: OrgFlag })[]
   orgTags: OrgTag[]
   orgFlags: OrgFlag[]
+  orgLocations?: Pick<Location, 'id' | 'name'>[]
 }) {
   const [activeTab, setActiveTab] = useState<Tab>('Info')
 
@@ -124,42 +126,11 @@ export default function VolunteerTabs({
 
         {/* ── Info ── */}
         {activeTab === 'Info' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              {[
-                { label: 'First Name',        value: volunteer.first_name },
-                { label: 'Last Name',         value: volunteer.last_name },
-                { label: 'Email',             value: volunteer.email },
-                { label: 'Phone',             value: volunteer.phone ?? '—' },
-                { label: 'Category',          value: volunteer.category.replace(/_/g, ' ') },
-                { label: 'Status',            value: volunteer.status },
-                { label: 'Emergency Contact', value: volunteer.emergency_contact_name ?? '—' },
-                { label: 'Emergency Phone',   value: volunteer.emergency_contact_phone ?? '—' },
-              ].map(({ label, value }) => (
-                <div key={label} style={{
-                  padding: '14px 16px', background: '#fafafa', borderRadius: '8px',
-                  border: '1px solid #f3f4f6',
-                }}>
-                  <p style={{ fontSize: '11px', fontWeight: 500, color: '#9ca3af', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    {label}
-                  </p>
-                  <p style={{ fontSize: '14px', color: '#111827', fontWeight: 500 }}>{value}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Tags section */}
-            <div>
-              <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
-                Tags
-              </p>
-              <TagsPanel volunteerId={volunteer.id} appliedTags={appliedTags} orgTags={orgTags} />
-            </div>
-          </div>
+          <InfoTab volunteer={volunteer} appliedTags={appliedTags} orgTags={orgTags} orgLocations={orgLocations ?? []} />
         )}
 
-        {/* ── Pipeline ── */}
-        {activeTab === 'Pipeline' && (
+        {/* ── Onboarding ── */}
+        {activeTab === 'Onboarding' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
             <PipelinePhaseBar volunteerId={volunteer.id} currentPhase={volunteer.pipeline_phase} />
 

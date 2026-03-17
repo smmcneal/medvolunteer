@@ -103,6 +103,24 @@ export async function deleteStage(id: string) {
   revalidatePath('/dashboard/onboarding')
 }
 
+export async function updateStageChecklist(id: string, checklistItems: string[]) {
+  const supabase = await createClient()
+  const { data: stage } = await supabase
+    .from('onboarding_stages')
+    .select('metadata')
+    .eq('id', id)
+    .single()
+
+  const currentMetadata = (stage?.metadata as Record<string, unknown>) ?? {}
+  const { error } = await supabase
+    .from('onboarding_stages')
+    .update({ metadata: { ...currentMetadata, checklist_items: checklistItems } })
+    .eq('id', id)
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/dashboard/onboarding')
+}
+
 export async function reorderStages(stages: { id: string; order_index: number }[]) {
   const supabase = await createClient()
 

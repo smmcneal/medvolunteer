@@ -2,11 +2,29 @@
 
 import { useState, useMemo } from 'react'
 import { Download, TrendingUp, Clock, ShieldCheck, AlertTriangle } from 'lucide-react'
-import type { HoursRow, OnboardingRow, BgCheckRow, CredentialExpiryRow } from './page'
+import type { HoursRow, OnboardingRow, PipelinePhaseCount, VolunteerOnboardingRow, BgCheckRow, CredentialExpiryRow } from './page'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const NAVY = '#1B2A4A'
+
+const PIPELINE_PHASE_LABELS: Record<string, string> = {
+  intake:       'Intake',
+  orientation:  'Orientation',
+  review:       'Review',
+  training:     'Training',
+  active:       'Active',
+  offboarding:  'Offboarding',
+}
+
+const PIPELINE_PHASE_COLORS: Record<string, { bg: string; text: string; bar: string }> = {
+  intake:      { bg: '#f3f4f6', text: '#374151', bar: '#9ca3af' },
+  orientation: { bg: '#eff6ff', text: '#1e40af', bar: '#3b82f6' },
+  review:      { bg: '#fef3c7', text: '#92400e', bar: '#f59e0b' },
+  training:    { bg: '#fdf4ff', text: '#6b21a8', bar: '#a855f7' },
+  active:      { bg: '#f0fdf4', text: '#15803d', bar: '#22c55e' },
+  offboarding: { bg: '#fef2f2', text: '#991b1b', bar: '#ef4444' },
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   medical_professional: 'Medical',
@@ -65,11 +83,15 @@ type Tab = typeof TABS[number]['key']
 export default function ReportsView({
   hoursRows,
   onboardingRows,
+  pipelineStats,
+  volunteerOnboardingRows,
   bgRows,
   credRows,
 }: {
   hoursRows: HoursRow[]
   onboardingRows: OnboardingRow[]
+  pipelineStats: PipelinePhaseCount[]
+  volunteerOnboardingRows: VolunteerOnboardingRow[]
   bgRows: BgCheckRow[]
   credRows: CredentialExpiryRow[]
 }) {
@@ -87,6 +109,17 @@ export default function ReportsView({
   }, [hoursRows, hoursSearch, hoursCategory])
 
   const totalHours = filteredHours.reduce((s, r) => s + r.total_minutes, 0) / 60
+
+  // Onboarding volunteer filter
+  const [onboardingSearch, setOnboardingSearch]   = useState('')
+  const [onboardingPhase, setOnboardingPhase]     = useState('')
+
+  const filteredOnboardingVols = useMemo(() => {
+    let rows = [...volunteerOnboardingRows]
+    if (onboardingSearch) rows = rows.filter(r => r.name.toLowerCase().includes(onboardingSearch.toLowerCase()))
+    if (onboardingPhase)  rows = rows.filter(r => r.pipeline_phase === onboardingPhase)
+    return rows
+  }, [volunteerOnboardingRows, onboardingSearch, onboardingPhase])
 
   // Cred expiry window filter
   const [credWindow, setCredWindow] = useState<30 | 60 | 90>(90)
@@ -247,52 +280,209 @@ export default function ReportsView({
 
       {/* ── Onboarding ─────────────────────────────────────────── */}
       {activeTab === 'onboarding' && (
-        <div>
-          {onboardingRows.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '64px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
-              <TrendingUp style={{ width: '28px', height: '28px', color: '#e5e7eb', margin: '0 auto 8px' }} />
-              <p style={{ fontSize: '14px', color: '#9ca3af' }}>No active workflows found</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {onboardingRows.map(row => {
-                const catStyle = row.category ? (CATEGORY_COLORS[row.category] ?? CATEGORY_COLORS.other) : { bg: '#f3f4f6', text: '#374151' }
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+          {/* Pipeline phase breakdown */}
+          <div>
+            <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
+              Pipeline Phases
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '10px' }}>
+              {pipelineStats.map(({ phase, count }) => {
+                const c = PIPELINE_PHASE_COLORS[phase] ?? PIPELINE_PHASE_COLORS.intake
+                const total = volunteerOnboardingRows.length
+                const pct = total > 0 ? Math.round((count / total) * 100) : 0
                 return (
-                  <div key={row.workflow_id} style={{
-                    background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', padding: '20px 24px',
+                  <div key={phase} style={{
+                    background: 'white', borderRadius: '10px', border: '1px solid #f0f0f0',
+                    padding: '14px 16px',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                      <div>
-                        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>{row.workflow_name}</h3>
-                        <span style={{ fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '5px', background: catStyle.bg, color: catStyle.text }}>
-                          {row.category ? CATEGORY_LABELS[row.category] ?? row.category : 'All categories'}
-                        </span>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontSize: '28px', fontWeight: 700, color: row.completion_rate === 100 ? '#16a34a' : NAVY }}>
-                          {row.completion_rate}%
-                        </p>
-                        <p style={{ fontSize: '12px', color: '#9ca3af' }}>
-                          {row.fully_complete} of {row.total_volunteers} complete
-                        </p>
-                      </div>
+                    <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
+                      {PIPELINE_PHASE_LABELS[phase]}
+                    </p>
+                    <p style={{ fontSize: '26px', fontWeight: 700, color: '#111827', lineHeight: 1, marginBottom: '8px' }}>{count}</p>
+                    <div style={{ height: '4px', background: '#f3f4f6', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', borderRadius: '2px', background: c.bar, width: `${pct}%`, transition: 'width 0.4s ease' }} />
                     </div>
-                    <div style={{ height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{
-                        height: '100%', borderRadius: '4px', transition: 'width 0.4s ease',
-                        background: row.completion_rate === 100 ? '#22c55e' : row.completion_rate >= 60 ? NAVY : '#f59e0b',
-                        width: `${row.completion_rate}%`,
-                      }} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-                      <span style={{ fontSize: '11px', color: '#9ca3af' }}>{row.total_volunteers} enrolled</span>
-                      <span style={{ fontSize: '11px', color: '#9ca3af' }}>{row.total_volunteers - row.fully_complete} in progress</span>
-                    </div>
+                    <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>{pct}%</p>
                   </div>
                 )
               })}
             </div>
+          </div>
+
+          {/* Summary stat row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+            {(() => {
+              const total    = volunteerOnboardingRows.length
+              const active   = volunteerOnboardingRows.filter(r => r.pipeline_phase === 'active').length
+              const complete = volunteerOnboardingRows.filter(r => r.completion_pct === 100).length
+              const avgPct   = total > 0
+                ? Math.round(volunteerOnboardingRows.reduce((s, r) => s + r.completion_pct, 0) / total)
+                : 0
+              return [
+                { label: 'Total Volunteers', value: total, suffix: '' },
+                { label: 'Workflow Complete', value: complete, suffix: '' },
+                { label: 'Avg Completion', value: avgPct, suffix: '%' },
+              ].map(({ label, value, suffix }) => (
+                <div key={label} style={{ background: 'white', borderRadius: '10px', border: '1px solid #f0f0f0', padding: '16px 20px' }}>
+                  <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>{label}</p>
+                  <p style={{ fontSize: '24px', fontWeight: 700, color: '#111827' }}>{value}{suffix}</p>
+                </div>
+              ))
+            })()}
+          </div>
+
+          {/* Workflow completion cards */}
+          {onboardingRows.length > 0 && (
+            <div>
+              <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
+                Workflow Completion
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {onboardingRows.map(row => {
+                  const catStyle = row.category ? (CATEGORY_COLORS[row.category] ?? CATEGORY_COLORS.other) : { bg: '#f3f4f6', text: '#374151' }
+                  return (
+                    <div key={row.workflow_id} style={{
+                      background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', padding: '18px 22px',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                        <div>
+                          <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>{row.workflow_name}</h3>
+                          <span style={{ fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '5px', background: catStyle.bg, color: catStyle.text }}>
+                            {row.category ? CATEGORY_LABELS[row.category] ?? row.category : 'All categories'}
+                          </span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{ fontSize: '26px', fontWeight: 700, color: row.completion_rate === 100 ? '#16a34a' : NAVY }}>
+                            {row.completion_rate}%
+                          </p>
+                          <p style={{ fontSize: '12px', color: '#9ca3af' }}>{row.fully_complete} of {row.total_volunteers} complete</p>
+                        </div>
+                      </div>
+                      <div style={{ height: '7px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: '4px', transition: 'width 0.4s ease',
+                          background: row.completion_rate === 100 ? '#22c55e' : row.completion_rate >= 60 ? NAVY : '#f59e0b',
+                          width: `${row.completion_rate}%`,
+                        }} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
+                        <span style={{ fontSize: '11px', color: '#9ca3af' }}>{row.total_volunteers} enrolled</span>
+                        <span style={{ fontSize: '11px', color: '#9ca3af' }}>{row.total_volunteers - row.fully_complete} in progress</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           )}
+
+          {/* Per-volunteer progress table */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Volunteer Progress
+              </p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <input
+                  style={inputStyle}
+                  placeholder="Search by name…"
+                  value={onboardingSearch}
+                  onChange={e => setOnboardingSearch(e.target.value)}
+                />
+                <select style={selectStyle} value={onboardingPhase} onChange={e => setOnboardingPhase(e.target.value)}>
+                  <option value="">All phases</option>
+                  {Object.entries(PIPELINE_PHASE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+                <button
+                  onClick={() => downloadCSV(
+                    filteredOnboardingVols.map(r => ({
+                      Name: r.name,
+                      Category: CATEGORY_LABELS[r.category] ?? r.category,
+                      'Pipeline Phase': PIPELINE_PHASE_LABELS[r.pipeline_phase] ?? r.pipeline_phase,
+                      Workflow: r.workflow_name ?? '—',
+                      'Stages Completed': r.stages_completed,
+                      'Stages Total': r.stages_total,
+                      'Completion %': r.completion_pct,
+                    })),
+                    'onboarding-progress.csv'
+                  )}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '7px 14px', borderRadius: '8px',
+                    background: NAVY, color: 'white', border: 'none',
+                    cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                  }}
+                >
+                  <Download style={{ width: '13px', height: '13px' }} />
+                  Export CSV
+                </button>
+              </div>
+            </div>
+
+            {filteredOnboardingVols.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
+                <TrendingUp style={{ width: '28px', height: '28px', color: '#e5e7eb', margin: '0 auto 8px' }} />
+                <p style={{ fontSize: '14px', color: '#9ca3af' }}>No volunteers match the current filter</p>
+              </div>
+            ) : (
+              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#fafafa' }}>
+                      <th style={thStyle}>Volunteer</th>
+                      <th style={thStyle}>Category</th>
+                      <th style={thStyle}>Phase</th>
+                      <th style={thStyle}>Workflow</th>
+                      <th style={thStyle}>Stages</th>
+                      <th style={thStyle}>Progress</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOnboardingVols.map((r, i) => {
+                      const catStyle   = CATEGORY_COLORS[r.category] ?? CATEGORY_COLORS.other
+                      const phaseStyle = PIPELINE_PHASE_COLORS[r.pipeline_phase] ?? PIPELINE_PHASE_COLORS.intake
+                      const pct        = r.completion_pct
+                      const barColor   = pct === 100 ? '#22c55e' : pct >= 60 ? NAVY : '#f59e0b'
+                      return (
+                        <tr key={r.volunteer_id} style={{ borderTop: i === 0 ? 'none' : '1px solid #f9f9f9' }}>
+                          <td style={{ padding: '12px 20px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>{r.name}</td>
+                          <td style={{ padding: '12px 20px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px', background: catStyle.bg, color: catStyle.text }}>
+                              {CATEGORY_LABELS[r.category] ?? r.category}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 20px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px', background: phaseStyle.bg, color: phaseStyle.text }}>
+                              {PIPELINE_PHASE_LABELS[r.pipeline_phase] ?? r.pipeline_phase}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 20px', fontSize: '13px', color: '#374151' }}>{r.workflow_name ?? '—'}</td>
+                          <td style={{ padding: '12px 20px', fontSize: '13px', color: '#374151' }}>
+                            {r.stages_total > 0 ? `${r.stages_completed} / ${r.stages_total}` : '—'}
+                          </td>
+                          <td style={{ padding: '12px 20px' }}>
+                            {r.stages_total > 0 ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ width: '100px', height: '6px', borderRadius: '3px', background: '#f3f4f6', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', borderRadius: '3px', background: barColor, width: `${pct}%` }} />
+                                </div>
+                                <span style={{ fontSize: '11px', color: '#9ca3af', minWidth: '32px' }}>{pct}%</span>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '12px', color: '#d1d5db' }}>No workflow</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
         </div>
       )}
 

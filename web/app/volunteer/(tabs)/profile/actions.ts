@@ -122,6 +122,41 @@ export async function updateContactInfo(
   return {}
 }
 
+// ─── Update emergency contact ─────────────────────────────────────────────────
+
+export async function updateEmergencyContact(
+  volunteerId: string,
+  name: string,
+  phone: string,
+): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  const admin = createAdminClient()
+
+  const { data: vol } = await admin
+    .from('volunteers')
+    .select('id')
+    .eq('id', volunteerId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!vol) return { error: 'Permission denied.' }
+
+  const { error } = await admin
+    .from('volunteers')
+    .update({
+      emergency_contact_name:  name.trim()  || null,
+      emergency_contact_phone: phone.trim() || null,
+    })
+    .eq('id', volunteerId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/volunteer/profile')
+  return {}
+}
+
 // ─── Signed URL ───────────────────────────────────────────────────────────────
 
 export async function getUploadSignedUrl(

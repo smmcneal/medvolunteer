@@ -13,7 +13,7 @@ export default async function ProfilePage() {
 
   const { data: volunteer } = await admin
     .from('volunteers')
-    .select('id, first_name, last_name, email, phone, photo_url, category, status, created_at')
+    .select('id, first_name, last_name, email, phone, photo_url, category, status, created_at, emergency_contact_name, emergency_contact_phone')
     .eq('user_id', user.id)
     .single()
 

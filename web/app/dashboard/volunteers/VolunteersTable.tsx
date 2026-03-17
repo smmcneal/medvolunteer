@@ -54,7 +54,7 @@ function initials(first: string, last: string) {
   return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase()
 }
 
-type SortKey = 'name' | 'category' | 'status' | 'onboarding_pct' | 'hours_this_month'
+type SortKey = 'name' | 'category' | 'status' | 'hours_this_month'
 type SortDir = 'asc' | 'desc'
 
 export default function VolunteersTable({
@@ -89,7 +89,6 @@ export default function VolunteersTable({
       if (sort.key === 'name')           cmp = `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
       if (sort.key === 'category')       cmp = a.category.localeCompare(b.category)
       if (sort.key === 'status')         cmp = a.status.localeCompare(b.status)
-      if (sort.key === 'onboarding_pct')   cmp = a.onboarding_pct - b.onboarding_pct
       if (sort.key === 'hours_this_month') cmp = a.hours_this_month - b.hours_this_month
       return sort.dir === 'asc' ? cmp : -cmp
     })
@@ -177,7 +176,6 @@ export default function VolunteersTable({
               <Th label="Tags" />
               <Th label="Flags" />
               <Th label="Location(s)" />
-              <Th onClick={() => toggleSort('onboarding_pct')} label="Onboarding" sortIcon={<SortIcon col="onboarding_pct" />} />
               <Th onClick={() => toggleSort('hours_this_month')} label="Hrs (month)" sortIcon={<SortIcon col="hours_this_month" />} />
               <th style={{ padding: '10px 16px', width: '40px' }} />
             </tr>
@@ -287,18 +285,6 @@ export default function VolunteersTable({
                           <span key={l} style={{ fontSize: '11px', background: '#f3f4f6', color: '#374151', padding: '2px 7px', borderRadius: '5px', marginRight: '4px' }}>{l}</span>
                         ))
                     }
-                  </td>
-                  <td style={{ padding: '13px 12px' }}>
-                    {v.total_stages === 0 ? (
-                      <span style={{ fontSize: '12px', color: '#d1d5db' }}>—</span>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ flex: 1, minWidth: '70px', height: '5px', borderRadius: '3px', background: '#f3f4f6', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', borderRadius: '3px', background: v.onboarding_pct === 100 ? '#22c55e' : '#1B2A4A', width: `${v.onboarding_pct}%`, transition: 'width 0.3s ease' }} />
-                        </div>
-                        <span style={{ fontSize: '12px', color: '#6b7280', whiteSpace: 'nowrap' }}>{v.completed_stages}/{v.total_stages}</span>
-                      </div>
-                    )}
                   </td>
                   <td style={{ padding: '13px 12px' }}>
                     {v.hours_this_month === 0 ? (

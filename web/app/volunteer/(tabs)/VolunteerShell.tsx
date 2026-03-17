@@ -130,21 +130,11 @@ export default function VolunteerShell({ volunteer, children }: Props) {
             zIndex: 99,
             boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
           }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              background: '#00897B',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2v13m0 0l-4-4m4 4l4-4"/>
-                <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
-              </svg>
-            </div>
+            <img
+              src="/icons/hummingbird.svg"
+              alt=""
+              style={{ width: '36px', height: '36px', flexShrink: 0 }}
+            />
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'white', marginBottom: '2px' }}>
                 Add to Home Screen

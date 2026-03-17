@@ -4,14 +4,15 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import VolunteerDocumentsSection from './VolunteerDocumentsSection'
-import { updateContactInfo } from './actions'
+import { updateContactInfo, updateEmergencyContact } from './actions'
 import type { Volunteer, Credential, Document, VolunteerUpload, VolunteerStatus, VolunteerCategory } from '@/types/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type VolunteerProfile = Pick<
   Volunteer,
-  'id' | 'first_name' | 'last_name' | 'email' | 'phone' | 'photo_url' | 'category' | 'status' | 'created_at'
+  'id' | 'first_name' | 'last_name' | 'email' | 'phone' | 'photo_url' | 'category' | 'status' | 'created_at' |
+  'emergency_contact_name' | 'emergency_contact_phone'
 >
 
 interface Props {
@@ -85,6 +86,42 @@ export default function ProfileView({ volunteer, credentials, documents, uploads
   // Local display values (updated optimistically on save)
   const [displayEmail, setDisplayEmail] = useState(volunteer.email)
   const [displayPhone, setDisplayPhone] = useState(volunteer.phone ?? '')
+
+  // ── Emergency contact edit state ────────────────────────────────────────────
+  const [editingEmergency, setEditingEmergency]       = useState(false)
+  const [emergencyName, setEmergencyName]             = useState(volunteer.emergency_contact_name ?? '')
+  const [emergencyPhone, setEmergencyPhone]           = useState(volunteer.emergency_contact_phone ?? '')
+  const [emergencySaving, setEmergencySaving]         = useState(false)
+  const [emergencyError, setEmergencyError]           = useState<string | null>(null)
+  const [emergencySaved, setEmergencySaved]           = useState(false)
+  const [displayEmergencyName, setDisplayEmergencyName]   = useState(volunteer.emergency_contact_name ?? '')
+  const [displayEmergencyPhone, setDisplayEmergencyPhone] = useState(volunteer.emergency_contact_phone ?? '')
+
+  function startEditEmergency() {
+    setEmergencyName(displayEmergencyName)
+    setEmergencyPhone(displayEmergencyPhone)
+    setEmergencyError(null)
+    setEmergencySaved(false)
+    setEditingEmergency(true)
+  }
+
+  function cancelEditEmergency() {
+    setEditingEmergency(false)
+    setEmergencyError(null)
+  }
+
+  async function saveEmergencyContact() {
+    setEmergencySaving(true)
+    setEmergencyError(null)
+    const result = await updateEmergencyContact(volunteer.id, emergencyName, emergencyPhone)
+    setEmergencySaving(false)
+    if (result.error) { setEmergencyError(result.error); return }
+    setDisplayEmergencyName(emergencyName.trim())
+    setDisplayEmergencyPhone(emergencyPhone.trim())
+    setEditingEmergency(false)
+    setEmergencySaved(true)
+    setTimeout(() => setEmergencySaved(false), 3000)
+  }
 
   function startEditContact() {
     setContactEmail(displayEmail)
@@ -276,6 +313,86 @@ export default function ProfileView({ volunteer, credentials, documents, uploads
           </div>
         </div>
 
+        {/* ── Emergency Contact ── */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', padding: '0 4px' }}>
+            <h2 style={{ fontSize: '13px', fontWeight: 700, color: '#6b7280', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>
+              Emergency Contact
+            </h2>
+            {!editingEmergency && (
+              <button
+                onClick={startEditEmergency}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#00897B', fontFamily: 'inherit', padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <PencilIcon /> Edit
+              </button>
+            )}
+            {editingEmergency && (
+              <button
+                onClick={cancelEditEmergency}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: '#9ca3af', fontFamily: 'inherit', padding: 0 }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+
+          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #f0f0f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+            {editingEmergency ? (
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {emergencyError && (
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', background: '#fef2f2', border: '1px solid #fecaca', fontSize: '13px', color: '#dc2626' }}>
+                    {emergencyError}
+                  </div>
+                )}
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '5px' }}>
+                    Contact name
+                  </label>
+                  <input
+                    type="text"
+                    value={emergencyName}
+                    onChange={e => setEmergencyName(e.target.value)}
+                    placeholder="Full name"
+                    autoComplete="off"
+                    style={{ width: '100%', padding: '11px 13px', borderRadius: '10px', border: '1.5px solid #e5e7eb', fontSize: '15px', color: '#111827', background: '#fafafa', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '5px' }}>
+                    Phone number
+                  </label>
+                  <input
+                    type="tel"
+                    value={emergencyPhone}
+                    onChange={e => setEmergencyPhone(e.target.value)}
+                    placeholder="—"
+                    autoComplete="off"
+                    style={{ width: '100%', padding: '11px 13px', borderRadius: '10px', border: '1.5px solid #e5e7eb', fontSize: '15px', color: '#111827', background: '#fafafa', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  />
+                </div>
+                <button
+                  onClick={saveEmergencyContact}
+                  disabled={emergencySaving}
+                  style={{ width: '100%', padding: '13px', borderRadius: '10px', border: 'none', background: emergencySaving ? '#9ca3af' : '#1B2A4A', color: 'white', fontSize: '15px', fontWeight: 700, cursor: emergencySaving ? 'default' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.15s' }}
+                >
+                  {emergencySaving ? <><MiniSpinner /> Saving…</> : 'Save changes'}
+                </button>
+              </div>
+            ) : (
+              <>
+                <InfoRow icon={PersonIcon} label="Name" value={displayEmergencyName || '—'} />
+                <InfoRow icon={PhoneIcon} label="Phone" value={displayEmergencyPhone || '—'} />
+                {emergencySaved && (
+                  <div style={{ padding: '10px 16px', fontSize: '13px', color: '#16a34a', background: '#f0fdf4', borderTop: '1px solid #dcfce7', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <CheckIcon /> Emergency contact updated
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
         {/* ── Credentials ── */}
         <Section title={`Credentials${credentials.length > 0 ? ` (${credentials.length})` : ''}`}>
           {credentials.length === 0 ? (
@@ -435,6 +552,15 @@ function EmptyState({ message }: { message: string }) {
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
+
+function PersonIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+      <circle cx="12" cy="7" r="4"/>
+    </svg>
+  )
+}
 
 function EmailIcon() {
   return (

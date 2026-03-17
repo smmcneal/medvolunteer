@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { PipelinePhase, VolunteerStatus } from '@/types/database'
+import type { PipelinePhase, VolunteerStatus, VolunteerCategory } from '@/types/database'
 
 // Phase → status mapping (single source of truth)
 const PHASE_STATUS_MAP: Record<PipelinePhase, VolunteerStatus> = {
@@ -13,6 +13,41 @@ const PHASE_STATUS_MAP: Record<PipelinePhase, VolunteerStatus> = {
   training:     'prospect',
   active:       'volunteer',
   offboarding:  'inactive',
+}
+
+// ─── Volunteer info ───────────────────────────────────────────────────────────
+
+export async function updateVolunteerInfo(
+  volunteerId: string,
+  data: {
+    first_name: string
+    last_name: string
+    email: string
+    phone: string
+    category: VolunteerCategory
+  },
+): Promise<{ error?: string }> {
+  if (!data.first_name.trim()) return { error: 'First name is required.' }
+  if (!data.last_name.trim())  return { error: 'Last name is required.' }
+  if (!data.email.trim())      return { error: 'Email is required.' }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) return { error: 'Enter a valid email address.' }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('volunteers')
+    .update({
+      first_name: data.first_name.trim(),
+      last_name:  data.last_name.trim(),
+      email:      data.email.trim().toLowerCase(),
+      phone:      data.phone.trim() || null,
+      category:   data.category,
+    })
+    .eq('id', volunteerId)
+
+  if (error) return { error: error.message }
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
+  revalidatePath('/dashboard/volunteers')
+  return {}
 }
 
 // ─── Pipeline phase ───────────────────────────────────────────────────────────
@@ -119,6 +154,35 @@ export async function resolveFlag(flagAssignmentId: string): Promise<{ error?: s
     .eq('id', flagAssignmentId)
 
   if (error) return { error: error.message }
+  return {}
+}
+
+// ─── Locations ────────────────────────────────────────────────────────────────
+
+export async function updateVolunteerLocations(
+  volunteerId: string,
+  locationIds: string[],
+): Promise<{ error?: string }> {
+  const admin = createAdminClient()
+
+  // Replace all assignments atomically: delete then re-insert
+  const { error: deleteError } = await admin
+    .from('volunteer_locations')
+    .delete()
+    .eq('volunteer_id', volunteerId)
+
+  if (deleteError) return { error: deleteError.message }
+
+  if (locationIds.length > 0) {
+    const { error: insertError } = await admin
+      .from('volunteer_locations')
+      .insert(locationIds.map(location_id => ({ volunteer_id: volunteerId, location_id })))
+
+    if (insertError) return { error: insertError.message }
+  }
+
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
+  revalidatePath('/dashboard/volunteers')
   return {}
 }
 

@@ -23,6 +23,22 @@ export interface OnboardingRow {
   completion_rate: number
 }
 
+export interface PipelinePhaseCount {
+  phase: string
+  count: number
+}
+
+export interface VolunteerOnboardingRow {
+  volunteer_id: string
+  name: string
+  category: string
+  pipeline_phase: string
+  workflow_name: string | null
+  stages_completed: number
+  stages_total: number
+  completion_pct: number
+}
+
 export interface BgCheckRow {
   status: string
   result: string | null
@@ -61,7 +77,7 @@ async function fetchReportsData() {
     // All volunteers for name lookup
     supabase
       .from('volunteers')
-      .select('id, first_name, last_name, category, onboarding_workflow_id')
+      .select('id, first_name, last_name, category, onboarding_workflow_id, pipeline_phase')
       .order('first_name'),
 
     // Onboarding workflows
@@ -97,12 +113,13 @@ async function fetchReportsData() {
   ])
 
   const volunteers = volunteersRes.data ?? []
-  const volMap: Record<string, { name: string; category: string; workflow_id: string | null }> = {}
+  const volMap: Record<string, { name: string; category: string; workflow_id: string | null; pipeline_phase: string }> = {}
   for (const v of volunteers) {
     volMap[v.id] = {
       name: `${v.first_name} ${v.last_name}`,
       category: v.category,
       workflow_id: v.onboarding_workflow_id,
+      pipeline_phase: v.pipeline_phase ?? 'intake',
     }
   }
 
@@ -152,6 +169,55 @@ async function fetchReportsData() {
     }
   })
 
+  // ── Pipeline phase breakdown ─────────────────────────────────────
+  const PIPELINE_PHASES = ['intake', 'orientation', 'review', 'training', 'active', 'offboarding']
+  const phaseCountMap: Record<string, number> = {}
+  for (const phase of PIPELINE_PHASES) phaseCountMap[phase] = 0
+  for (const v of volunteers) {
+    const p = v.pipeline_phase ?? 'intake'
+    phaseCountMap[p] = (phaseCountMap[p] ?? 0) + 1
+  }
+  const pipelineStats: PipelinePhaseCount[] = PIPELINE_PHASES.map(phase => ({
+    phase,
+    count: phaseCountMap[phase] ?? 0,
+  }))
+
+  // ── Per-volunteer onboarding rows ────────────────────────────────
+  const workflowMap: Record<string, string> = {}
+  for (const w of workflows) workflowMap[w.id] = w.name
+
+  const stagesByWorkflow: Record<string, Set<string>> = {}
+  for (const s of stages) {
+    if (!stagesByWorkflow[s.workflow_id]) stagesByWorkflow[s.workflow_id] = new Set()
+    stagesByWorkflow[s.workflow_id].add(s.id)
+  }
+
+  const completedByVol: Record<string, Set<string>> = {}
+  for (const p of progress) {
+    if (!completedByVol[p.volunteer_id]) completedByVol[p.volunteer_id] = new Set()
+    completedByVol[p.volunteer_id].add(p.stage_id)
+  }
+
+  const volunteerOnboardingRows: VolunteerOnboardingRow[] = volunteers.map(v => {
+    const wfId = v.onboarding_workflow_id
+    const wfStages = wfId ? stagesByWorkflow[wfId] ?? new Set<string>() : new Set<string>()
+    const stagesTotal = wfStages.size
+    const volCompleted = completedByVol[v.id] ?? new Set<string>()
+    const stagesCompleted = stagesTotal > 0
+      ? [...wfStages].filter(sid => volCompleted.has(sid)).length
+      : 0
+    return {
+      volunteer_id: v.id,
+      name: `${v.first_name} ${v.last_name}`,
+      category: v.category,
+      pipeline_phase: v.pipeline_phase ?? 'intake',
+      workflow_name: wfId ? (workflowMap[wfId] ?? null) : null,
+      stages_completed: stagesCompleted,
+      stages_total: stagesTotal,
+      completion_pct: stagesTotal > 0 ? Math.round((stagesCompleted / stagesTotal) * 100) : 0,
+    }
+  })
+
   // ── Background checks ────────────────────────────────────────────
   const bgMap: Record<string, number> = {}
   for (const b of (bgChecksRes.data ?? []) as { status: string; result: string | null }[]) {
@@ -177,13 +243,13 @@ async function fetchReportsData() {
     })
   )
 
-  return { hoursRows, onboardingRows, bgRows, credRows }
+  return { hoursRows, onboardingRows, pipelineStats, volunteerOnboardingRows, bgRows, credRows }
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function ReportsPage() {
-  const { hoursRows, onboardingRows, bgRows, credRows } = await fetchReportsData()
+  const { hoursRows, onboardingRows, pipelineStats, volunteerOnboardingRows, bgRows, credRows } = await fetchReportsData()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -198,6 +264,8 @@ export default async function ReportsPage() {
       <ReportsView
         hoursRows={hoursRows}
         onboardingRows={onboardingRows}
+        pipelineStats={pipelineStats}
+        volunteerOnboardingRows={volunteerOnboardingRows}
         bgRows={bgRows}
         credRows={credRows}
       />

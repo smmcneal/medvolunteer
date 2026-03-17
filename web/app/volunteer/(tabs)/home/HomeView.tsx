@@ -71,9 +71,17 @@ export default function HomeView({
       {/* Header */}
       <div style={{
         background: '#1B2A4A',
-        padding: '56px 20px 28px',
-        paddingTop: 'calc(56px + env(safe-area-inset-top))',
+        padding: '20px 20px 28px',
+        paddingTop: 'calc(20px + env(safe-area-inset-top))',
       }}>
+        {/* Logo row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/hummingbird.svg" alt="MedVolunteer" style={{ width: '32px', height: '32px', flexShrink: 0 }} />
+          <span style={{ fontSize: '13px', fontWeight: 700, color: 'rgba(255,255,255,0.7)', letterSpacing: '0.04em' }}>
+            MedVolunteer
+          </span>
+        </div>
         <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.6)', margin: '0 0 4px', fontWeight: 500 }}>
           {greeting()},
         </p>

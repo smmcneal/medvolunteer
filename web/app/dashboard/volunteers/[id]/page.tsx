@@ -30,7 +30,7 @@ async function fetchVolunteer(id: string) {
   const supabase = createAdminClient()
 
   const [volunteerRes, credsRes, docsRes, bgCheckRes, timeRes, learningRes,
-         notesRes, volTagsRes, volFlagsRes, orgTagsRes, orgFlagsRes, uploadsRes] = await Promise.all([
+         notesRes, volTagsRes, volFlagsRes, orgTagsRes, orgFlagsRes, uploadsRes, orgLocationsRes] = await Promise.all([
     supabase
       .from('volunteers')
       .select('*, volunteer_locations(location:locations(*))')
@@ -47,6 +47,7 @@ async function fetchVolunteer(id: string) {
     supabase.from('org_tags').select('*').order('name'),
     supabase.from('org_flags').select('*').order('name'),
     supabase.from('volunteer_uploads').select('*').eq('volunteer_id', id).order('uploaded_at', { ascending: false }),
+    supabase.from('locations').select('id, name').eq('is_active', true).order('name'),
   ])
 
   if (!volunteerRes.data) return null
@@ -95,8 +96,9 @@ async function fetchVolunteer(id: string) {
     appliedTags,
     activeFlags,
     resolvedFlags,
-    orgTags:  (orgTagsRes.data ?? []) as OrgTag[],
-    orgFlags: (orgFlagsRes.data ?? []) as OrgFlag[],
+    orgTags:      (orgTagsRes.data ?? []) as OrgTag[],
+    orgFlags:     (orgFlagsRes.data ?? []) as OrgFlag[],
+    orgLocations: (orgLocationsRes.data ?? []) as Pick<Location, 'id' | 'name'>[],
   }
 }
 
@@ -134,7 +136,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
   const {
     volunteer, credentials, documents, uploads, backgroundCheck,
     timeEntries, onboardingStages, lessonCompletions,
-    notes, appliedTags, activeFlags, resolvedFlags, orgTags, orgFlags,
+    notes, appliedTags, activeFlags, resolvedFlags, orgTags, orgFlags, orgLocations,
   } = data
 
   const statStyle = STATUS_COLORS[volunteer.status] ?? STATUS_COLORS.inactive
@@ -241,6 +243,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
         resolvedFlags={resolvedFlags}
         orgTags={orgTags}
         orgFlags={orgFlags}
+        orgLocations={orgLocations}
       />
     </div>
   )

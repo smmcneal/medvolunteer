@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import type { Organization, Location } from '@/types/database'
+import type { Organization, Location, OrgTag, OrgFlag } from '@/types/database'
 import {
   updateOrgProfile,
   updateOrgSettings,
@@ -9,8 +9,10 @@ import {
   updateLocation,
   deleteLocation,
 } from './actions'
+import TagsManager from './TagsManager'
+import FlagsManager from './FlagsManager'
 
-type Tab = 'profile' | 'locations' | 'integrations'
+type Tab = 'profile' | 'locations' | 'integrations' | 'tags' | 'flags'
 
 interface OrgSettings {
   checkr_api_key?: string
@@ -28,9 +30,11 @@ interface OrgSettings {
 interface Props {
   org: Organization | null
   locations: Location[]
+  initialTags: OrgTag[]
+  initialFlags: OrgFlag[]
 }
 
-export default function SettingsView({ org, locations: initialLocations }: Props) {
+export default function SettingsView({ org, locations: initialLocations, initialTags, initialFlags }: Props) {
   const [tab, setTab] = useState<Tab>('profile')
 
   return (
@@ -44,9 +48,11 @@ export default function SettingsView({ org, locations: initialLocations }: Props
         flexShrink: 0,
       }}>
         {([
-          { key: 'profile', label: '🏢 Org Profile' },
-          { key: 'locations', label: '📍 Locations' },
+          { key: 'profile',      label: '🏢 Org Profile' },
+          { key: 'locations',    label: '📍 Locations' },
           { key: 'integrations', label: '🔗 Integrations' },
+          { key: 'tags',         label: '🏷 Tags' },
+          { key: 'flags',        label: '🚩 Flags' },
         ] as { key: Tab; label: string }[]).map(t => (
           <button
             key={t.key}
@@ -67,9 +73,11 @@ export default function SettingsView({ org, locations: initialLocations }: Props
 
       {/* Tab content */}
       <div style={{ flex: 1, overflow: 'auto', padding: '28px 32px', maxWidth: '680px' }}>
-        {tab === 'profile' && <ProfileTab org={org} />}
-        {tab === 'locations' && <LocationsTab locations={initialLocations} />}
+        {tab === 'profile'      && <ProfileTab org={org} />}
+        {tab === 'locations'    && <LocationsTab locations={initialLocations} />}
         {tab === 'integrations' && <IntegrationsTab settings={(org?.settings as OrgSettings) ?? {}} />}
+        {tab === 'tags'         && <TagsManager initialTags={initialTags} />}
+        {tab === 'flags'        && <FlagsManager initialFlags={initialFlags} />}
       </div>
     </div>
   )

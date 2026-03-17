@@ -1,7 +1,70 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Background -->
-  <rect width="512" height="512" rx="96" fill="#1B2A4A"/>
-  <!-- Medical cross in teal -->
-  <rect x="196" y="112" width="120" height="288" rx="20" fill="#00897B"/>
-  <rect x="112" y="196" width="288" height="120" rx="20" fill="#00897B"/>
+  <!-- White rounded background -->
+  <rect width="512" height="512" rx="108" fill="white"/>
+
+  <defs>
+    <linearGradient id="uw" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%"   stop-color="#0D47A1"/>
+      <stop offset="42%"  stop-color="#00ACC1"/>
+      <stop offset="100%" stop-color="#43A047"/>
+    </linearGradient>
+    <linearGradient id="lw" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#43A047"/>
+      <stop offset="30%"  stop-color="#FDD835"/>
+      <stop offset="65%"  stop-color="#FB8C00"/>
+      <stop offset="100%" stop-color="#E53935"/>
+    </linearGradient>
+    <linearGradient id="tg" x1="100%" y1="50%" x2="0%" y2="50%">
+      <stop offset="0%"   stop-color="#00BCD4"/>
+      <stop offset="50%"  stop-color="#66BB6A"/>
+      <stop offset="100%" stop-color="#FDD835"/>
+    </linearGradient>
+    <linearGradient id="bd" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#1565C0"/>
+      <stop offset="50%"  stop-color="#26C6DA"/>
+      <stop offset="100%" stop-color="#43A047"/>
+    </linearGradient>
+    <radialGradient id="hd" cx="38%" cy="35%" r="60%">
+      <stop offset="0%"   stop-color="#1E88E5"/>
+      <stop offset="100%" stop-color="#0D47A1"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Scale and center the hummingbird (480→400, offset 56,56) -->
+  <g transform="translate(56 56) scale(0.833)">
+    <!-- TAIL feathers -->
+    <path d="M158,245 C108,228,58,215,10,200 C55,225,110,248,152,258 Z"           fill="url(#tg)"/>
+    <path d="M153,257 C100,248,45,242,5,238 C48,252,104,265,145,268 Z"             fill="url(#tg)" opacity="0.88"/>
+    <path d="M148,268 C93,268,38,272,-2,278 C40,282,97,278,140,275 Z"              fill="url(#tg)" opacity="0.76"/>
+    <path d="M143,278 C82,290,30,308,-8,325 C36,308,90,293,135,285 Z"              fill="url(#lw)" opacity="0.62"/>
+    <!-- LOWER WING -->
+    <path d="M228,272 C165,295,88,318,38,338 C88,296,168,272,218,263 Z"            fill="url(#lw)"/>
+    <path d="M220,282 C150,315,68,348,18,372 C72,318,158,285,208,272 Z"            fill="url(#lw)" opacity="0.88"/>
+    <path d="M212,292 C135,335,50,375,8,398 C60,345,148,298,200,282 Z"             fill="url(#lw)" opacity="0.74"/>
+    <!-- UPPER WING -->
+    <path d="M235,228 C185,158,105,108,52,68  C92,120,158,172,218,218 Z"           fill="url(#uw)"/>
+    <path d="M228,238 C172,166,88,114,32,72   C76,132,148,185,210,228 Z"           fill="url(#uw)" opacity="0.88"/>
+    <path d="M222,248 C160,176,75,125,18,82   C62,143,138,198,202,240 Z"           fill="url(#uw)" opacity="0.74"/>
+    <!-- BODY -->
+    <ellipse cx="205" cy="252" rx="92" ry="38" fill="url(#bd)" transform="rotate(-25 205 252)"/>
+    <!-- NECK -->
+    <path d="M278,190 Q258,210,245,232 L258,243 Q272,222,292,202 Z" fill="#1565C0"/>
+    <!-- HEAD -->
+    <circle cx="310" cy="172" r="52" fill="url(#hd)"/>
+    <!-- BEAK -->
+    <path d="M354,163 C400,153,448,149,472,147 C468,158,412,164,355,172 Z" fill="#1A237E"/>
+    <!-- EYE -->
+    <circle cx="322" cy="162" r="9"   fill="#E3F2FD"/>
+    <circle cx="325" cy="162" r="5.5" fill="#0D1A3A"/>
+    <circle cx="326" cy="160" r="2"   fill="white"/>
+    <!-- THROAT -->
+    <ellipse cx="288" cy="194" rx="20" ry="10" fill="#00E5FF" opacity="0.6" transform="rotate(-30 288 194)"/>
+    <!-- SPARKLES -->
+    <circle cx="445" cy="185" r="5"   fill="#FFD600"/>
+    <circle cx="462" cy="210" r="3.5" fill="#FF9100"/>
+    <circle cx="447" cy="233" r="4"   fill="#F44336"/>
+    <circle cx="155" cy="74"  r="3"   fill="#29B6F6"/>
+    <circle cx="130" cy="93"  r="2.5" fill="#00ACC1"/>
+    <path d="M465,168 L467.5,175 L475,175 L469,180 L471,187 L465,183 L459,187 L461,180 L455,175 L462.5,175 Z" fill="#FFD600"/>
+  </g>
 </svg>
