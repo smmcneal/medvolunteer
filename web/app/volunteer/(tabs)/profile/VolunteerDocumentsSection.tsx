@@ -89,6 +89,7 @@ export default function VolunteerDocumentsSection({
         storage_path: '',   // revalidatePath will refresh with real path
         uploaded_by: null,
         uploaded_at: new Date().toISOString(),
+        category: 'document',
       }, ...prev])
     }
 

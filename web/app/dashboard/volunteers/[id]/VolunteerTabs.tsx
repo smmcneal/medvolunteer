@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { CheckCircle2, Circle, Clock, AlertTriangle, FileText, ShieldCheck, BookOpen } from 'lucide-react'
 import { toggleChecklistItem } from './actions'
+import { getUploadSignedUrl } from './actions'
 import type { ChecklistField } from './actions'
 import type {
   Volunteer, Credential, Document, BackgroundCheck,
@@ -417,9 +418,11 @@ export default function VolunteerTabs({
 
         {/* ── Credentials ── */}
         {activeTab === 'Credentials' && (
-          <div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+            {/* Credential metadata cards */}
             {credentials.length === 0 ? (
-              <p style={{ fontSize: '14px', color: '#9ca3af', textAlign: 'center', padding: '32px 0' }}>
+              <p style={{ fontSize: '14px', color: '#9ca3af', textAlign: 'center', padding: '16px 0' }}>
                 No credentials on file
               </p>
             ) : (
@@ -465,6 +468,59 @@ export default function VolunteerTabs({
                 })}
               </div>
             )}
+
+            {/* Credential file uploads (uploaded by volunteer via portal) */}
+            {(() => {
+              const credUploads = uploads.filter(u => u.category === 'credential')
+              if (credUploads.length === 0) return null
+
+              function credFileColor(mime: string) {
+                if (mime === 'application/pdf')                          return '#ef4444'
+                if (mime.includes('word') || mime.includes('document')) return '#2563eb'
+                if (mime.includes('excel') || mime.includes('sheet'))   return '#16a34a'
+                if (mime.startsWith('image/'))                          return '#8b5cf6'
+                return '#9ca3af'
+              }
+              function credExtBadge(name: string, mime: string) {
+                const ext = name.includes('.') ? name.split('.').pop()!.toUpperCase() : ''
+                if (ext)                        return ext.slice(0, 4)
+                if (mime === 'application/pdf') return 'PDF'
+                if (mime.startsWith('image/'))  return mime.split('/')[1].toUpperCase().slice(0, 4)
+                return 'FILE'
+              }
+              function fmtBytes(bytes: number) {
+                if (bytes < 1024)          return `${bytes} B`
+                if (bytes < 1024 * 1024)  return `${(bytes / 1024).toFixed(1)} KB`
+                return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+              }
+
+              return (
+                <div>
+                  <p style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
+                    Supporting Documents
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', borderRadius: '10px', overflow: 'hidden', border: '1px solid #f0f0f0' }}>
+                    {credUploads.map((u, i) => {
+                      const color = credFileColor(u.mime_type)
+                      return (
+                        <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', background: 'white', borderTop: i > 0 ? '1px solid #f9fafb' : 'none' }}>
+                          <div style={{ width: '36px', height: '36px', borderRadius: '8px', flexShrink: 0, background: color + '15', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: 800, color }}>
+                            {credExtBadge(u.name, u.mime_type)}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</p>
+                            <p style={{ fontSize: '11px', color: '#9ca3af', margin: '2px 0 0' }}>
+                              {fmtBytes(u.size_bytes)} · {new Date(u.uploaded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </p>
+                          </div>
+                          <CredViewButton upload={u} />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         )}
 
@@ -533,7 +589,7 @@ export default function VolunteerTabs({
         {activeTab === 'Documents' && (
           <DocumentsPanel
             volunteerId={volunteer.id}
-            uploads={uploads}
+            uploads={uploads.filter(u => u.category !== 'credential')}
             signedDocuments={documents}
           />
         )}
@@ -604,6 +660,52 @@ export default function VolunteerTabs({
         )}
 
       </div>
+    </div>
+  )
+}
+
+// ─── Credential view button ───────────────────────────────────────────────────
+
+function CredViewButton({ upload }: { upload: VolunteerUpload }) {
+  const [loading, setLoading] = useState(false)
+  const [err, setErr]         = useState<string | null>(null)
+
+  async function handleClick() {
+    if (!upload.storage_path) return
+    setLoading(true)
+    const result = await getUploadSignedUrl(upload.storage_path)
+    setLoading(false)
+    if (result.error || !result.url) { setErr(result.error ?? 'Error'); return }
+    window.open(result.url, '_blank', 'noopener,noreferrer')
+  }
+
+  return (
+    <div>
+      {err && <span style={{ fontSize: '11px', color: '#dc2626' }}>{err}</span>}
+      <button
+        onClick={handleClick}
+        disabled={loading}
+        title="Open file"
+        style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          padding: '6px 11px', borderRadius: '7px',
+          border: '1px solid #e5e7eb', background: 'white',
+          fontSize: '12px', fontWeight: 600, color: '#374151',
+          cursor: loading ? 'wait' : 'pointer', flexShrink: 0,
+          fontFamily: 'inherit',
+        }}
+      >
+        {loading ? '…' : (
+          <>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            Open
+          </>
+        )}
+      </button>
     </div>
   )
 }

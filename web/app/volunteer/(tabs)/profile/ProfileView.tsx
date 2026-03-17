@@ -3,9 +3,9 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import VolunteerDocumentsSection from './VolunteerDocumentsSection'
-import { updateContactInfo, updateEmergencyContact } from './actions'
-import type { Volunteer, Credential, Document, VolunteerUpload, VolunteerStatus, VolunteerCategory } from '@/types/database'
+import { updateContactInfo, updateEmergencyContact, uploadCredentialFile, deleteVolunteerUpload, getUploadSignedUrl } from './actions'
+import type { Volunteer, Credential, VolunteerUpload, VolunteerStatus, VolunteerCategory } from '@/types/database'
+import { useRef } from 'react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,8 +18,7 @@ type VolunteerProfile = Pick<
 interface Props {
   volunteer: VolunteerProfile
   credentials: Credential[]
-  documents: Document[]
-  uploads: VolunteerUpload[]
+  credentialUploads: VolunteerUpload[]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -71,10 +70,16 @@ function initials(first: string, last: string): string {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function ProfileView({ volunteer, credentials, documents, uploads }: Props) {
+export default function ProfileView({ volunteer, credentials, credentialUploads }: Props) {
   const router = useRouter()
   const [isPending, startTransition]   = useTransition()
   const [signOutError, setSignOutError] = useState<string | null>(null)
+  const credFileInputRef = useRef<HTMLInputElement>(null)
+  const [credUploads, setCredUploads]     = useState<VolunteerUpload[]>(credentialUploads)
+  const [credUploading, setCredUploading] = useState(false)
+  const [credUploadProgress, setCredUploadProgress] = useState<string | null>(null)
+  const [credUploadError, setCredUploadError]       = useState<string | null>(null)
+  const [credDeletingId, setCredDeletingId]         = useState<string | null>(null)
 
   // ── Contact edit state ─────────────────────────────────────────────────────
   const [editingContact, setEditingContact] = useState(false)
@@ -171,7 +176,82 @@ export default function ProfileView({ volunteer, credentials, documents, uploads
   const activeCredentials  = credentials.filter(c => { const d = daysUntilExpiry(c.expiration_date); return d === null || d >= 0 })
   const expiredCredentials = credentials.filter(c => { const d = daysUntilExpiry(c.expiration_date); return d !== null && d < 0 })
 
-  const docCount = uploads.length + documents.length
+  const CRED_ACCEPT = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'text/plain',
+  ].join(',')
+
+  async function handleCredFiles(files: FileList | null) {
+    if (!files || files.length === 0) return
+    setCredUploadError(null)
+    setCredUploading(true)
+    for (const file of Array.from(files)) {
+      setCredUploadProgress(`Uploading ${file.name}…`)
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('volunteerId', volunteer.id)
+      const result = await uploadCredentialFile(fd)
+      if (result.error) {
+        setCredUploadError(result.error)
+        setCredUploading(false)
+        setCredUploadProgress(null)
+        return
+      }
+      setCredUploads(prev => [{
+        id: crypto.randomUUID(),
+        volunteer_id: volunteer.id,
+        name: file.name,
+        mime_type: file.type || 'application/octet-stream',
+        size_bytes: file.size,
+        storage_path: '',
+        uploaded_by: null,
+        uploaded_at: new Date().toISOString(),
+        category: 'credential',
+      }, ...prev])
+    }
+    setCredUploading(false)
+    setCredUploadProgress(null)
+  }
+
+  async function handleCredDelete(upload: VolunteerUpload) {
+    setCredDeletingId(upload.id)
+    const result = await deleteVolunteerUpload(upload.id, upload.storage_path)
+    setCredDeletingId(null)
+    if (result.error) { setCredUploadError(result.error); return }
+    setCredUploads(prev => prev.filter(u => u.id !== upload.id))
+  }
+
+  async function handleCredView(upload: VolunteerUpload) {
+    const result = await getUploadSignedUrl(upload.storage_path)
+    if (result.error || !result.url) { setCredUploadError(result.error ?? 'Could not open file'); return }
+    window.open(result.url, '_blank', 'noopener,noreferrer')
+  }
+
+  function credFileColor(mime: string): string {
+    if (mime === 'application/pdf')                          return '#ef4444'
+    if (mime.includes('word') || mime.includes('document')) return '#2563eb'
+    if (mime.includes('excel') || mime.includes('sheet'))   return '#16a34a'
+    if (mime.startsWith('image/'))                          return '#8b5cf6'
+    return '#9ca3af'
+  }
+
+  function credExtBadge(name: string, mime: string): string {
+    const ext = name.includes('.') ? name.split('.').pop()!.toUpperCase() : ''
+    if (ext)                               return ext.slice(0, 4)
+    if (mime === 'application/pdf')        return 'PDF'
+    if (mime.startsWith('image/'))         return mime.split('/')[1].toUpperCase().slice(0, 4)
+    return 'FILE'
+  }
+
+  function formatBytes(bytes: number) {
+    if (bytes < 1024)           return `${bytes} B`
+    if (bytes < 1024 * 1024)   return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
 
   return (
     <div style={{ paddingBottom: '24px', fontFamily: "'Figtree', system-ui, sans-serif" }}>
@@ -394,38 +474,91 @@ export default function ProfileView({ volunteer, credentials, documents, uploads
         </div>
 
         {/* ── Credentials ── */}
-        <Section title={`Credentials${credentials.length > 0 ? ` (${credentials.length})` : ''}`}>
-          {credentials.length === 0 ? (
-            <EmptyState message="No credentials on file" />
-          ) : (
-            <>
-              {activeCredentials.map(cred => <CredentialCard key={cred.id} cred={cred} />)}
-              {expiredCredentials.length > 0 && (
-                <>
-                  <div style={{
-                    fontSize: '11px', fontWeight: 700, color: '#9ca3af',
-                    letterSpacing: '0.08em', textTransform: 'uppercase',
-                    padding: '4px 16px 2px',
-                  }}>
-                    Expired
-                  </div>
-                  {expiredCredentials.map(cred => <CredentialCard key={cred.id} cred={cred} />)}
-                </>
-              )}
-            </>
-          )}
-        </Section>
+        <div>
+          <h2 style={{ fontSize: '13px', fontWeight: 700, color: '#6b7280', letterSpacing: '0.06em', textTransform: 'uppercase', margin: '0 0 8px 4px' }}>
+            Credentials{credentials.length > 0 ? ` (${credentials.length})` : ''}
+          </h2>
+          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #f0f0f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+            {credentials.length === 0 ? (
+              <EmptyState message="No credentials on file" />
+            ) : (
+              <>
+                {activeCredentials.map(cred => <CredentialCard key={cred.id} cred={cred} />)}
+                {expiredCredentials.length > 0 && (
+                  <>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '4px 16px 2px' }}>
+                      Expired
+                    </div>
+                    {expiredCredentials.map(cred => <CredentialCard key={cred.id} cred={cred} />)}
+                  </>
+                )}
+              </>
+            )}
 
-        {/* ── Documents ── */}
-        <Section title={`Documents${docCount > 0 ? ` (${docCount})` : ''}`} noPadding>
-          <div style={{ padding: '16px' }}>
-            <VolunteerDocumentsSection
-              volunteerId={volunteer.id}
-              uploads={uploads}
-              signedDocuments={documents}
-            />
+            {/* ── Credential file uploads ── */}
+            <div style={{ borderTop: '1px solid #f3f4f6', padding: '16px' }}>
+              <p style={{ fontSize: '12px', fontWeight: 600, color: '#6b7280', marginBottom: '10px' }}>
+                Supporting Documents
+              </p>
+
+              {/* Error */}
+              {credUploadError && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', marginBottom: '10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '13px', color: '#dc2626' }}>
+                  <span>{credUploadError}</span>
+                  <button onClick={() => setCredUploadError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: 0 }}>✕</button>
+                </div>
+              )}
+
+              {/* Uploaded credential files */}
+              {credUploads.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', borderRadius: '10px', overflow: 'hidden', border: '1px solid #f0f0f0', marginBottom: '10px' }}>
+                  {credUploads.map((u, i) => (
+                    <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 12px', background: 'white', borderTop: i > 0 ? '1px solid #f9fafb' : 'none', opacity: credDeletingId === u.id ? 0.45 : 1 }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0, background: credFileColor(u.mime_type) + '15', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: 800, color: credFileColor(u.mime_type) }}>
+                        {credExtBadge(u.name, u.mime_type)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</p>
+                        <p style={{ fontSize: '11px', color: '#9ca3af', margin: '2px 0 0' }}>{formatBytes(u.size_bytes)}</p>
+                      </div>
+                      <button onClick={() => handleCredView(u)} title="Open" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '5px', borderRadius: '6px', color: '#9ca3af', display: 'flex', alignItems: 'center' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      </button>
+                      <button onClick={() => handleCredDelete(u)} disabled={credDeletingId === u.id} title="Remove" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '5px', borderRadius: '6px', color: '#d1d5db', display: 'flex', alignItems: 'center' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Upload button */}
+              <input ref={credFileInputRef} type="file" accept={CRED_ACCEPT} multiple style={{ display: 'none' }} onChange={e => handleCredFiles(e.target.files)} />
+              <button
+                onClick={() => !credUploading && credFileInputRef.current?.click()}
+                disabled={credUploading}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: '10px',
+                  border: '2px dashed #e5e7eb', background: credUploading ? '#f9fafb' : 'white',
+                  color: credUploading ? '#9ca3af' : '#374151',
+                  fontSize: '13px', fontWeight: 600,
+                  cursor: credUploading ? 'wait' : 'pointer',
+                  fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                }}
+              >
+                {credUploading ? (
+                  <><MiniSpinner /> {credUploadProgress ?? 'Uploading…'}</>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Upload Credential Document
+                  </>
+                )}
+              </button>
+              <p style={{ fontSize: '11px', color: '#9ca3af', textAlign: 'center', marginTop: '6px' }}>PDF, Word, Excel, PNG, JPG — up to 50 MB</p>
+            </div>
           </div>
-        </Section>
+        </div>
 
         {/* ── Sign Out ── */}
         <div style={{ paddingTop: '8px' }}>

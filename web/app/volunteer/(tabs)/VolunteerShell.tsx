@@ -21,11 +21,11 @@ function isInStandaloneMode(): boolean {
 }
 
 const TABS = [
-  { href: '/volunteer/home',     label: 'Home',     icon: HomeIcon },
-  { href: '/volunteer/shifts',   label: 'Shifts',   icon: CalendarIcon },
-  { href: '/volunteer/handbook', label: 'Handbook', icon: HandbookIcon },
-  { href: '/volunteer/profile',  label: 'Profile',  icon: UserIcon },
-  { href: '/volunteer/messages', label: 'Messages', icon: MessageIcon },
+  { href: '/volunteer/home',      label: 'Home',      icon: HomeIcon },
+  { href: '/volunteer/shifts',    label: 'Shifts',    icon: CalendarIcon },
+  { href: '/volunteer/documents', label: 'Docs',      icon: DocumentsIcon },
+  { href: '/volunteer/handbook',  label: 'Handbook',  icon: HandbookIcon },
+  { href: '/volunteer/profile',   label: 'Profile',   icon: UserIcon },
 ]
 
 interface Props {
@@ -285,6 +285,21 @@ export default function VolunteerShell({ volunteer, children }: Props) {
 }
 
 // ─── Tab icons (inline SVG for zero-dependency) ────────────────────────────────
+
+function DocumentsIcon({ active }: { active: boolean }) {
+  const c = active ? '#1B2A4A' : '#9ca3af'
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+      {active && (
+        <>
+          <line x1="8" y1="13" x2="16" y2="13" stroke="white" strokeWidth="1.5"/>
+          <line x1="8" y1="17" x2="13" y2="17" stroke="white" strokeWidth="1.5"/>
+        </>
+      )}
+    </svg>
+  )
+}
 
 function HomeIcon({ active }: { active: boolean }) {
   return (

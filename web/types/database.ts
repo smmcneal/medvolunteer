@@ -336,6 +336,20 @@ export interface VolunteerUpload {
   storage_path: string
   uploaded_by: string | null
   uploaded_at: string
+  category: string  // 'document' | 'credential'
+}
+
+export interface OrgDocument {
+  id: string
+  name: string
+  description: string | null
+  storage_path: string | null
+  public_path: string | null
+  mime_type: string
+  size_bytes: number
+  is_preset: boolean
+  sort_order: number
+  created_at: string
 }
 
 export interface VolunteerWithLocation extends Volunteer {

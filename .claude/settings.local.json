@@ -53,7 +53,29 @@
       "Bash(cmd.exe /c \"git add -A && git status\")",
       "Bash(git -C \"C:/Users/smmcn/Desktop/medvolunteer\" add -A)",
       "Bash(git -C \"C:/Users/smmcn/Desktop/medvolunteer\" status)",
-      "Bash(git -C:*)"
+      "Bash(git -C:*)",
+      "Bash(supabase status:*)",
+      "Bash(psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -c \"SELECT id, user_id, email, confirmed_at FROM auth.users;\")",
+      "Bash(docker exec:*)",
+      "Bash(curl -s -X POST \"http://127.0.0.1:54321/auth/v1/token?grant_type=password\" -H \"Content-Type: application/json\" -H \"apikey: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH\" -d '{\"\"\"\"email\"\"\"\":\"\"\"\"alice@example.com\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"volunteer123\"\"\"\"}')",
+      "Bash(find /mnt/c/Users/smmcn/Desktop/medvolunteer -path *supabase* -name *.sql -type f)",
+      "Bash(find /mnt/c/Users/smmcn/Desktop/medvolunteer/web/app/dashboard/volunteers -type f -name *.tsx)",
+      "Bash(find /mnt/c/Users/smmcn/Desktop/medvolunteer -path *supabase* -name *.sql)",
+      "Bash(find C:UserssmmcnDesktopmedvolunteer -name *Pipeline* -o -name *phase*)",
+      "Bash(find /c/Users/smmcn/Desktop/medvolunteer/supabase/functions -type f -name *.ts)",
+      "Bash(find /c/Users/smmcn/Desktop/medvolunteer -maxdepth 2 -name *.toml -o -name .env*)",
+      "Bash(wc -l /c/Users/smmcn/Desktop/medvolunteer/web/app/**/*.tsx)",
+      "Bash(grep -r \"handbook\\\\|acknowledgment\\\\|signed_at\\\\|handbook_signed\" --include=*.sql --include=*.ts --include=*.tsx -l)",
+      "Bash(ls web/app/dashboard/volunteers/[id]/)",
+      "Bash(dir \"C:\\\\Users\\\\smmcn\\\\Downloads\\\\MedVolunteer\\\\clinicdocuments\"\" /b 2>nul || echo \"NOT FOUND \")",
+      "Bash(powershell.exe -Command \"Get-ChildItem ''C:\\\\Users\\\\smmcn\\\\Downloads\\\\MedVolunteer\\\\clinicdocuments\\\\'' | Select-Object Name | Format-Table -AutoSize\")",
+      "Bash(powershell.exe -Command \"Get-Item ''C:\\\\Users\\\\smmcn\\\\Downloads\\\\MedVolunteer\\\\clinicdocuments\\\\03_YFC_Disclosure_Regarding_Background_Invest~.pdf'' | Select-Object FullName; Get-Item ''C:\\\\Users\\\\smmcn\\\\Downloads\\\\MedVolunteer\\\\clinicdocuments\\\\04_FedFCRA_bcfp_consumer-rights-summary_2018-~.pdf'' | Select-Object FullName\")",
+      "Bash(powershell.exe -Command \"\\(Get-Item ''C:\\\\Users\\\\smmcn\\\\Downloads\\\\MedVolunteer\\\\clinicdocuments\\\\03_YFC_Disclosure_Regarding_Background_Invest~.pdf''\\).Name; \\(Get-Item ''C:\\\\Users\\\\smmcn\\\\Downloads\\\\MedVolunteer\\\\clinicdocuments\\\\04_FedFCRA_bcfp_consumer-rights-summary_2018-~.pdf''\\).Name\")",
+      "Bash(powershell.exe -Command \":*)",
+      "Bash(powershell.exe -Command \"cd ''C:\\\\Users\\\\smmcn\\\\Desktop\\\\medvolunteer\\\\web''; npx tsc --noEmit 2>&1 | Select-Object -First 50\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -Command \"Set-Location ''C:\\\\Users\\\\smmcn\\\\Desktop\\\\medvolunteer\\\\web''; & node_modules\\\\.bin\\\\tsc --noEmit 2>&1 | Select-Object -First 50\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -Command \"Set-Location ''C:\\\\Users\\\\smmcn\\\\Desktop\\\\medvolunteer\\\\web''; & node_modules\\\\.bin\\\\tsc --noEmit 2>&1 | Where-Object { $_-notmatch ''dashboard/page.tsx'' } | Select-Object -First 30\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -Command \"Set-Location ''C:\\\\Users\\\\smmcn\\\\Desktop\\\\medvolunteer\\\\web''; $out = & node_modules\\\\.bin\\\\tsc --noEmit 2>&1; $out | Where-Object { $_ -notlike ''*dashboard/page.tsx*'' } | Select-Object -First 30\")"
     ]
   }
 }

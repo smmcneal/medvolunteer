@@ -68,6 +68,76 @@ export async function uploadVolunteerDocument(
   return {}
 }
 
+// ─── Upload credential document ───────────────────────────────────────────────
+
+export async function uploadCredentialFile(
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const file        = formData.get('file') as File | null
+  const volunteerId = formData.get('volunteerId') as string | null
+
+  if (!file || !volunteerId) return { error: 'Missing file or volunteer ID.' }
+  if (file.size > 52_428_800)  return { error: 'File must be under 50 MB.' }
+
+  // Verify caller owns this volunteer record
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  const admin = createAdminClient()
+  const { data: vol } = await admin
+    .from('volunteers')
+    .select('id')
+    .eq('id', volunteerId)
+    .eq('user_id', user.id)
+    .single()
+  if (!vol) return { error: 'Permission denied.' }
+
+  const { error: bucketError } = await admin.storage.createBucket(BUCKET, {
+    public: false,
+    fileSizeLimit: 52_428_800,
+    allowedMimeTypes: [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'text/plain',
+    ],
+  })
+  if (bucketError && !bucketError.message.toLowerCase().includes('already exists')) {
+    return { error: bucketError.message }
+  }
+
+  const ext      = file.name.includes('.') ? file.name.split('.').pop() : ''
+  const safeName = `${crypto.randomUUID()}${ext ? `.${ext}` : ''}`
+  const path     = `${volunteerId}/${safeName}`
+
+  const bytes = await file.arrayBuffer()
+  const { error: storageError } = await admin.storage
+    .from(BUCKET)
+    .upload(path, bytes, { contentType: file.type || 'application/octet-stream', upsert: false })
+  if (storageError) return { error: storageError.message }
+
+  const { error: dbError } = await admin.from('volunteer_uploads').insert({
+    volunteer_id: volunteerId,
+    name:         file.name,
+    mime_type:    file.type || 'application/octet-stream',
+    size_bytes:   file.size,
+    storage_path: path,
+    uploaded_by:  user.id,
+    category:     'credential',
+  })
+
+  if (dbError) {
+    await admin.storage.from(BUCKET).remove([path])
+    return { error: dbError.message }
+  }
+
+  revalidatePath('/volunteer/profile')
+  return {}
+}
+
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
 export async function deleteVolunteerUpload(

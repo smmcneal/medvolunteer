@@ -6,19 +6,19 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import {
-  LayoutDashboard, Users, Calendar, BookOpen,
+  LayoutDashboard, Users, Calendar, FolderOpen,
   BarChart2, MessageSquare, Settings, LogOut, Heart
 } from 'lucide-react'
 
 const nav = [
-  { href: '/dashboard',            label: 'Dashboard',  icon: LayoutDashboard },
-  { href: '/dashboard/volunteers', label: 'Volunteers', icon: Users },
-  { href: '/dashboard/onboarding', label: 'Onboarding', icon: Heart },
-  { href: '/dashboard/shifts',     label: 'Shifts',     icon: Calendar },
-  { href: '/dashboard/learning',   label: 'Learning',   icon: BookOpen },
-  { href: '/dashboard/reports',    label: 'Reports',    icon: BarChart2 },
-  { href: '/dashboard/messages',   label: 'Messages',   icon: MessageSquare },
-  { href: '/dashboard/settings',   label: 'Settings',   icon: Settings },
+  { href: '/dashboard',             label: 'Dashboard',  icon: LayoutDashboard },
+  { href: '/dashboard/volunteers',  label: 'Volunteers', icon: Users },
+  { href: '/dashboard/onboarding',  label: 'Onboarding', icon: Heart },
+  { href: '/dashboard/shifts',      label: 'Shifts',     icon: Calendar },
+  { href: '/dashboard/documents',   label: 'Documents',  icon: FolderOpen },
+  { href: '/dashboard/reports',     label: 'Reports',    icon: BarChart2 },
+  { href: '/dashboard/messages',    label: 'Messages',   icon: MessageSquare },
+  { href: '/dashboard/settings',    label: 'Settings',   icon: Settings },
 ]
 
 export default function Sidebar() {
