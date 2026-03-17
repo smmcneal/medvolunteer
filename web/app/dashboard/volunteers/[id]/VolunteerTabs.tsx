@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { CheckCircle2, Circle, Clock, AlertTriangle, FileText, ShieldCheck, BookOpen } from 'lucide-react'
+import { toggleChecklistItem } from './actions'
+import type { ChecklistField } from './actions'
 import type {
   Volunteer, Credential, Document, BackgroundCheck,
   TimeEntry, LessonCompletion, Location,
@@ -81,6 +83,32 @@ export default function VolunteerTabs({
 }) {
   const [activeTab, setActiveTab] = useState<Tab>('Info')
 
+  // ── Onboarding checklist state (optimistic) ──
+  const [checklist, setChecklist] = useState({
+    handbook:      !!volunteer.handbook_signed_at,
+    bg_form:       volunteer.checklist_bg_form_signed,
+    video:         volunteer.checklist_video_watched,
+    id_verified:   volunteer.checklist_id_verified,
+    certifications: volunteer.checklist_certifications_submitted,
+  })
+  const [, startChecklistTransition] = useTransition()
+
+  function handleChecklistToggle(
+    key: keyof typeof checklist,
+    field: ChecklistField,
+    current: boolean,
+  ) {
+    const next = !current
+    setChecklist(prev => ({ ...prev, [key]: next }))
+    startChecklistTransition(async () => {
+      const result = await toggleChecklistItem(volunteer.id, field, next)
+      if (result.error) {
+        // Revert on failure
+        setChecklist(prev => ({ ...prev, [key]: current }))
+      }
+    })
+  }
+
   const completed  = onboardingStages.filter(s => s.progress?.completed_at).length
   const totalHours = timeEntries.reduce((sum, e) => sum + (e.duration_minutes ?? 0), 0) / 60
 
@@ -132,6 +160,173 @@ export default function VolunteerTabs({
         {/* ── Onboarding ── */}
         {activeTab === 'Onboarding' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+
+            {/* ── Onboarding Checklist ── */}
+            {(() => {
+              const checklistItems: {
+                key: keyof typeof checklist
+                field: ChecklistField | null
+                label: string
+                sublabel: string
+                auto: boolean
+                signedDetail?: string | null
+              }[] = [
+                {
+                  key: 'handbook',
+                  field: null,
+                  label: 'Volunteer Handbook read & signed',
+                  sublabel: volunteer.handbook_signed_at
+                    ? `Signed by ${volunteer.handbook_signed_name ?? 'volunteer'} on ${new Date(volunteer.handbook_signed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                    : 'Volunteer must sign via the Handbook tab in their portal',
+                  auto: true,
+                  signedDetail: volunteer.handbook_signed_at ?? null,
+                },
+                {
+                  key: 'bg_form',
+                  field: 'checklist_bg_form_signed',
+                  label: 'Background Check permission form signed & submitted',
+                  sublabel: 'Permission form received and consent on file',
+                  auto: false,
+                },
+                {
+                  key: 'video',
+                  field: 'checklist_video_watched',
+                  label: 'Video watched',
+                  sublabel: 'Orientation or required training video completed',
+                  auto: false,
+                },
+                {
+                  key: 'id_verified',
+                  field: 'checklist_id_verified',
+                  label: 'ID verified',
+                  sublabel: 'Government-issued photo ID reviewed and confirmed',
+                  auto: false,
+                },
+                {
+                  key: 'certifications',
+                  field: 'checklist_certifications_submitted',
+                  label: 'Certifications submitted',
+                  sublabel: 'Relevant professional certifications received',
+                  auto: false,
+                },
+              ]
+
+              const doneCount = checklistItems.filter(item => checklist[item.key]).length
+              const allDone   = doneCount === checklistItems.length
+              const pct       = Math.round((doneCount / checklistItems.length) * 100)
+
+              return (
+                <div>
+                  {/* Header row */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <p style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Onboarding Checklist
+                    </p>
+                    <span style={{
+                      fontSize: '12px', fontWeight: 600,
+                      color: allDone ? '#16a34a' : '#6b7280',
+                    }}>
+                      {doneCount}/{checklistItems.length} complete
+                    </span>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div style={{ height: '5px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden', marginBottom: '14px' }}>
+                    <div style={{
+                      height: '100%', borderRadius: '4px',
+                      background: allDone ? '#22c55e' : '#1B2A4A',
+                      width: `${pct}%`,
+                      transition: 'width 0.3s ease',
+                    }} />
+                  </div>
+
+                  {/* Items */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {checklistItems.map(item => {
+                      const isDone = checklist[item.key]
+                      return (
+                        <div
+                          key={item.key}
+                          onClick={() => {
+                            if (!item.auto && item.field) {
+                              handleChecklistToggle(item.key, item.field, isDone)
+                            }
+                          }}
+                          style={{
+                            display: 'flex', alignItems: 'flex-start', gap: '12px',
+                            padding: '13px 14px',
+                            borderRadius: '10px',
+                            border: `1px solid ${isDone ? '#d1fae5' : '#f0f0f0'}`,
+                            background: isDone ? '#f0fdf4' : 'white',
+                            cursor: item.auto ? 'default' : 'pointer',
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          {/* Checkbox / check */}
+                          <div style={{
+                            width: '20px', height: '20px', borderRadius: '5px', flexShrink: 0,
+                            border: `2px solid ${isDone ? '#22c55e' : '#d1d5db'}`,
+                            background: isDone ? '#22c55e' : 'white',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            marginTop: '1px', transition: 'all 0.15s',
+                          }}>
+                            {isDone && (
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
+                                <polyline points="20 6 9 17 4 12"/>
+                              </svg>
+                            )}
+                          </div>
+
+                          {/* Text */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{
+                              fontSize: '13px', fontWeight: 600,
+                              color: isDone ? '#15803d' : '#111827',
+                              marginBottom: '2px',
+                              textDecoration: isDone ? 'none' : 'none',
+                            }}>
+                              {item.label}
+                              {item.auto && (
+                                <span style={{
+                                  marginLeft: '7px', fontSize: '10px', fontWeight: 600,
+                                  padding: '1px 6px', borderRadius: '4px',
+                                  background: '#eff6ff', color: '#1d4ed8',
+                                  verticalAlign: 'middle',
+                                }}>
+                                  AUTO
+                                </span>
+                              )}
+                            </p>
+                            <p style={{ fontSize: '11px', color: isDone ? '#16a34a' : '#9ca3af', lineHeight: '1.4' }}>
+                              {item.sublabel}
+                            </p>
+                          </div>
+
+                          {/* Right side: toggle label or lock icon */}
+                          {item.auto ? (
+                            <div style={{ flexShrink: 0, marginTop: '1px' }}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                              </svg>
+                            </div>
+                          ) : (
+                            <span style={{
+                              fontSize: '11px', fontWeight: 500,
+                              color: isDone ? '#16a34a' : '#9ca3af',
+                              flexShrink: 0, marginTop: '2px',
+                            }}>
+                              {isDone ? 'Done' : 'Pending'}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
+
             <PipelinePhaseBar volunteerId={volunteer.id} currentPhase={volunteer.pipeline_phase} />
 
             {/* Onboarding stage checklist */}

@@ -76,6 +76,12 @@ export interface Volunteer {
   onboarding_workflow_id: string | null
   emergency_contact_name: string | null
   emergency_contact_phone: string | null
+  handbook_signed_at: string | null
+  handbook_signed_name: string | null
+  checklist_bg_form_signed: boolean
+  checklist_video_watched: boolean
+  checklist_id_verified: boolean
+  checklist_certifications_submitted: boolean
   created_at: string
   updated_at: string
 }

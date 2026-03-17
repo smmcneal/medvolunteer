@@ -280,6 +280,30 @@ export async function getUploadSignedUrl(
   return { url: data.signedUrl }
 }
 
+// ─── Onboarding checklist ─────────────────────────────────────────────────────
+
+export type ChecklistField =
+  | 'checklist_bg_form_signed'
+  | 'checklist_video_watched'
+  | 'checklist_id_verified'
+  | 'checklist_certifications_submitted'
+
+export async function toggleChecklistItem(
+  volunteerId: string,
+  field: ChecklistField,
+  value: boolean,
+): Promise<{ error?: string }> {
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('volunteers')
+    .update({ [field]: value })
+    .eq('id', volunteerId)
+
+  if (error) return { error: error.message }
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
+  return {}
+}
+
 // ─── Clock in / out ───────────────────────────────────────────────────────────
 
 export async function clockIn(
