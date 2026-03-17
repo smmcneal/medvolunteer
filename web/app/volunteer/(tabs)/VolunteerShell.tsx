@@ -23,7 +23,7 @@ function isInStandaloneMode(): boolean {
 const TABS = [
   { href: '/volunteer/home',     label: 'Home',     icon: HomeIcon },
   { href: '/volunteer/shifts',   label: 'Shifts',   icon: CalendarIcon },
-  { href: '/volunteer/learn',    label: 'Learn',    icon: BookIcon },
+  { href: '/volunteer/handbook', label: 'Handbook', icon: HandbookIcon },
   { href: '/volunteer/profile',  label: 'Profile',  icon: UserIcon },
   { href: '/volunteer/messages', label: 'Messages', icon: MessageIcon },
 ]
@@ -307,12 +307,24 @@ function CalendarIcon({ active }: { active: boolean }) {
   )
 }
 
-function BookIcon({ active }: { active: boolean }) {
+function HandbookIcon({ active }: { active: boolean }) {
+  const c = active ? '#1B2A4A' : '#9ca3af'
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#1B2A4A' : '#9ca3af'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-      {active && <><line x1="8" y1="7" x2="16" y2="7" stroke="white" strokeWidth="1.5"/><line x1="8" y1="11" x2="13" y2="11" stroke="white" strokeWidth="1.5"/></>}
+      {active ? (
+        <>
+          <line x1="8" y1="7" x2="16" y2="7" stroke="white" strokeWidth="1.5"/>
+          <line x1="8" y1="11" x2="14" y2="11" stroke="white" strokeWidth="1.5"/>
+          <polyline points="8 15 10 17 14 13" stroke="white" strokeWidth="1.5" fill="none"/>
+        </>
+      ) : (
+        <>
+          <line x1="8" y1="7" x2="16" y2="7"/>
+          <line x1="8" y1="11" x2="14" y2="11"/>
+        </>
+      )}
     </svg>
   )
 }
