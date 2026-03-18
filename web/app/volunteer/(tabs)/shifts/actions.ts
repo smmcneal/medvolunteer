@@ -69,13 +69,10 @@ export async function volunteerClockOut(timeEntryId: string): Promise<void> {
   if (!entry || owner !== user.id) throw new Error('Entry not found or access denied')
 
   const clockOut = new Date().toISOString()
-  const duration_minutes = Math.round(
-    (new Date(clockOut).getTime() - new Date(entry.clock_in).getTime()) / 60000
-  )
 
   const { error } = await supabase
     .from('time_entries')
-    .update({ clock_out: clockOut, duration_minutes })
+    .update({ clock_out: clockOut })
     .eq('id', timeEntryId)
 
   if (error) throw new Error(error.message)
