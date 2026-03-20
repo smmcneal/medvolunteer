@@ -144,7 +144,22 @@ export async function deleteVolunteerUpload(
   uploadId: string,
   storagePath: string,
 ): Promise<{ error?: string }> {
+  // Verify caller is authenticated and owns this upload
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
   const admin = createAdminClient()
+
+  const { data: upload } = await admin
+    .from('volunteer_uploads')
+    .select('id, storage_path, volunteers!inner(user_id)')
+    .eq('id', uploadId)
+    .single()
+
+  const owner = (upload?.volunteers as unknown as { user_id: string } | null)?.user_id
+  if (!upload || owner !== user.id) return { error: 'Permission denied.' }
+
   await admin.storage.from(BUCKET).remove([storagePath])
   const { error } = await admin.from('volunteer_uploads').delete().eq('id', uploadId)
   if (error) return { error: error.message }
@@ -232,7 +247,22 @@ export async function updateEmergencyContact(
 export async function getUploadSignedUrl(
   storagePath: string,
 ): Promise<{ url?: string; error?: string }> {
+  // Verify caller is authenticated and owns the file at this path
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
   const admin = createAdminClient()
+
+  const { data: upload } = await admin
+    .from('volunteer_uploads')
+    .select('storage_path, volunteers!inner(user_id)')
+    .eq('storage_path', storagePath)
+    .single()
+
+  const owner = (upload?.volunteers as unknown as { user_id: string } | null)?.user_id
+  if (!upload || owner !== user.id) return { error: 'Permission denied.' }
+
   const { data, error } = await admin.storage
     .from(BUCKET)
     .createSignedUrl(storagePath, 3600)

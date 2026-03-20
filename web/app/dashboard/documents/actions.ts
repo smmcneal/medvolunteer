@@ -1,7 +1,15 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+
+async function requireDashboardUser() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated.')
+  return user
+}
 
 const BUCKET = 'org-documents'
 
@@ -10,6 +18,8 @@ const BUCKET = 'org-documents'
 export async function uploadOrgDocument(
   formData: FormData,
 ): Promise<{ error?: string }> {
+  try { await requireDashboardUser() } catch { return { error: 'Not authenticated.' } }
+
   const file = formData.get('file') as File | null
   if (!file) return { error: 'No file provided.' }
   if (file.size > 52_428_800) return { error: 'File must be under 50 MB.' }
@@ -67,6 +77,8 @@ export async function deleteOrgDocument(
   id: string,
   storagePath: string | null,
 ): Promise<{ error?: string }> {
+  try { await requireDashboardUser() } catch { return { error: 'Not authenticated.' } }
+
   const admin = createAdminClient()
 
   if (storagePath) {
@@ -86,6 +98,8 @@ export async function deleteOrgDocument(
 export async function getOrgDocumentSignedUrl(
   storagePath: string,
 ): Promise<{ url?: string; error?: string }> {
+  try { await requireDashboardUser() } catch { return { error: 'Not authenticated.' } }
+
   const admin = createAdminClient()
   const { data, error } = await admin.storage
     .from(BUCKET)

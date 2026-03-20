@@ -271,6 +271,10 @@ export async function deleteVolunteerUpload(
 export async function getUploadSignedUrl(
   storagePath: string,
 ): Promise<{ url?: string; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
   const admin = createAdminClient()
   const { data, error } = await admin.storage
     .from('volunteer-documents')
