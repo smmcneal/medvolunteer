@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import type { AssignmentWithShift, TimeEntryRow } from './page'
-import { volunteerClockIn, volunteerClockOut } from './actions'
+import type { AssignmentWithShift, AvailableShift, TimeEntryRow } from './page'
+import { volunteerClockIn, volunteerClockOut, volunteerSignUpForShift, volunteerDropShift } from './actions'
 
 interface Props {
   assignments: AssignmentWithShift[]
   volunteerId: string
+  availableShifts: AvailableShift[]
 }
 
 type Tab = 'upcoming' | 'past'
@@ -52,13 +53,16 @@ function isShiftActive(start: string, end: string) {
   return now >= s - 15 * 60000 && now <= e // 15 min before start to end
 }
 
-export default function ShiftsView({ assignments, volunteerId }: Props) {
+export default function ShiftsView({ assignments, volunteerId, availableShifts }: Props) {
   const [tab, setTab] = useState<Tab>('upcoming')
   const [geo, setGeo] = useState<GeoState | null>(null)
   const [geoError, setGeoError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const [actionError, setActionError] = useState<string | null>(null)
   const [clockingShiftId, setClockingShiftId] = useState<string | null>(null)
+  const [signingUpShiftId, setSigningUpShiftId] = useState<string | null>(null)
+  const [dropConfirmId, setDropConfirmId] = useState<string | null>(null)
+  const [droppingAssignmentId, setDroppingAssignmentId] = useState<string | null>(null)
   const autoFiredRef = useRef<Set<string>>(new Set())
   const watchIdRef = useRef<number | null>(null)
   const router = useRouter()
@@ -154,6 +158,37 @@ export default function ShiftsView({ assignments, volunteerId }: Props) {
     })
   }
 
+  function handleSignUp(shiftId: string) {
+    setActionError(null)
+    setSigningUpShiftId(shiftId)
+    startTransition(async () => {
+      try {
+        await volunteerSignUpForShift(shiftId)
+        router.refresh()
+      } catch (e: unknown) {
+        setActionError(e instanceof Error ? e.message : 'Sign-up failed')
+      } finally {
+        setSigningUpShiftId(null)
+      }
+    })
+  }
+
+  function handleDropShift(assignmentId: string) {
+    setActionError(null)
+    setDropConfirmId(null)
+    setDroppingAssignmentId(assignmentId)
+    startTransition(async () => {
+      try {
+        await volunteerDropShift(assignmentId)
+        router.refresh()
+      } catch (e: unknown) {
+        setActionError(e instanceof Error ? e.message : 'Could not drop shift')
+      } finally {
+        setDroppingAssignmentId(null)
+      }
+    })
+  }
+
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -219,20 +254,65 @@ export default function ShiftsView({ assignments, volunteerId }: Props) {
       {/* Shift list */}
       <div style={{ padding: '16px' }}>
         {tab === 'upcoming' && (
-          upcoming.length === 0
-            ? <EmptyState icon="📅" msg="No upcoming shifts" sub="Check with your coordinator for assignments" />
-            : upcoming.map(a => (
-                <UpcomingCard
-                  key={a.id}
-                  assignment={a}
-                  geo={geo}
-                  isClockedIn={!!a.openEntry}
-                  isClockingIn={clockingShiftId === a.shift.id && isPending}
-                  isClockingOut={!a.openEntry ? false : isPending}
-                  onClockIn={() => handleClockIn(a)}
-                  onClockOut={() => a.openEntry && handleClockOut(a.openEntry)}
-                />
-              ))
+          <>
+            {/* Available shifts section */}
+            {availableShifts.length > 0 && (
+              <div style={{ marginBottom: '20px' }}>
+                <p style={{
+                  fontSize: '11px', fontWeight: 700, color: '#00897B',
+                  letterSpacing: '0.08em', textTransform: 'uppercase',
+                  margin: '0 0 10px',
+                }}>
+                  Available to Sign Up · {availableShifts.length}
+                </p>
+                {availableShifts.map(s => (
+                  <AvailableShiftCard
+                    key={s.id}
+                    shift={s}
+                    geo={geo}
+                    isSigningUp={signingUpShiftId === s.id && isPending}
+                    onSignUp={() => handleSignUp(s.id)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* My assigned shifts */}
+            {upcoming.length > 0 && (
+              <p style={{
+                fontSize: '11px', fontWeight: 700, color: '#6b7280',
+                letterSpacing: '0.08em', textTransform: 'uppercase',
+                margin: '0 0 10px',
+              }}>
+                My Shifts · {upcoming.length}
+              </p>
+            )}
+
+            {upcoming.length === 0 && availableShifts.length === 0
+              ? <EmptyState icon="📅" msg="No upcoming shifts" sub="Check back later for available shifts" />
+              : upcoming.map(a => {
+                  const canDrop = new Date(a.shift.start_time).getTime() - Date.now() > 24 * 60 * 60 * 1000
+                  return (
+                    <UpcomingCard
+                      key={a.id}
+                      assignment={a}
+                      geo={geo}
+                      isClockedIn={!!a.openEntry}
+                      isClockingIn={clockingShiftId === a.shift.id && isPending}
+                      isClockingOut={!a.openEntry ? false : isPending}
+                      onClockIn={() => handleClockIn(a)}
+                      onClockOut={() => a.openEntry && handleClockOut(a.openEntry)}
+                      canDrop={canDrop}
+                      showDropConfirm={dropConfirmId === a.id}
+                      isDroppingShift={droppingAssignmentId === a.id && isPending}
+                      onDropRequest={() => setDropConfirmId(a.id)}
+                      onDropConfirm={() => handleDropShift(a.id)}
+                      onDropCancel={() => setDropConfirmId(null)}
+                    />
+                  )
+                })
+            }
+          </>
         )}
 
         {tab === 'past' && (
@@ -255,6 +335,12 @@ function UpcomingCard({
   isClockingOut,
   onClockIn,
   onClockOut,
+  canDrop,
+  showDropConfirm,
+  isDroppingShift,
+  onDropRequest,
+  onDropConfirm,
+  onDropCancel,
 }: {
   assignment: AssignmentWithShift
   geo: GeoState | null
@@ -263,6 +349,12 @@ function UpcomingCard({
   isClockingOut: boolean
   onClockIn: () => void
   onClockOut: () => void
+  canDrop: boolean
+  showDropConfirm: boolean
+  isDroppingShift: boolean
+  onDropRequest: () => void
+  onDropConfirm: () => void
+  onDropCancel: () => void
 }) {
   const { shift } = a
   const active = isShiftActive(shift.start_time, shift.end_time)
@@ -360,6 +452,110 @@ function UpcomingCard({
             </button>
           )
         )}
+
+        {/* Drop shift */}
+        {canDrop && !active && (
+          showDropConfirm ? (
+            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+              <button
+                onClick={onDropConfirm}
+                disabled={isDroppingShift}
+                style={{
+                  flex: 1, padding: '9px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
+                  border: '1.5px solid #dc2626', background: '#fef2f2', color: '#dc2626', cursor: 'pointer',
+                }}
+              >
+                {isDroppingShift ? 'Dropping…' : 'Yes, drop shift'}
+              </button>
+              <button
+                onClick={onDropCancel}
+                style={{
+                  flex: 1, padding: '9px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
+                  border: '1.5px solid #e5e7eb', background: 'transparent', color: '#6b7280', cursor: 'pointer',
+                }}
+              >
+                Keep it
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onDropRequest}
+              style={{
+                marginTop: '10px', width: '100%', padding: '8px', borderRadius: '8px',
+                fontSize: '12px', fontWeight: 600, border: '1px solid #e5e7eb',
+                background: 'transparent', color: '#9ca3af', cursor: 'pointer',
+              }}
+            >
+              Drop shift
+            </button>
+          )
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Available shift card ─────────────────────────────────────────────────────
+
+function AvailableShiftCard({
+  shift: s,
+  geo,
+  isSigningUp,
+  onSignUp,
+}: {
+  shift: AvailableShift
+  geo: GeoState | null
+  isSigningUp: boolean
+  onSignUp: () => void
+}) {
+  const loc = s.locations
+  const dist = (geo && loc?.lat && loc?.lng)
+    ? distance(geo.lat, geo.lng, loc.lat, loc.lng)
+    : null
+
+  return (
+    <div style={{
+      background: 'white',
+      border: '1.5px solid #d1fae5',
+      borderRadius: '14px',
+      marginBottom: '10px',
+      overflow: 'hidden',
+    }}>
+      <div style={{ background: 'linear-gradient(90deg, #ecfdf5, #f0fdf4)', padding: '5px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: '#00897B', letterSpacing: '0.04em' }}>OPEN SHIFT</span>
+        <span style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280' }}>
+          {s.spots_left} of {s.required_count} spot{s.spots_left !== 1 ? 's' : ''} left
+        </span>
+      </div>
+
+      <div style={{ padding: '14px' }}>
+        <p style={{ fontSize: '15px', fontWeight: 700, color: '#111827', margin: '0 0 4px' }}>{s.name}</p>
+        <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 2px' }}>
+          📍 {loc?.name ?? 'Unknown location'}
+          {dist !== null && (
+            <span style={{ marginLeft: '6px', color: '#9ca3af', fontWeight: 500 }}>
+              ({dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`})
+            </span>
+          )}
+        </p>
+        <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 12px' }}>
+          🕐 {formatDate(s.start_time)} · {formatTime(s.start_time)} – {formatTime(s.end_time)} · {shiftDuration(s.start_time, s.end_time)}
+        </p>
+
+        {s.notes && (
+          <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 12px', fontStyle: 'italic' }}>{s.notes}</p>
+        )}
+
+        <button
+          onClick={onSignUp}
+          disabled={isSigningUp}
+          style={{
+            width: '100%', padding: '11px', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
+            border: 'none', background: isSigningUp ? '#e0f2f1' : '#00897B', color: 'white', cursor: 'pointer',
+          }}
+        >
+          {isSigningUp ? 'Signing up…' : '+ Sign Up'}
+        </button>
       </div>
     </div>
   )

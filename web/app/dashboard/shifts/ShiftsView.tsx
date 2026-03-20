@@ -70,14 +70,23 @@ function initials(first: string, last: string) {
 interface CreateForm {
   name: string
   location_id: string
+  start_date: string
   start_time: string
+  end_date: string
   end_time: string
   required_count: string
   notes: string
 }
 
 const EMPTY_CREATE: CreateForm = {
-  name: '', location_id: '', start_time: '', end_time: '', required_count: '1', notes: '',
+  name: '', location_id: '',
+  start_date: '', start_time: '',
+  end_date: '', end_time: '',
+  required_count: '1', notes: '',
+}
+
+function buildISO(date: string, time: string): string {
+  return new Date(`${date}T${time}`).toISOString()
 }
 
 type VolunteerLike = Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'category' | 'status' | 'pipeline_phase'>
@@ -198,14 +207,14 @@ export default function ShiftsView({
   // ── Actions ────────────────────────────────────────────────────
 
   function handleCreate() {
-    if (!createForm.name || !createForm.start_time || !createForm.end_time) return
+    if (!createForm.name || !createForm.start_date || !createForm.start_time || !createForm.end_date || !createForm.end_time) return
     run(async () => {
-      const shiftDate = new Date(createForm.start_time)
+      const shiftDate = new Date(buildISO(createForm.start_date, createForm.start_time))
       const { shiftId } = await createShift({
         name: createForm.name,
         location_id: createForm.location_id || null,
-        start_time: shiftDate.toISOString(),
-        end_time: new Date(createForm.end_time).toISOString(),
+        start_time: buildISO(createForm.start_date, createForm.start_time),
+        end_time: buildISO(createForm.end_date, createForm.end_time),
         required_count: parseInt(createForm.required_count) || 1,
         notes: createForm.notes,
         volunteer_ids: [...createVolunteerIds],
@@ -907,12 +916,22 @@ export default function ShiftsView({
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Start *</label>
-                  <input style={inputStyle} type="datetime-local" value={createForm.start_time} onChange={e => setCreateForm(f => ({ ...f, start_time: e.target.value }))} />
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Start Date *</label>
+                  <input style={inputStyle} type="date" value={createForm.start_date} onChange={e => setCreateForm(f => ({ ...f, start_date: e.target.value }))} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>End *</label>
-                  <input style={inputStyle} type="datetime-local" value={createForm.end_time} onChange={e => setCreateForm(f => ({ ...f, end_time: e.target.value }))} />
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Start Time *</label>
+                  <input style={inputStyle} type="time" value={createForm.start_time} onChange={e => setCreateForm(f => ({ ...f, start_time: e.target.value }))} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>End Date *</label>
+                  <input style={inputStyle} type="date" value={createForm.end_date} onChange={e => setCreateForm(f => ({ ...f, end_date: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>End Time *</label>
+                  <input style={inputStyle} type="time" value={createForm.end_time} onChange={e => setCreateForm(f => ({ ...f, end_time: e.target.value }))} />
                 </div>
               </div>
 
@@ -1019,7 +1038,7 @@ export default function ShiftsView({
             </div>
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
-              <button style={btnPrimary} onClick={handleCreate} disabled={!createForm.name || !createForm.start_time || !createForm.end_time || isPending}>
+              <button style={btnPrimary} onClick={handleCreate} disabled={!createForm.name || !createForm.start_date || !createForm.start_time || !createForm.end_date || !createForm.end_time || isPending}>
                 Create Shift
               </button>
               <button style={btnSecondary} onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch('') }}>

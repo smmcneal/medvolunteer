@@ -40,6 +40,18 @@ export interface AssignmentWithShift {
   pastEntries: TimeEntryRow[]
 }
 
+export interface AvailableShift {
+  id: string
+  name: string
+  start_time: string
+  end_time: string
+  location_id: string | null
+  notes: string | null
+  required_count: number
+  spots_left: number
+  locations: LocationRow | null
+}
+
 export default async function ShiftsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -49,7 +61,7 @@ export default async function ShiftsPage() {
 
   const { data: volunteer } = await admin
     .from('volunteers')
-    .select('id')
+    .select('id, org_id, status, pipeline_phase')
     .eq('user_id', user.id)
     .single()
 
@@ -100,5 +112,62 @@ export default async function ShiftsPage() {
     pastEntries: teByShift[a.shift_id]?.filter(te => !!te.clock_out) ?? [],
   }))
 
-  return <ShiftsView assignments={enriched} volunteerId={volunteer.id} />
+  // Fetch available shifts if volunteer is eligible to self-signup
+  let availableShifts: AvailableShift[] = []
+  const canSelfSignup = volunteer.status === 'volunteer' && volunteer.pipeline_phase === 'active'
+
+  if (canSelfSignup) {
+    const now = new Date().toISOString()
+    const { data: upcomingShifts } = await admin
+      .from('shifts')
+      .select('id, name, start_time, end_time, location_id, notes, required_count, locations(id, name, lat, lng, geofence_radius_meters)')
+      .eq('org_id', volunteer.org_id)
+      .gt('start_time', now)
+      .order('start_time', { ascending: true })
+
+    const allShifts = upcomingShifts ?? []
+
+    if (allShifts.length > 0) {
+      const allShiftIds = allShifts.map((s: { id: string }) => s.id)
+
+      const { data: takenAssignments } = await admin
+        .from('shift_assignments')
+        .select('shift_id')
+        .in('shift_id', allShiftIds)
+        .neq('status', 'cancelled')
+
+      const countByShift: Record<string, number> = {}
+      for (const a of (takenAssignments ?? [])) {
+        countByShift[a.shift_id] = (countByShift[a.shift_id] ?? 0) + 1
+      }
+
+      const assignedShiftIds = new Set(enriched.map(a => a.shift_id))
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      availableShifts = (allShifts as any[])
+        .filter(s => {
+          const taken = countByShift[s.id] ?? 0
+          return taken < s.required_count && !assignedShiftIds.has(s.id)
+        })
+        .map(s => ({
+          id: s.id,
+          name: s.name,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          location_id: s.location_id,
+          notes: s.notes,
+          required_count: s.required_count,
+          spots_left: s.required_count - (countByShift[s.id] ?? 0),
+          locations: s.locations ?? null,
+        }))
+    }
+  }
+
+  return (
+    <ShiftsView
+      assignments={enriched}
+      volunteerId={volunteer.id}
+      availableShifts={availableShifts}
+    />
+  )
 }

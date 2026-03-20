@@ -1,8 +1,80 @@
 @import "tailwindcss";
 
 :root {
-  --navy: #1B2A4A;
-  --teal: #00897B;
-  --amber: #F59E0B;
-  --danger: #DC2626;
+  /* Brand */
+  --navy:         #1B2A4A;
+  --navy-dark:    #141f38;
+  --navy-mid:     #1e3054;
+  --teal:         #00897B;
+  --teal-vivid:   #00BFA5;
+  --amber:        #F59E0B;
+  --danger:       #DC2626;
+
+  /* Surfaces */
+  --surface-bg:          #f4f5f8;
+  --surface-card:        #ffffff;
+  --surface-border:      #e8e9ed;
+  --surface-border-sub:  #f0f1f4;
+
+  /* Text */
+  --text-primary:   #0f1726;
+  --text-secondary: #4a5168;
+  --text-muted:     #9098b1;
+  --text-faint:     #b8bfce;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgba(15,23,42,0.05), 0 4px 14px rgba(15,23,42,0.04);
+  --shadow-md:   0 4px 16px rgba(15,23,42,0.08), 0 1px 4px rgba(15,23,42,0.04);
+  --shadow-lg:   0 8px 32px rgba(15,23,42,0.12), 0 2px 8px rgba(15,23,42,0.06);
+
+  /* Typography */
+  --font-display: 'Syne', system-ui, sans-serif;
+  --font-body:    'Figtree', system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--surface-bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar               { width: 5px; height: 5px; }
+::-webkit-scrollbar-track         { background: transparent; }
+::-webkit-scrollbar-thumb         { background: #ced1da; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover   { background: #9098b1; }
+::-webkit-scrollbar-corner        { background: transparent; }
+
+/* ── Sidebar nav ───────────────────────────────────────────────────── */
+.sidebar-nav-item:not(.sidebar-nav-active):hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.sidebar-signout:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+/* ── Utility card ──────────────────────────────────────────────────── */
+.card {
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+}
+
+/* ── Focus ring ────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
 }

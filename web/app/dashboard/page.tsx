@@ -250,29 +250,38 @@ function KpiCard({
 }) {
   return (
     <div style={{
-      background: 'white',
+      background: 'var(--surface-card)',
       borderRadius: '12px',
-      border: '1px solid #f0f0f0',
-      padding: '20px 24px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '12px',
+      border: '1px solid var(--surface-border)',
+      boxShadow: 'var(--shadow-card)',
+      overflow: 'hidden',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '13px', fontWeight: 500, color: '#6b7280' }}>{label}</span>
-        <div style={{
-          width: '36px', height: '36px', borderRadius: '10px',
-          background: `${color}1a`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Icon style={{ width: '17px', height: '17px', color }} />
+      {/* Accent top bar */}
+      <div style={{ height: '3px', background: color, opacity: 0.75 }} />
+      <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</span>
+          <div style={{
+            width: '34px', height: '34px', borderRadius: '9px',
+            background: `${color}15`,
+            border: `1px solid ${color}22`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Icon style={{ width: '16px', height: '16px', color }} />
+          </div>
         </div>
-      </div>
-      <div>
-        <span style={{ fontSize: '28px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>
-          {value}
-        </span>
-        {sub && <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>{sub}</p>}
+        <div>
+          <span style={{
+            fontSize: '28px', fontWeight: 700,
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-body)',
+            lineHeight: 1,
+            letterSpacing: '-0.02em',
+          }}>
+            {value}
+          </span>
+          {sub && <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '5px' }}>{sub}</p>}
+        </div>
       </div>
     </div>
   )
@@ -290,13 +299,34 @@ export default async function DashboardPage() {
     <div style={{ padding: '32px', maxWidth: '1200px' }}>
 
       {/* Header */}
-      <div style={{ marginBottom: '28px' }}>
-        <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#111827', marginBottom: '2px' }}>
-          Dashboard
-        </h1>
-        <p style={{ fontSize: '13px', color: '#9ca3af' }}>
-          {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-        </p>
+      <div style={{ marginBottom: '28px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        <div>
+          <h1 style={{
+            fontSize: '22px', fontWeight: 700,
+            fontFamily: 'var(--font-display)',
+            color: 'var(--text-primary)',
+            letterSpacing: '-0.02em',
+            lineHeight: 1,
+            marginBottom: '5px',
+          }}>
+            Dashboard
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 500 }}>
+            {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+          </p>
+        </div>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '5px 12px',
+          background: 'rgba(0,137,123,0.08)',
+          border: '1px solid rgba(0,137,123,0.16)',
+          borderRadius: '20px',
+        }}>
+          <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00897B' }} />
+          <span style={{ fontSize: '11px', fontWeight: 600, color: '#00897B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            Live
+          </span>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -308,21 +338,25 @@ export default async function DashboardPage() {
       }}>
         {/* Clocked In Now — custom card with name list */}
         <div style={{
-          background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0',
-          padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '12px',
+          background: 'var(--surface-card)', borderRadius: '12px',
+          border: '1px solid var(--surface-border)',
+          boxShadow: 'var(--shadow-card)', overflow: 'hidden',
         }}>
+          <div style={{ height: '3px', background: '#1B2A4A', opacity: 0.75 }} />
+          <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '13px', fontWeight: 500, color: '#6b7280' }}>Clocked In Now</span>
+            <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Clocked In Now</span>
             <div style={{
-              width: '36px', height: '36px', borderRadius: '10px',
-              background: '#1B2A4A1a',
+              width: '34px', height: '34px', borderRadius: '9px',
+              background: '#1B2A4A15',
+              border: '1px solid #1B2A4A22',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <Users style={{ width: '17px', height: '17px', color: '#1B2A4A' }} />
+              <Users style={{ width: '16px', height: '16px', color: '#1B2A4A' }} />
             </div>
           </div>
           <div>
-            <span style={{ fontSize: '28px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>
+            <span style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-body)', lineHeight: 1, letterSpacing: '-0.02em' }}>
               {kpi.activeVolunteers}
             </span>
             {clockedInVolunteers.length === 0 ? (
@@ -364,24 +398,29 @@ export default async function DashboardPage() {
               </div>
             )}
           </div>
+          </div>
         </div>
         {/* Hours This Month — custom card with per-volunteer breakdown */}
         <div style={{
-          background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0',
-          padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '12px',
+          background: 'var(--surface-card)', borderRadius: '12px',
+          border: '1px solid var(--surface-border)',
+          boxShadow: 'var(--shadow-card)', overflow: 'hidden',
         }}>
+          <div style={{ height: '3px', background: '#00897B', opacity: 0.75 }} />
+          <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '13px', fontWeight: 500, color: '#6b7280' }}>Hours in {monthName}</span>
+            <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Hours in {monthName}</span>
             <div style={{
-              width: '36px', height: '36px', borderRadius: '10px',
-              background: '#00897B1a',
+              width: '34px', height: '34px', borderRadius: '9px',
+              background: '#00897B15',
+              border: '1px solid #00897B22',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <Clock style={{ width: '17px', height: '17px', color: '#00897B' }} />
+              <Clock style={{ width: '16px', height: '16px', color: '#00897B' }} />
             </div>
           </div>
           <div>
-            <span style={{ fontSize: '28px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>
+            <span style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-body)', lineHeight: 1, letterSpacing: '-0.02em' }}>
               {kpi.hoursThisMonth}
             </span>
             {volunteerHoursBreakdown.length === 0 ? (
@@ -421,24 +460,29 @@ export default async function DashboardPage() {
               </div>
             )}
           </div>
+          </div>
         </div>
         {/* Open Shifts — custom card with shift list */}
         <div style={{
-          background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0',
-          padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '12px',
+          background: 'var(--surface-card)', borderRadius: '12px',
+          border: '1px solid var(--surface-border)',
+          boxShadow: 'var(--shadow-card)', overflow: 'hidden',
         }}>
+          <div style={{ height: '3px', background: '#F59E0B', opacity: 0.75 }} />
+          <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '13px', fontWeight: 500, color: '#6b7280' }}>Open Shifts</span>
+            <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Open Shifts</span>
             <div style={{
-              width: '36px', height: '36px', borderRadius: '10px',
-              background: '#F59E0B1a',
+              width: '34px', height: '34px', borderRadius: '9px',
+              background: '#F59E0B15',
+              border: '1px solid #F59E0B22',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <CalendarDays style={{ width: '17px', height: '17px', color: '#F59E0B' }} />
+              <CalendarDays style={{ width: '16px', height: '16px', color: '#F59E0B' }} />
             </div>
           </div>
           <div>
-            <span style={{ fontSize: '28px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>
+            <span style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-body)', lineHeight: 1, letterSpacing: '-0.02em' }}>
               {kpi.openShifts}
             </span>
             {openShifts.length === 0 ? (
@@ -485,6 +529,7 @@ export default async function DashboardPage() {
               </div>
             )}
           </div>
+          </div>
         </div>
       </div>
 
@@ -493,11 +538,12 @@ export default async function DashboardPage() {
 
         {/* Expiring Credentials */}
         <div style={{
-          background: 'white', borderRadius: '12px',
-          border: '1px solid #f0f0f0', overflow: 'hidden',
+          background: 'var(--surface-card)', borderRadius: '12px',
+          border: '1px solid var(--surface-border)',
+          boxShadow: 'var(--shadow-card)', overflow: 'hidden',
         }}>
           <div style={{
-            padding: '18px 24px', borderBottom: '1px solid #f9f9f9',
+            padding: '18px 24px', borderBottom: '1px solid var(--surface-border-sub)',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -598,11 +644,12 @@ export default async function DashboardPage() {
 
         {/* Recent Check-ins */}
         <div style={{
-          background: 'white', borderRadius: '12px',
-          border: '1px solid #f0f0f0', overflow: 'hidden',
+          background: 'var(--surface-card)', borderRadius: '12px',
+          border: '1px solid var(--surface-border)',
+          boxShadow: 'var(--shadow-card)', overflow: 'hidden',
         }}>
           <div style={{
-            padding: '18px 20px', borderBottom: '1px solid #f9f9f9',
+            padding: '18px 20px', borderBottom: '1px solid var(--surface-border-sub)',
             display: 'flex', alignItems: 'center', gap: '8px',
           }}>
             <Activity style={{ width: '15px', height: '15px', color: '#00897B' }} />
