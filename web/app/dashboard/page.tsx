@@ -122,7 +122,7 @@ async function fetchDashboardData() {
   ])
 
   // Build open shifts list (upcoming shifts that aren't fully staffed)
-  const openShifts: OpenShift[] = ((openShiftsRes.data ?? []) as {
+  const openShifts: OpenShift[] = ((openShiftsRes.data ?? []) as unknown as {
     id: string; name: string; start_time: string; end_time: string
     required_count: number; location: { name: string } | null
     shift_assignments: unknown[]
