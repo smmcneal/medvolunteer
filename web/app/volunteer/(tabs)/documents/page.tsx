@@ -16,6 +16,7 @@ export default async function VolunteerDocumentsPage() {
   const { data: docs } = await admin
     .from('org_documents')
     .select('*')
+    .eq('volunteer_visible', true)
     .order('is_preset', { ascending: false })
     .order('sort_order')
     .order('created_at')

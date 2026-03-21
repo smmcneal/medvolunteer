@@ -15,8 +15,9 @@ const BUCKET = 'org-documents'
 
 // ─── Upload ───────────────────────────────────────────────────────────────────
 
-export async function uploadOrgDocument(
+async function uploadDocument(
   formData: FormData,
+  volunteerVisible: boolean,
 ): Promise<{ error?: string }> {
   try { await requireDashboardUser() } catch { return { error: 'Not authenticated.' } }
 
@@ -53,12 +54,15 @@ export async function uploadOrgDocument(
 
   if (storageError) return { error: storageError.message }
 
+  const isInternal = !volunteerVisible
   const { error: dbError } = await admin.from('org_documents').insert({
-    name:         file.name,
-    storage_path: safeName,
-    mime_type:    file.type || 'application/octet-stream',
-    size_bytes:   file.size,
-    is_preset:    false,
+    name:              file.name,
+    storage_path:      safeName,
+    mime_type:         file.type || 'application/octet-stream',
+    size_bytes:        file.size,
+    is_preset:         false,
+    volunteer_visible: volunteerVisible,
+    is_internal:       isInternal,
   })
 
   if (dbError) {
@@ -67,8 +71,18 @@ export async function uploadOrgDocument(
   }
 
   revalidatePath('/dashboard/documents')
-  revalidatePath('/volunteer/documents')
+  if (volunteerVisible) revalidatePath('/volunteer/documents')
   return {}
+}
+
+/** Upload a document visible to all volunteers in their portal. */
+export async function uploadOrgDocument(formData: FormData): Promise<{ error?: string }> {
+  return uploadDocument(formData, true)
+}
+
+/** Upload an admin-only document — never surfaced to volunteers. */
+export async function uploadAdminDocument(formData: FormData): Promise<{ error?: string }> {
+  return uploadDocument(formData, false)
 }
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
@@ -86,6 +100,28 @@ export async function deleteOrgDocument(
   }
 
   const { error } = await admin.from('org_documents').delete().eq('id', id)
+  if (error) return { error: error.message }
+
+  revalidatePath('/dashboard/documents')
+  revalidatePath('/volunteer/documents')
+  return {}
+}
+
+// ─── Toggle volunteer visibility ─────────────────────────────────────────────
+
+export async function toggleDocumentVisibility(
+  id: string,
+  visible: boolean,
+): Promise<{ error?: string }> {
+  try { await requireDashboardUser() } catch { return { error: 'Not authenticated.' } }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('org_documents')
+    .update({ volunteer_visible: visible })
+    .eq('id', id)
+    .eq('is_internal', false) // safety: never toggle internal docs
+
   if (error) return { error: error.message }
 
   revalidatePath('/dashboard/documents')

@@ -4,20 +4,25 @@ import { useState, useTransition, useMemo } from 'react'
 import type { MessageWithRecipients } from './page'
 import type { Volunteer, MessageChannel, VolunteerCategory } from '@/types/database'
 import { sendMessage } from './actions'
+import { ChevronLeft, Send, CheckCheck, Eye, Users, Inbox } from 'lucide-react'
 
-const CHANNEL_CONFIG: Record<MessageChannel, { label: string; icon: string; color: string; desc: string }> = {
-  email: { label: 'Email', icon: '✉', color: '#3b82f6', desc: 'Delivered to inbox' },
-  sms:   { label: 'SMS', icon: '💬', color: '#10b981', desc: 'Text message' },
-  push:  { label: 'Push', icon: '🔔', color: '#8b5cf6', desc: 'App notification' },
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+const CHANNEL_CONFIG: Record<MessageChannel, { label: string; icon: string; color: string; bg: string; desc: string }> = {
+  email: { label: 'Email', icon: '✉',  color: '#3b82f6', bg: '#eff6ff', desc: 'Inbox delivery' },
+  sms:   { label: 'SMS',   icon: '💬', color: '#10b981', bg: '#f0fdf4', desc: 'Text message'  },
+  push:  { label: 'Push',  icon: '🔔', color: '#8b5cf6', bg: '#faf5ff', desc: 'App notify'    },
 }
 
 const CATEGORY_LABELS: Record<VolunteerCategory, string> = {
   medical_professional: 'Medical Professionals',
-  support_staff: 'Support Staff',
-  admin: 'Administrators',
-  trainee: 'Trainees',
-  other: 'Other',
+  support_staff:        'Support Staff',
+  admin:                'Administrators',
+  trainee:              'Trainees',
+  other:                'Other',
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -26,8 +31,7 @@ function timeAgo(dateStr: string) {
   if (mins < 60) return `${mins}m ago`
   const hrs = Math.floor(mins / 60)
   if (hrs < 24) return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  return `${days}d ago`
+  return `${Math.floor(hrs / 24)}d ago`
 }
 
 function formatDate(dateStr: string) {
@@ -37,12 +41,17 @@ function formatDate(dateStr: string) {
   })
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 interface Props {
   initialMessages: MessageWithRecipients[]
   volunteers: Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'email' | 'phone' | 'category' | 'status'>[]
 }
 
 export default function MessagesView({ initialMessages, volunteers }: Props) {
+  // Mobile panel state — 'list' shows sidebar, 'main' shows compose/detail
+  const [mobilePanel, setMobilePanel] = useState<'list' | 'main'>('main')
+
   const [view, setView] = useState<'compose' | 'detail'>('compose')
   const [selectedMsg, setSelectedMsg] = useState<MessageWithRecipients | null>(null)
   const [channelFilter, setChannelFilter] = useState<MessageChannel | 'all'>('all')
@@ -59,19 +68,18 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
-  // Compute recipients preview
   const recipientIds = useMemo(() => {
     if (recipientType === 'all') return volunteers.map(v => v.id)
-    if (recipientType === 'group' && selectedCategory) {
+    if (recipientType === 'group' && selectedCategory)
       return volunteers.filter(v => v.category === selectedCategory).map(v => v.id)
-    }
     if (recipientType === 'individual') return Array.from(selectedVolunteerIds)
     return []
   }, [recipientType, selectedCategory, selectedVolunteerIds, volunteers])
 
-  const filteredMessages = useMemo(() => {
-    return initialMessages.filter(m => channelFilter === 'all' || m.channel === channelFilter)
-  }, [initialMessages, channelFilter])
+  const filteredMessages = useMemo(() =>
+    initialMessages.filter(m => channelFilter === 'all' || m.channel === channelFilter),
+    [initialMessages, channelFilter]
+  )
 
   const filteredVolunteers = useMemo(() => {
     const q = volunteerSearch.toLowerCase()
@@ -84,10 +92,21 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
   function toggleVolunteer(id: string) {
     setSelectedVolunteerIds(prev => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+  }
+
+  function openDetail(msg: MessageWithRecipients) {
+    setSelectedMsg(msg)
+    setView('detail')
+    setMobilePanel('main')
+  }
+
+  function openCompose() {
+    setView('compose')
+    setSelectedMsg(null)
+    setMobilePanel('main')
   }
 
   function handleSend() {
@@ -103,114 +122,126 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
           recipient_type: recipientType === 'group' ? 'group' : recipientType,
           recipient_volunteer_ids: recipientIds,
         })
-        setSuccessMsg(`Message sent to ${recipientIds.length} volunteer${recipientIds.length !== 1 ? 's' : ''}`)
+        setSuccessMsg(`Sent to ${recipientIds.length} volunteer${recipientIds.length !== 1 ? 's' : ''}`)
         setSubject('')
         setBody('')
         setSelectedVolunteerIds(new Set())
-      } catch (e: unknown) {
+      } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to send message')
       }
     })
   }
 
+  const canSend = !!(subject.trim() && body.trim() && recipientIds.length > 0 && !isPending)
+
   return (
-    <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-      {/* Left panel — compose + history */}
-      <div style={{
-        width: '320px',
-        flexShrink: 0,
-        borderRight: '1px solid #f0f0f0',
-        display: 'flex',
-        flexDirection: 'column',
-        background: '#fafafa',
-        overflow: 'hidden',
-      }}>
-        {/* Compose button */}
-        <div style={{ padding: '12px 16px', flexShrink: 0 }}>
+    <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
+
+      {/* ── Left: Message history sidebar ─────────────────────── */}
+      <div
+        className={`msg-sidebar${mobilePanel === 'list' ? ' msg-panel-active' : ''}`}
+      >
+        {/* Sidebar top: compose button */}
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--surface-border-sub)', flexShrink: 0 }}>
           <button
-            onClick={() => { setView('compose'); setSelectedMsg(null) }}
+            onClick={openCompose}
             style={{
-              width: '100%',
-              padding: '9px',
-              borderRadius: '8px',
-              fontSize: '13px',
-              fontWeight: 700,
-              border: 'none',
-              cursor: 'pointer',
-              background: '#1B2A4A',
-              color: 'white',
-              letterSpacing: '0.02em',
+              width: '100%', padding: '9px 16px', borderRadius: '9px',
+              fontSize: '13px', fontWeight: 700, border: 'none', cursor: 'pointer',
+              background: 'var(--navy)', color: 'white',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+              fontFamily: 'inherit', letterSpacing: '-0.01em',
+              boxShadow: '0 2px 8px rgba(27,42,74,0.2)',
+              transition: 'background 0.15s, box-shadow 0.15s',
             }}
-          >✏ Compose New Message</button>
+          >
+            <span style={{ fontSize: '14px' }}>✏</span> Compose New Message
+          </button>
         </div>
 
-        {/* Channel filter */}
-        <div style={{ display: 'flex', gap: '4px', padding: '0 12px 8px', flexShrink: 0 }}>
-          {(['all', 'email', 'sms', 'push'] as const).map(ch => (
-            <button
-              key={ch}
-              onClick={() => setChannelFilter(ch)}
-              style={{
-                flex: 1,
-                padding: '4px 0',
-                borderRadius: '6px',
-                fontSize: '11px',
-                fontWeight: 600,
-                border: '1px solid',
-                cursor: 'pointer',
-                background: channelFilter === ch ? '#1B2A4A' : 'white',
-                borderColor: channelFilter === ch ? '#1B2A4A' : '#e5e7eb',
-                color: channelFilter === ch ? 'white' : '#6b7280',
-                textTransform: 'uppercase',
-              }}
-            >{ch}</button>
-          ))}
+        {/* Channel filter pills */}
+        <div style={{ display: 'flex', gap: '4px', padding: '10px 12px', flexShrink: 0 }}>
+          {(['all', 'email', 'sms', 'push'] as const).map(ch => {
+            const active = channelFilter === ch
+            return (
+              <button
+                key={ch}
+                onClick={() => setChannelFilter(ch)}
+                style={{
+                  flex: 1, padding: '4px 0', borderRadius: '6px',
+                  fontSize: '10px', fontWeight: 700, border: '1px solid',
+                  cursor: 'pointer', letterSpacing: '0.06em', textTransform: 'uppercase',
+                  background: active ? 'var(--navy)' : 'var(--surface-card)',
+                  borderColor: active ? 'var(--navy)' : 'var(--surface-border)',
+                  color: active ? 'white' : 'var(--text-muted)',
+                  fontFamily: 'inherit', transition: 'background 0.12s, color 0.12s',
+                }}
+              >{ch}</button>
+            )
+          })}
         </div>
 
-        {/* Message history */}
-        <div style={{ flex: 1, overflow: 'auto' }}>
+        {/* History count */}
+        <div style={{ padding: '0 16px 8px', flexShrink: 0 }}>
+          <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            {filteredMessages.length} message{filteredMessages.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        {/* Message list */}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
           {filteredMessages.length === 0 && (
-            <p style={{ padding: '20px', fontSize: '13px', color: '#9ca3af', textAlign: 'center' }}>
-              No messages sent yet.
-            </p>
+            <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+              <Inbox style={{ width: '28px', height: '28px', color: 'var(--surface-border)', margin: '0 auto 8px' }} />
+              <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>No messages sent yet</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-faint)', marginTop: '4px' }}>Compose a message to get started</p>
+            </div>
           )}
+
           {filteredMessages.map(msg => {
             const ch = CHANNEL_CONFIG[msg.channel as MessageChannel]
             const isSelected = selectedMsg?.id === msg.id
             const deliveryPct = msg.recipient_count > 0
-              ? Math.round((msg.delivered_count / msg.recipient_count) * 100)
-              : 0
+              ? Math.round((msg.delivered_count / msg.recipient_count) * 100) : 0
+
             return (
               <div
                 key={msg.id}
-                onClick={() => { setSelectedMsg(msg); setView('detail') }}
+                onClick={() => openDetail(msg)}
+                className="msg-history-item"
                 style={{
-                  padding: '12px 16px',
+                  padding: '11px 16px',
                   cursor: 'pointer',
-                  background: isSelected ? '#e8edf5' : 'transparent',
-                  borderLeft: isSelected ? '3px solid #1B2A4A' : '3px solid transparent',
-                  borderBottom: '1px solid #f0f0f0',
+                  background: isSelected ? 'rgba(27,42,74,0.04)' : 'transparent',
+                  borderLeft: isSelected ? '3px solid var(--navy)' : '3px solid transparent',
+                  borderBottom: '1px solid var(--surface-border-sub)',
+                  transition: 'background 0.1s',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px', marginBottom: '3px' }}>
-                  <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                {/* Subject + time */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px', marginBottom: '5px' }}>
+                  <p style={{
+                    fontSize: '13px', fontWeight: isSelected ? 700 : 600,
+                    color: 'var(--text-primary)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+                  }}>
                     {msg.subject || '(No subject)'}
                   </p>
-                  <span style={{ fontSize: '10px', color: '#9ca3af', flexShrink: 0, marginTop: '2px' }}>
+                  <span style={{ fontSize: '10px', color: 'var(--text-faint)', flexShrink: 0, marginTop: '2px' }}>
                     {timeAgo(msg.sent_at ?? msg.created_at ?? '')}
                   </span>
                 </div>
+
+                {/* Channel badge + stats */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{
-                    padding: '1px 6px',
-                    borderRadius: '99px',
-                    fontSize: '10px',
-                    fontWeight: 600,
-                    background: ch.color + '15',
-                    color: ch.color,
+                    padding: '1px 7px', borderRadius: '99px',
+                    fontSize: '10px', fontWeight: 700,
+                    background: ch.color + '18', color: ch.color,
+                    letterSpacing: '0.02em',
                   }}>{ch.icon} {ch.label}</span>
-                  <span style={{ fontSize: '11px', color: '#6b7280' }}>
-                    {msg.recipient_count} recipients · {deliveryPct}% delivered
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {msg.recipient_count} · {deliveryPct}%
                   </span>
                 </div>
               </div>
@@ -219,49 +250,77 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
         </div>
       </div>
 
-      {/* Right panel */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'white' }}>
+      {/* ── Right: Compose / Detail ────────────────────────────── */}
+      <div
+        className={`msg-main-panel${mobilePanel === 'main' ? ' msg-panel-active' : ''}`}
+      >
         {view === 'compose' && (
-          <div style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#111827', marginBottom: '20px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+
+            {/* Mobile back button */}
+            <button
+              className="msg-back-btn"
+              onClick={() => setMobilePanel('list')}
+              style={{ display: 'none' /* shown by CSS on mobile */ }}
+            >
+              <ChevronLeft style={{ width: '14px', height: '14px' }} />
+              Messages
+            </button>
+
+            {/* Title */}
+            <h2 style={{
+              fontSize: '18px', fontWeight: 700,
+              color: 'var(--text-primary)', fontFamily: 'var(--font-display)',
+              letterSpacing: '-0.025em', lineHeight: 1, marginBottom: '20px',
+            }}>
               New Message
             </h2>
 
+            {/* Feedback */}
             {error && (
-              <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '13px', color: '#dc2626', marginBottom: '16px' }}>
+              <div style={{
+                padding: '10px 14px', background: '#fef2f2',
+                border: '1px solid #fecaca', borderRadius: '8px',
+                fontSize: '13px', color: '#dc2626', marginBottom: '16px',
+              }}>
                 {error}
               </div>
             )}
             {successMsg && (
-              <div style={{ padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', fontSize: '13px', color: '#15803d', marginBottom: '16px' }}>
-                ✓ {successMsg}
+              <div style={{
+                padding: '10px 14px', background: '#f0fdf4',
+                border: '1px solid #bbf7d0', borderRadius: '8px',
+                fontSize: '13px', color: '#15803d', marginBottom: '16px',
+                display: 'flex', alignItems: 'center', gap: '7px',
+              }}>
+                <CheckCheck style={{ width: '14px', height: '14px', flexShrink: 0 }} />
+                {successMsg}
               </div>
             )}
 
-            {/* Channel selector */}
-            <div style={{ marginBottom: '16px' }}>
+            {/* Channel */}
+            <div style={{ marginBottom: '18px' }}>
               <label style={labelStyle}>Channel</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                 {(Object.keys(CHANNEL_CONFIG) as MessageChannel[]).map(ch => {
                   const c = CHANNEL_CONFIG[ch]
+                  const active = channel === ch
                   return (
                     <button
                       key={ch}
                       onClick={() => setChannel(ch)}
                       style={{
-                        flex: 1,
-                        padding: '10px 8px',
-                        borderRadius: '8px',
-                        border: '2px solid',
-                        cursor: 'pointer',
-                        background: channel === ch ? c.color + '10' : 'white',
-                        borderColor: channel === ch ? c.color : '#e5e7eb',
-                        textAlign: 'center',
+                        padding: '12px 8px', borderRadius: '10px',
+                        border: `2px solid ${active ? c.color : 'var(--surface-border)'}`,
+                        cursor: 'pointer', textAlign: 'center',
+                        background: active ? c.bg : 'var(--surface-card)',
+                        transition: 'border-color 0.15s, background 0.15s',
+                        fontFamily: 'inherit',
                       }}
                     >
-                      <div style={{ fontSize: '18px', marginBottom: '2px' }}>{c.icon}</div>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: channel === ch ? c.color : '#374151' }}>{c.label}</div>
-                      <div style={{ fontSize: '10px', color: '#9ca3af' }}>{c.desc}</div>
+                      <div style={{ fontSize: '20px', marginBottom: '4px' }}>{c.icon}</div>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: active ? c.color : 'var(--text-primary)' }}>{c.label}</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>{c.desc}</div>
                     </button>
                   )
                 })}
@@ -269,32 +328,39 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
             </div>
 
             {/* Recipients */}
-            <div style={{ marginBottom: '16px' }}>
+            <div style={{ marginBottom: '18px' }}>
               <label style={labelStyle}>To</label>
-              <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+              {/* Segmented control */}
+              <div style={{
+                display: 'inline-flex', borderRadius: '8px',
+                border: '1px solid var(--surface-border)',
+                overflow: 'hidden', marginBottom: '10px',
+                background: 'var(--surface-bg)',
+              }}>
                 {(['all', 'group', 'individual'] as const).map(rt => (
                   <button
                     key={rt}
                     onClick={() => { setRecipientType(rt); setSelectedVolunteerIds(new Set()) }}
                     style={{
-                      padding: '5px 12px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      border: '1px solid',
-                      cursor: 'pointer',
-                      background: recipientType === rt ? '#1B2A4A' : 'white',
-                      borderColor: recipientType === rt ? '#1B2A4A' : '#e5e7eb',
-                      color: recipientType === rt ? 'white' : '#374151',
-                      textTransform: 'capitalize',
+                      padding: '6px 14px', border: 'none', cursor: 'pointer',
+                      fontSize: '12px', fontWeight: 600,
+                      background: recipientType === rt ? 'var(--navy)' : 'transparent',
+                      color: recipientType === rt ? 'white' : 'var(--text-secondary)',
+                      fontFamily: 'inherit', transition: 'background 0.12s, color 0.12s',
                     }}
-                  >{rt === 'all' ? 'All Volunteers' : rt === 'group' ? 'By Category' : 'Individuals'}</button>
+                  >{rt === 'all' ? 'All' : rt === 'group' ? 'By Category' : 'Individuals'}</button>
                 ))}
               </div>
 
               {recipientType === 'all' && (
-                <div style={{ padding: '8px 12px', background: '#f0f4ff', borderRadius: '6px', fontSize: '13px', color: '#1B2A4A', fontWeight: 500 }}>
-                  📢 Sending to all {volunteers.length} active/onboarding volunteers
+                <div style={{
+                  padding: '10px 14px', background: 'rgba(27,42,74,0.04)',
+                  borderRadius: '8px', fontSize: '13px', color: 'var(--navy)',
+                  fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px',
+                  border: '1px solid rgba(27,42,74,0.08)',
+                }}>
+                  <Users style={{ width: '14px', height: '14px', flexShrink: 0 }} />
+                  Sending to all {volunteers.length} active volunteers
                 </div>
               )}
 
@@ -302,7 +368,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
                 <select
                   value={selectedCategory}
                   onChange={e => setSelectedCategory(e.target.value as VolunteerCategory | '')}
-                  style={{ ...fieldStyle, marginBottom: '6px' }}
+                  style={fieldStyle}
                 >
                   <option value="">Select a category…</option>
                   {(Object.keys(CATEGORY_LABELS) as VolunteerCategory[]).map(cat => (
@@ -314,51 +380,53 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
               )}
 
               {recipientType === 'individual' && (
-                <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ border: '1px solid var(--surface-border)', borderRadius: '9px', overflow: 'hidden', background: 'var(--surface-card)' }}>
                   <input
                     value={volunteerSearch}
                     onChange={e => setVolunteerSearch(e.target.value)}
                     placeholder="Search volunteers…"
-                    style={{ ...fieldStyle, border: 'none', borderBottom: '1px solid #e5e7eb', borderRadius: 0 }}
+                    style={{ ...fieldStyle, border: 'none', borderBottom: '1px solid var(--surface-border-sub)', borderRadius: 0 }}
                   />
-                  <div style={{ maxHeight: '160px', overflow: 'auto' }}>
+                  <div style={{ maxHeight: '160px', overflowY: 'auto' }}>
                     {filteredVolunteers.map(v => (
                       <label key={v.id} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '7px 12px',
-                        cursor: 'pointer',
-                        background: selectedVolunteerIds.has(v.id) ? '#f0f4ff' : 'transparent',
-                        borderBottom: '1px solid #f9fafb',
+                        display: 'flex', alignItems: 'center', gap: '9px',
+                        padding: '8px 12px', cursor: 'pointer',
+                        background: selectedVolunteerIds.has(v.id) ? 'rgba(27,42,74,0.04)' : 'transparent',
+                        borderBottom: '1px solid var(--surface-border-sub)',
+                        transition: 'background 0.1s',
                       }}>
                         <input
                           type="checkbox"
                           checked={selectedVolunteerIds.has(v.id)}
                           onChange={() => toggleVolunteer(v.id)}
-                          style={{ cursor: 'pointer', accentColor: '#1B2A4A' }}
+                          style={{ cursor: 'pointer', accentColor: 'var(--navy)', flexShrink: 0 }}
                         />
                         <div>
-                          <p style={{ fontSize: '12px', fontWeight: 600, color: '#111827', margin: 0 }}>
+                          <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                             {v.first_name} {v.last_name}
                           </p>
-                          <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0 }}>{v.email}</p>
+                          <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>{v.email}</p>
                         </div>
                       </label>
                     ))}
+                    {filteredVolunteers.length === 0 && (
+                      <p style={{ fontSize: '12px', color: 'var(--text-faint)', padding: '12px', textAlign: 'center' }}>No matches</p>
+                    )}
                   </div>
                 </div>
               )}
 
               {recipientIds.length > 0 && recipientType !== 'all' && (
-                <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '6px' }}>
-                  → {recipientIds.length} recipient{recipientIds.length !== 1 ? 's' : ''} selected
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '7px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Users style={{ width: '12px', height: '12px' }} />
+                  {recipientIds.length} recipient{recipientIds.length !== 1 ? 's' : ''} selected
                 </p>
               )}
             </div>
 
             {/* Subject */}
-            <div style={{ marginBottom: '16px' }}>
+            <div style={{ marginBottom: '14px' }}>
               <label style={labelStyle}>Subject</label>
               <input
                 value={subject}
@@ -376,39 +444,42 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
                 onChange={e => setBody(e.target.value)}
                 placeholder="Write your message here…"
                 rows={8}
-                style={{ ...fieldStyle, resize: 'vertical', lineHeight: '1.6' }}
+                style={{ ...fieldStyle, resize: 'vertical', lineHeight: '1.65' }}
               />
             </div>
 
-            {/* Send button */}
+            {/* Send */}
             <button
               onClick={handleSend}
-              disabled={!subject.trim() || !body.trim() || recipientIds.length === 0 || isPending}
+              disabled={!canSend}
               style={{
-                padding: '11px 28px',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: 700,
-                border: 'none',
-                cursor: 'pointer',
-                background: !subject.trim() || !body.trim() || recipientIds.length === 0 ? '#9ca3af' : '#1B2A4A',
-                color: 'white',
-                opacity: isPending ? 0.7 : 1,
-                letterSpacing: '0.02em',
+                padding: '11px 24px', borderRadius: '9px',
+                fontSize: '13px', fontWeight: 700, border: 'none',
+                cursor: canSend ? 'pointer' : 'not-allowed',
+                background: canSend ? 'var(--navy)' : 'var(--surface-border)',
+                color: canSend ? 'white' : 'var(--text-faint)',
+                display: 'flex', alignItems: 'center', gap: '7px',
+                fontFamily: 'inherit', letterSpacing: '-0.01em',
+                boxShadow: canSend ? '0 2px 8px rgba(27,42,74,0.2)' : 'none',
+                transition: 'background 0.15s, box-shadow 0.15s',
               }}
             >
-              {isPending ? 'Sending…' : `Send ${CHANNEL_CONFIG[channel].icon} to ${recipientIds.length} volunteer${recipientIds.length !== 1 ? 's' : ''}`}
+              <Send style={{ width: '13px', height: '13px' }} />
+              {isPending
+                ? 'Sending…'
+                : `Send ${CHANNEL_CONFIG[channel].icon} to ${recipientIds.length} volunteer${recipientIds.length !== 1 ? 's' : ''}`}
             </button>
           </div>
         )}
 
         {view === 'detail' && selectedMsg && (
-          <MessageDetail msg={selectedMsg} />
+          <MessageDetail msg={selectedMsg} onBack={() => setMobilePanel('list')} />
         )}
 
         {view === 'detail' && !selectedMsg && (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
-            Select a message to view details
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--text-faint)' }}>
+            <Inbox style={{ width: '32px', height: '32px' }} />
+            <p style={{ fontSize: '14px', fontWeight: 500 }}>Select a message to view</p>
           </div>
         )}
       </div>
@@ -416,71 +487,83 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
   )
 }
 
-function MessageDetail({ msg }: { msg: MessageWithRecipients }) {
+// ─── Message Detail ────────────────────────────────────────────────────────────
+
+function MessageDetail({ msg, onBack }: { msg: MessageWithRecipients; onBack: () => void }) {
   const ch = CHANNEL_CONFIG[msg.channel as MessageChannel]
   const deliveryPct = msg.recipient_count > 0
-    ? Math.round((msg.delivered_count / msg.recipient_count) * 100)
-    : 0
+    ? Math.round((msg.delivered_count / msg.recipient_count) * 100) : 0
   const readPct = msg.recipient_count > 0
-    ? Math.round((msg.read_count / msg.recipient_count) * 100)
-    : 0
+    ? Math.round((msg.read_count / msg.recipient_count) * 100) : 0
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+
+      {/* Mobile back button */}
+      <button
+        className="msg-back-btn"
+        onClick={onBack}
+        style={{ display: 'none' /* shown by CSS on mobile */ }}
+      >
+        <ChevronLeft style={{ width: '14px', height: '14px' }} />
+        Messages
+      </button>
+
       {/* Header */}
       <div style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '6px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#111827' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '8px' }}>
+          <h2 style={{
+            fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)',
+            fontFamily: 'var(--font-display)', letterSpacing: '-0.025em', lineHeight: 1.3,
+          }}>
             {msg.subject || '(No subject)'}
           </h2>
           <span style={{
-            padding: '3px 10px',
-            borderRadius: '99px',
-            fontSize: '12px',
-            fontWeight: 600,
-            background: ch.color + '15',
-            color: ch.color,
-            flexShrink: 0,
+            padding: '3px 10px', borderRadius: '99px',
+            fontSize: '11px', fontWeight: 700,
+            background: ch.color + '18', color: ch.color,
+            flexShrink: 0, letterSpacing: '0.02em',
           }}>{ch.icon} {ch.label}</span>
         </div>
-        <p style={{ fontSize: '13px', color: '#6b7280' }}>
+        <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
           Sent {formatDate(msg.sent_at ?? msg.created_at ?? '')}
           {' · '}{msg.recipient_type === 'all' ? 'All volunteers' : msg.recipient_type}
         </p>
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+      <div className="msg-stats-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '24px' }}>
         {[
-          { label: 'Recipients', value: msg.recipient_count, color: '#6b7280' },
-          { label: 'Delivered', value: `${msg.delivered_count} (${deliveryPct}%)`, color: '#10b981' },
-          { label: 'Read', value: `${msg.read_count} (${readPct}%)`, color: '#3b82f6' },
+          { label: 'Recipients', value: String(msg.recipient_count),           icon: <Users style={{ width: '14px', height: '14px' }} />,     color: 'var(--text-secondary)' },
+          { label: 'Delivered',  value: `${msg.delivered_count} (${deliveryPct}%)`, icon: <CheckCheck style={{ width: '14px', height: '14px' }} />, color: '#10b981' },
+          { label: 'Read',       value: `${msg.read_count} (${readPct}%)`,      icon: <Eye style={{ width: '14px', height: '14px' }} />,        color: '#3b82f6' },
         ].map(stat => (
           <div key={stat.label} style={{
-            flex: 1,
-            padding: '14px 16px',
-            background: '#f9fafb',
-            borderRadius: '8px',
-            border: '1px solid #e5e7eb',
+            padding: '14px 16px', borderRadius: '10px',
+            background: 'var(--surface-bg)', border: '1px solid var(--surface-border)',
           }}>
-            <p style={{ fontSize: '20px', fontWeight: 800, color: stat.color, marginBottom: '2px' }}>{stat.value}</p>
-            <p style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stat.label}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: stat.color, marginBottom: '6px' }}>
+              {stat.icon}
+              <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{stat.label}</span>
+            </div>
+            <p style={{ fontSize: '20px', fontWeight: 800, color: stat.color, fontVariantNumeric: 'tabular-nums' }}>{stat.value}</p>
           </div>
         ))}
       </div>
 
       {/* Message body */}
-      <div style={{
-        padding: '20px',
-        background: '#f9fafb',
-        borderRadius: '10px',
-        border: '1px solid #e5e7eb',
-        fontSize: '14px',
-        lineHeight: '1.7',
-        color: '#374151',
-        whiteSpace: 'pre-wrap',
-      }}>
-        {msg.body}
+      <div style={{ marginBottom: '6px' }}>
+        <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-faint)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
+          Message Body
+        </p>
+        <div style={{
+          padding: '18px 20px', background: 'var(--surface-bg)',
+          borderRadius: '10px', border: '1px solid var(--surface-border)',
+          fontSize: '14px', lineHeight: '1.7', color: 'var(--text-primary)',
+          whiteSpace: 'pre-wrap',
+        }}>
+          {msg.body}
+        </div>
       </div>
     </div>
   )
@@ -489,23 +572,15 @@ function MessageDetail({ msg }: { msg: MessageWithRecipients }) {
 // ─── Style atoms ───────────────────────────────────────────────────────────────
 
 const fieldStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '8px 12px',
-  borderRadius: '6px',
-  border: '1px solid #d1d5db',
-  fontSize: '13px',
-  outline: 'none',
-  boxSizing: 'border-box',
-  color: '#111827',
-  background: 'white',
+  width: '100%', padding: '9px 12px',
+  borderRadius: '8px', border: '1px solid var(--surface-border)',
+  fontSize: '13px', outline: 'none', boxSizing: 'border-box',
+  color: 'var(--text-primary)', background: 'var(--surface-card)',
+  fontFamily: 'inherit',
 }
 
 const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: '12px',
-  fontWeight: 600,
-  color: '#374151',
-  marginBottom: '6px',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
+  display: 'block', fontSize: '10px', fontWeight: 700,
+  color: 'var(--text-faint)', marginBottom: '7px',
+  textTransform: 'uppercase', letterSpacing: '0.08em',
 }

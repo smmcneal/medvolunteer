@@ -20,7 +20,7 @@ const nav = [
   { href: '/dashboard/settings',    label: 'Settings',   icon: Settings },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -34,11 +34,13 @@ export default function Sidebar() {
   return (
     <aside style={{
       width: '224px',
+      height: '100%',
       display: 'flex',
       flexDirection: 'column',
       background: 'linear-gradient(175deg, #1e3054 0%, #141f38 100%)',
       flexShrink: 0,
       position: 'relative',
+      overflowY: 'auto',
     }}>
       {/* Subtle dot-grid texture */}
       <div style={{
@@ -68,20 +70,22 @@ export default function Sidebar() {
         position: 'relative',
       }}>
         <div style={{
-          width: '36px', height: '36px',
-          borderRadius: '10px',
-          background: 'rgba(0,191,165,0.18)',
-          border: '1px solid rgba(0,191,165,0.22)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: '40px', height: '40px',
+          borderRadius: '12px',
+          background: 'white',
+          border: '1px solid rgba(0,172,193,0.28)',
+          overflow: 'hidden',
           flexShrink: 0,
+          boxShadow: '0 2px 8px rgba(0,172,193,0.15)',
         }}>
           <Image
-            src="/icons/hummingbird.svg"
+            src="/icons/hummingbird.png"
             alt="MedVolunteer"
-            width={22}
-            height={22}
+            width={40}
+            height={40}
             unoptimized
             priority
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
         </div>
         <div>
@@ -89,12 +93,12 @@ export default function Sidebar() {
             display: 'block',
             fontFamily: 'var(--font-display)',
             fontWeight: 700,
-            fontSize: '14.5px',
+            fontSize: '12px',
             color: 'white',
-            lineHeight: 1.2,
-            letterSpacing: '-0.02em',
+            lineHeight: 1.25,
+            letterSpacing: '-0.01em',
           }}>
-            MedVolunteer
+            Yakima Free Clinic
           </span>
           <span style={{
             display: 'block',
@@ -119,6 +123,7 @@ export default function Sidebar() {
             <Link
               key={href}
               href={href}
+              onClick={onClose}
               className={`sidebar-nav-item${active ? ' sidebar-nav-active' : ''}`}
               style={{
                 display: 'flex',
@@ -130,9 +135,9 @@ export default function Sidebar() {
                 fontWeight: active ? 600 : 500,
                 color: active ? 'white' : 'rgba(255,255,255,0.48)',
                 background: active
-                  ? 'linear-gradient(90deg, rgba(0,191,165,0.14) 0%, rgba(255,255,255,0.07) 100%)'
+                  ? 'linear-gradient(90deg, rgba(0,172,193,0.16) 0%, rgba(255,255,255,0.06) 100%)'
                   : 'transparent',
-                boxShadow: active ? 'inset 3px 0 0 #00BFA5' : 'none',
+                boxShadow: active ? 'inset 3px 0 0 #00ACC1' : 'none',
                 textDecoration: 'none',
                 transition: 'all 0.15s',
               }}
@@ -141,7 +146,7 @@ export default function Sidebar() {
                 width: '15px', height: '15px',
                 flexShrink: 0,
                 opacity: active ? 1 : 0.6,
-                color: active ? '#00BFA5' : 'currentColor',
+                color: active ? '#00ACC1' : 'currentColor',
               }} />
               {label}
             </Link>

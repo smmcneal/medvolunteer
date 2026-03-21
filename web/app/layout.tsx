@@ -17,9 +17,13 @@ const figtree = Figtree({
 })
 
 export const metadata: Metadata = {
-  title: 'MedVolunteer',
+  title: 'Yakima Free Clinic',
   description: 'Medical volunteer management platform',
   manifest: '/manifest.json',
+  icons: {
+    icon: [{ url: '/icon.png', type: 'image/png' }],
+    shortcut: '/icon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -28,7 +32,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#1B2A4A',
+  themeColor: '#00ACC1',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover', // Required for safe-area-inset on iOS notch/home bar

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Download, TrendingUp, Clock, ShieldCheck, AlertTriangle } from 'lucide-react'
 import type { HoursRow, OnboardingRow, PipelinePhaseCount, VolunteerOnboardingRow, BgCheckRow, CredentialExpiryRow } from './page'
 
@@ -95,7 +96,11 @@ export default function ReportsView({
   bgRows: BgCheckRow[]
   credRows: CredentialExpiryRow[]
 }) {
-  const [activeTab, setActiveTab] = useState<Tab>('hours')
+  const searchParams = useSearchParams()
+  const initialTab = (searchParams.get('tab') as Tab | null) ?? 'hours'
+  const [activeTab, setActiveTab] = useState<Tab>(
+    TABS.some(t => t.key === initialTab) ? initialTab : 'hours'
+  )
 
   // Hours filters
   const [hoursSearch, setHoursSearch]     = useState('')

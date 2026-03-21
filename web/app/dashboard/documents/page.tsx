@@ -33,7 +33,7 @@ export default async function DocumentsPage() {
           Documents
         </h1>
         <p style={{ fontSize: '13px', color: '#9ca3af' }}>
-          Manage organizational documents available to all volunteers
+          Volunteer repository and internal admin-only documents
         </p>
       </div>
 

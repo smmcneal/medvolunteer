@@ -1,7 +1,16 @@
 import Link from 'next/link'
+import { Playfair_Display } from 'next/font/google'
+
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  style: ['normal', 'italic'],
+  variable: '--font-serif',
+  display: 'swap',
+})
 
 const NAVY = '#1B2A4A'
-const TEAL = '#00897B'
+const TEAL = '#00ACC1'
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
@@ -68,13 +77,11 @@ export default function HomePage() {
   return (
     <>
       <style suppressHydrationWarning>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=Figtree:wght@300;400;500;600;700&display=swap');
-
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Figtree', system-ui, sans-serif; background: #fafafa; }
+        body { font-family: var(--font-body, 'Figtree', system-ui, sans-serif); background: #fafafa; }
 
-        .mv-serif  { font-family: 'Playfair Display', Georgia, serif; }
-        .mv-sans   { font-family: 'Figtree', system-ui, sans-serif; }
+        .mv-serif  { font-family: var(--font-serif, Georgia, serif); }
+        .mv-sans   { font-family: var(--font-body, system-ui, sans-serif); }
 
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(20px); }
@@ -195,13 +202,13 @@ export default function HomePage() {
         }
       `}</style>
 
-      <div className="mv-sans" style={{ minHeight: '100vh', background: '#fafafa' }}>
+      <div className={`mv-sans ${playfair.variable}`} style={{ minHeight: '100vh', background: '#fafafa' }}>
 
         {/* ── NAV ──────────────────────────────────────────────────────────── */}
         <nav className="mv-nav">
           <Link href="/" className="mv-nav-logo">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icons/hummingbird.svg" alt="" width={38} height={38} style={{ flexShrink: 0 }} />
+            <img src="/icons/hummingbird.png" alt="" width={38} height={38} style={{ flexShrink: 0, display: 'block' }} />
             <span className="mv-serif" style={{ fontSize: '17px', color: NAVY, fontWeight: 500 }}>
               MedVolunteer
             </span>
@@ -511,8 +518,10 @@ export default function HomePage() {
           gap: '16px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icons/hummingbird.svg" alt="" width={30} height={30} style={{ flexShrink: 0 }} />
+            <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'white', overflow: 'hidden', flexShrink: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/icons/hummingbird.png" alt="" width={34} height={34} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
             <span className="mv-serif" style={{ fontSize: '15px', color: 'white', fontWeight: 500 }}>
               MedVolunteer
             </span>

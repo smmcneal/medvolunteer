@@ -90,9 +90,8 @@ export default function VolunteerShell({ volunteer, children }: Props) {
   return (
     <>
       <style suppressHydrationWarning>{`
-        @import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap');
         * { box-sizing: border-box; }
-        body { background: #f4f5f7; font-family: 'Figtree', system-ui, sans-serif; }
+        body { background: #f4f5f7; font-family: var(--font-body, 'Figtree', system-ui, sans-serif); }
         ::-webkit-scrollbar { display: none; }
         a { text-decoration: none; color: inherit; }
       `}</style>
@@ -130,11 +129,13 @@ export default function VolunteerShell({ volunteer, children }: Props) {
             zIndex: 99,
             boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
           }}>
-            <img
-              src="/icons/hummingbird.svg"
-              alt=""
-              style={{ width: '36px', height: '36px', flexShrink: 0 }}
-            />
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'white', overflow: 'hidden', flexShrink: 0 }}>
+              <img
+                src="/icons/hummingbird.png"
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'white', marginBottom: '2px' }}>
                 Add to Home Screen

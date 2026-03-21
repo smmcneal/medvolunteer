@@ -348,6 +348,8 @@ export interface OrgDocument {
   mime_type: string
   size_bytes: number
   is_preset: boolean
+  volunteer_visible: boolean
+  is_internal: boolean
   sort_order: number
   created_at: string
 }

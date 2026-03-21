@@ -296,7 +296,7 @@ export default async function DashboardPage() {
   const monthName = now.toLocaleString('en-US', { month: 'long' })
 
   return (
-    <div style={{ padding: '32px', maxWidth: '1200px' }}>
+    <div className="dash-page-content" style={{ padding: '32px', maxWidth: '1200px' }}>
 
       {/* Header */}
       <div style={{ marginBottom: '28px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
@@ -330,7 +330,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{
+      <div className="dash-stat-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
         gap: '16px',
@@ -534,7 +534,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Lower grid: table + feed */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '20px' }}>
+      <div className="dash-lower-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '20px' }}>
 
         {/* Expiring Credentials */}
         <div style={{
@@ -566,7 +566,7 @@ export default async function DashboardPage() {
                 </span>
               )}
             </div>
-            <a href="/dashboard/volunteers" style={{ fontSize: '12px', color: '#00897B', textDecoration: 'none', fontWeight: 500 }}>
+            <a href="/dashboard/reports?tab=credentials" style={{ fontSize: '12px', color: '#00897B', textDecoration: 'none', fontWeight: 500 }}>
               View all →
             </a>
           </div>

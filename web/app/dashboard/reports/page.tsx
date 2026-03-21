@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_noStore as noStore } from 'next/cache'
+import { Suspense } from 'react'
 import ReportsView from './ReportsView'
 
 export const dynamic = 'force-dynamic'
@@ -261,14 +262,16 @@ export default async function ReportsPage() {
         <p style={{ fontSize: '13px', color: '#9ca3af' }}>Export data and monitor program metrics</p>
       </div>
 
-      <ReportsView
-        hoursRows={hoursRows}
-        onboardingRows={onboardingRows}
-        pipelineStats={pipelineStats}
-        volunteerOnboardingRows={volunteerOnboardingRows}
-        bgRows={bgRows}
-        credRows={credRows}
-      />
+      <Suspense fallback={null}>
+        <ReportsView
+          hoursRows={hoursRows}
+          onboardingRows={onboardingRows}
+          pipelineStats={pipelineStats}
+          volunteerOnboardingRows={volunteerOnboardingRows}
+          bgRows={bgRows}
+          credRows={credRows}
+        />
+      </Suspense>
     </div>
   )
 }

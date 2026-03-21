@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_noStore as noStore } from 'next/cache'
 import MessagesView from './MessagesView'
-import type { Message, MessageRecipient, Volunteer } from '@/types/database'
+import type { Message, Volunteer } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,18 +58,36 @@ export default async function MessagesPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
-      <div style={{
-        padding: '28px 32px 20px',
-        borderBottom: '1px solid #f0f0f0',
-        background: 'white',
-        flexShrink: 0,
-      }}>
-        <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#111827', marginBottom: '2px' }}>
+      <div
+        className="dash-page-header"
+        style={{
+          padding: '18px 28px',
+          borderBottom: '1px solid var(--surface-border)',
+          background: 'var(--surface-card)',
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: '10px',
+        }}
+      >
+        <h1 style={{
+          fontSize: '22px', fontWeight: 700,
+          fontFamily: 'var(--font-display)',
+          color: 'var(--text-primary)',
+          letterSpacing: '-0.025em', lineHeight: 1,
+        }}>
           Messages
         </h1>
-        <p style={{ fontSize: '13px', color: '#9ca3af' }}>
-          Send emails, SMS, and push notifications to volunteers
-        </p>
+        <span style={{
+          fontSize: '12px', fontWeight: 600,
+          padding: '3px 9px', borderRadius: '99px',
+          background: 'rgba(0, 137, 123, 0.1)',
+          color: 'var(--teal)',
+          border: '1px solid rgba(0, 172, 193, 0.18)',
+          letterSpacing: '0.01em',
+        }}>
+          {messages.length}
+        </span>
       </div>
 
       <MessagesView initialMessages={messages} volunteers={volunteers} />

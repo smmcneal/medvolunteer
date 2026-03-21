@@ -164,7 +164,7 @@ export default async function VolunteersPage({
   ])
 
   return (
-    <div style={{ padding: '32px', maxWidth: '1200px' }}>
+    <div className="vol-page">
       <VolunteersHeader count={volunteers.length} locations={locations} />
       <VolunteersTable
         volunteers={volunteers}
