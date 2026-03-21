@@ -147,7 +147,7 @@ async function fetchDashboardData() {
   const volMinutesMap = new Map<string, { id: string; first_name: string; last_name: string; category: string | null; minutes: number }>()
   let totalMinutes = 0
 
-  for (const entry of (hoursRes.data ?? []) as {
+  for (const entry of (hoursRes.data ?? []) as unknown as {
     duration_minutes: number | null
     clock_in: string
     clock_out: string | null
@@ -177,7 +177,7 @@ async function fetchDashboardData() {
 
   // Volunteers with an unresolved "Expiring Credentials" flag not already in expiringCreds
   const expiringCredVolIds = new Set(expiringCreds.map(c => c.volunteer.id))
-  const flaggedExpiringVolunteers: FlaggedVolunteer[] = ((expiringFlagsRes.data ?? []) as {
+  const flaggedExpiringVolunteers: FlaggedVolunteer[] = ((expiringFlagsRes.data ?? []) as unknown as {
     id: string
     notes: string | null
     raised_at: string
