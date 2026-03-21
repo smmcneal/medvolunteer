@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 
 async function getVolunteerId() {
@@ -8,14 +9,15 @@ async function getVolunteerId() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  const { data: volunteer } = await supabase
+  const admin = createAdminClient()
+  const { data: volunteer } = await admin
     .from('volunteers')
     .select('id')
     .eq('user_id', user.id)
     .single()
 
   if (!volunteer) throw new Error('Volunteer not found')
-  return { supabase, volunteerId: volunteer.id as string }
+  return { supabase: admin, volunteerId: volunteer.id as string }
 }
 
 export async function homeClockIn(): Promise<{ entryId: string }> {
