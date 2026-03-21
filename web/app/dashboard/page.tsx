@@ -168,7 +168,7 @@ async function fetchDashboardData() {
     .map(v => ({ id: v.id, first_name: v.first_name, last_name: v.last_name, category: v.category, hours: Math.round(v.minutes / 60 * 10) / 10 }))
     .sort((a, b) => b.hours - a.hours)
 
-  const expiringCreds: ExpiringCred[] = ((expiringCredsRes.data ?? []) as ExpiringCred[]).map(c => ({
+  const expiringCreds: ExpiringCred[] = ((expiringCredsRes.data ?? []) as unknown as ExpiringCred[]).map(c => ({
     ...c,
     days_until_expiry: Math.ceil(
       (new Date(c.expiration_date!).getTime() - Date.now()) / 86400000
@@ -193,7 +193,7 @@ async function fetchDashboardData() {
       raised_at: f.raised_at,
     }))
 
-  const clockedInVolunteers = (clockedInRes.data ?? []) as ClockedInEntry[]
+  const clockedInVolunteers = (clockedInRes.data ?? []) as unknown as ClockedInEntry[]
 
   const kpi: KpiData = {
     activeVolunteers: clockedInVolunteers.length,
@@ -208,7 +208,7 @@ async function fetchDashboardData() {
     volunteerHoursBreakdown,
     expiringCreds,
     flaggedExpiringVolunteers,
-    recentCheckIns: (recentCheckInsRes.data ?? []) as CheckIn[],
+    recentCheckIns: (recentCheckInsRes.data ?? []) as unknown as CheckIn[],
   }
 }
 
