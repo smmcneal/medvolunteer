@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Syne, Figtree } from 'next/font/google'
+import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
 const syne = Syne({
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${syne.variable} ${figtree.variable}`} style={{ margin: 0, padding: 0 }}>
         {children}
+        <Analytics />
       </body>
     </html>
   )
