@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { updateContactInfo, updateEmergencyContact, uploadCredentialFile, deleteVolunteerUpload, getUploadSignedUrl } from './actions'
+import { updateContactInfo, updateEmergencyContact, uploadCredentialFile, deleteVolunteerUpload, getUploadSignedUrl, updatePreferredLanguage } from './actions'
 import type { Volunteer, Credential, VolunteerUpload, VolunteerStatus, VolunteerCategory } from '@/types/database'
 import { useRef } from 'react'
 
@@ -12,7 +12,7 @@ import { useRef } from 'react'
 type VolunteerProfile = Pick<
   Volunteer,
   'id' | 'first_name' | 'last_name' | 'email' | 'phone' | 'photo_url' | 'category' | 'status' | 'created_at' |
-  'emergency_contact_name' | 'emergency_contact_phone'
+  'emergency_contact_name' | 'emergency_contact_phone' | 'preferred_language'
 >
 
 interface Props {
@@ -80,6 +80,9 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
   const [credUploadProgress, setCredUploadProgress] = useState<string | null>(null)
   const [credUploadError, setCredUploadError]       = useState<string | null>(null)
   const [credDeletingId, setCredDeletingId]         = useState<string | null>(null)
+
+  const [lang, setLang] = useState(volunteer.preferred_language ?? 'en')
+  const [langPending, startLangTransition] = useTransition()
 
   // ── Contact edit state ─────────────────────────────────────────────────────
   const [editingContact, setEditingContact] = useState(false)
@@ -557,6 +560,33 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
               </button>
               <p style={{ fontSize: '11px', color: '#9ca3af', textAlign: 'center', marginTop: '6px' }}>PDF, Word, Excel, PNG, JPG — up to 50 MB</p>
             </div>
+          </div>
+        </div>
+
+        {/* ── Language ── */}
+        <div style={{ paddingTop: '8px' }}>
+          <p style={{ fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+            Language / Idioma
+          </p>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {(['en', 'es'] as const).map(l => (
+              <button
+                key={l}
+                onClick={() => { setLang(l); startLangTransition(() => { void updatePreferredLanguage(volunteer.id, l) }) }}
+                disabled={langPending}
+                style={{
+                  padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
+                  border: `1.5px solid ${lang === l ? '#1B2A4A' : '#e5e7eb'}`,
+                  background: lang === l ? '#1B2A4A' : 'white',
+                  color: lang === l ? 'white' : '#374151',
+                  cursor: langPending ? 'default' : 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {l === 'en' ? 'English' : 'Español'}
+              </button>
+            ))}
           </div>
         </div>
 
