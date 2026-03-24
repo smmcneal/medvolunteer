@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import type { Volunteer } from '@/types/database'
+import { LangProvider, useT } from '@/lib/volunteer-lang'
 
 // Detect iOS Safari (where beforeinstallprompt doesn't fire)
 function isIOSSafari(): boolean {
@@ -20,20 +21,23 @@ function isInStandaloneMode(): boolean {
     (window.navigator as { standalone?: boolean }).standalone === true
 }
 
-const TABS = [
-  { href: '/volunteer/home',      label: 'Home',      icon: HomeIcon },
-  { href: '/volunteer/shifts',    label: 'Shifts',    icon: CalendarIcon },
-  { href: '/volunteer/documents', label: 'Docs',      icon: DocumentsIcon },
-  { href: '/volunteer/handbook',  label: 'Handbook',  icon: HandbookIcon },
-  { href: '/volunteer/profile',   label: 'Profile',   icon: UserIcon },
+const TAB_DEFS = [
+  { href: '/volunteer/home',      key: 'nav_home',     icon: HomeIcon },
+  { href: '/volunteer/shifts',    key: 'nav_shifts',   icon: CalendarIcon },
+  { href: '/volunteer/documents', key: 'nav_docs',     icon: DocumentsIcon },
+  { href: '/volunteer/handbook',  key: 'nav_handbook', icon: HandbookIcon },
+  { href: '/volunteer/profile',   key: 'nav_profile',  icon: UserIcon },
 ]
 
 interface Props {
   volunteer: Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'status' | 'category'>
+  initialLang: string
   children: React.ReactNode
 }
 
-export default function VolunteerShell({ volunteer, children }: Props) {
+function VolunteerShellInner({ volunteer, children }: Omit<Props, 'initialLang'>) {
+  const t = useT()
+  const TABS = TAB_DEFS.map(td => ({ ...td, label: t(td.key) }))
   const pathname = usePathname()
 
   // ── Install prompt state ──────────────────────────────────────────────────
@@ -138,10 +142,10 @@ export default function VolunteerShell({ volunteer, children }: Props) {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'white', marginBottom: '2px' }}>
-                Add to Home Screen
+                {t('install_title')}
               </div>
               <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
-                Get the full app experience
+                {t('install_subtitle')}
               </div>
             </div>
             <button
@@ -159,7 +163,7 @@ export default function VolunteerShell({ volunteer, children }: Props) {
                 flexShrink: 0,
               }}
             >
-              Install
+              {t('install_btn')}
             </button>
             <button
               onClick={dismissBanner}
@@ -197,7 +201,7 @@ export default function VolunteerShell({ volunteer, children }: Props) {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'white' }}>
-                Add to Home Screen
+                {t('ios_hint_title')}
               </div>
               <button
                 onClick={dismissBanner}
@@ -219,13 +223,13 @@ export default function VolunteerShell({ volunteer, children }: Props) {
               </button>
             </div>
             <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', lineHeight: '1.6' }}>
-              Tap the{' '}
+              {t('ios_hint_title') === 'Add to Home Screen' ? 'Tap the' : 'Toca el'}{' '}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', display: 'inline' }}>
                 <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
                 <polyline points="16 6 12 2 8 6"/>
                 <line x1="12" y1="2" x2="12" y2="15"/>
               </svg>
-              {' '}Share button, then choose <strong style={{ color: 'white' }}>"Add to Home Screen"</strong> to install MedVolunteer.
+              {' '}{t('ios_hint_body')} <strong style={{ color: 'white' }}>{t('ios_hint_action')}</strong> {t('ios_hint_suffix')}
             </div>
           </div>
         )}
@@ -282,6 +286,14 @@ export default function VolunteerShell({ volunteer, children }: Props) {
         </nav>
       </div>
     </>
+  )
+}
+
+export default function VolunteerShell({ volunteer, initialLang, children }: Props) {
+  return (
+    <LangProvider initialLang={initialLang}>
+      <VolunteerShellInner volunteer={volunteer}>{children}</VolunteerShellInner>
+    </LangProvider>
   )
 }
 

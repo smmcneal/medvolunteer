@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react'
 import type { Document, VolunteerUpload } from '@/types/database'
 import { uploadVolunteerDocument, deleteVolunteerUpload, getUploadSignedUrl } from './actions'
+import { useT } from '@/lib/volunteer-lang'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ export default function VolunteerDocumentsSection({
   uploads: VolunteerUpload[]
   signedDocuments: Document[]
 }) {
+  const t = useT()
   const [uploads, setUploads]       = useState<VolunteerUpload[]>(initialUploads)
   const [uploading, setUploading]   = useState(false)
   const [progress, setProgress]     = useState<string | null>(null)
@@ -179,12 +181,12 @@ export default function VolunteerDocumentsSection({
         ) : (
           <>
             <UploadIcon />
-            Upload Document
+            {t('upload_doc')}
           </>
         )}
       </button>
       <p style={{ fontSize: '11px', color: '#9ca3af', textAlign: 'center', marginTop: '-4px' }}>
-        PDF, Word, Excel, PNG, JPG — up to 50 MB
+        {t('credential_file_types')}
       </p>
 
       {/* ── Uploaded files ── */}
@@ -314,7 +316,7 @@ export default function VolunteerDocumentsSection({
       {/* Empty state */}
       {isEmpty && (
         <p style={{ fontSize: '13px', color: '#9ca3af', textAlign: 'center', padding: '8px 0' }}>
-          No documents on file yet
+          {t('no_docs_profile')}
         </p>
       )}
 

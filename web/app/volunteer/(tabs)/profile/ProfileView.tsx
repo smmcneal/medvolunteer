@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useContext } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { updateContactInfo, updateEmergencyContact, uploadCredentialFile, deleteVolunteerUpload, getUploadSignedUrl, updatePreferredLanguage } from './actions'
 import type { Volunteer, Credential, VolunteerUpload, VolunteerStatus, VolunteerCategory } from '@/types/database'
 import { useRef } from 'react'
+import { useT, SetLangContext } from '@/lib/volunteer-lang'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,8 @@ function initials(first: string, last: string): string {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ProfileView({ volunteer, credentials, credentialUploads }: Props) {
+  const t = useT()
+  const setLangCtx = useContext(SetLangContext)
   const router = useRouter()
   const [isPending, startTransition]   = useTransition()
   const [signOutError, setSignOutError] = useState<string | null>(null)
@@ -283,7 +286,7 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
             {volunteer.first_name} {volunteer.last_name}
           </h1>
           <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', margin: '0 0 8px' }}>
-            {categoryLabel(volunteer.category)} · Member since {memberSince}
+            {categoryLabel(volunteer.category)} · {t('member_since')} {memberSince}
           </p>
           <span style={{
             display: 'inline-block', padding: '3px 10px', borderRadius: '999px',
@@ -302,14 +305,14 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
           {/* Section header row */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', padding: '0 4px' }}>
             <h2 style={{ fontSize: '13px', fontWeight: 700, color: '#6b7280', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>
-              Contact Information
+              {t('contact_info')}
             </h2>
             {!editingContact && (
               <button
                 onClick={startEditContact}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#00897B', fontFamily: 'inherit', padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}
               >
-                <PencilIcon /> Edit
+                <PencilIcon /> {t('edit')}
               </button>
             )}
             {editingContact && (
@@ -317,7 +320,7 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
                 onClick={cancelEditContact}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: '#9ca3af', fontFamily: 'inherit', padding: 0 }}
               >
-                Cancel
+                {t('cancel')}
               </button>
             )}
           </div>
@@ -333,7 +336,7 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
                 )}
                 <div>
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '5px' }}>
-                    Email address
+                    {t('email_address_label')}
                   </label>
                   <input
                     type="email"
@@ -350,7 +353,7 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '5px' }}>
-                    Phone number
+                    {t('phone_number_label')}
                   </label>
                   <input
                     type="tel"
@@ -378,17 +381,17 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
                     transition: 'background 0.15s',
                   }}
                 >
-                  {contactSaving ? <><MiniSpinner /> Saving…</> : 'Save changes'}
+                  {contactSaving ? <><MiniSpinner /> {t('saving')}</> : t('save')}
                 </button>
               </div>
             ) : (
               /* ── Read mode ── */
               <>
-                <InfoRow icon={EmailIcon} label="Email" value={displayEmail || '—'} />
-                <InfoRow icon={PhoneIcon} label="Phone" value={displayPhone || '—'} />
+                <InfoRow icon={EmailIcon} label={t('email')} value={displayEmail || '—'} />
+                <InfoRow icon={PhoneIcon} label={t('phone')} value={displayPhone || '—'} />
                 {contactSaved && (
                   <div style={{ padding: '10px 16px', fontSize: '13px', color: '#16a34a', background: '#f0fdf4', borderTop: '1px solid #dcfce7', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <CheckIcon /> Contact info updated
+                    <CheckIcon /> {t('contact_updated')}
                   </div>
                 )}
               </>
@@ -400,14 +403,14 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', padding: '0 4px' }}>
             <h2 style={{ fontSize: '13px', fontWeight: 700, color: '#6b7280', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>
-              Emergency Contact
+              {t('emergency_contact')}
             </h2>
             {!editingEmergency && (
               <button
                 onClick={startEditEmergency}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#00897B', fontFamily: 'inherit', padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}
               >
-                <PencilIcon /> Edit
+                <PencilIcon /> {t('edit')}
               </button>
             )}
             {editingEmergency && (
@@ -415,7 +418,7 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
                 onClick={cancelEditEmergency}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: '#9ca3af', fontFamily: 'inherit', padding: 0 }}
               >
-                Cancel
+                {t('cancel')}
               </button>
             )}
           </div>
@@ -430,7 +433,7 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
                 )}
                 <div>
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '5px' }}>
-                    Contact name
+                    {t('contact_name_label')}
                   </label>
                   <input
                     type="text"
@@ -443,7 +446,7 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '5px' }}>
-                    Phone number
+                    {t('phone_number_label')}
                   </label>
                   <input
                     type="tel"
@@ -459,16 +462,16 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
                   disabled={emergencySaving}
                   style={{ width: '100%', padding: '13px', borderRadius: '10px', border: 'none', background: emergencySaving ? '#9ca3af' : '#1B2A4A', color: 'white', fontSize: '15px', fontWeight: 700, cursor: emergencySaving ? 'default' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.15s' }}
                 >
-                  {emergencySaving ? <><MiniSpinner /> Saving…</> : 'Save changes'}
+                  {emergencySaving ? <><MiniSpinner /> {t('saving')}</> : t('save')}
                 </button>
               </div>
             ) : (
               <>
-                <InfoRow icon={PersonIcon} label="Name" value={displayEmergencyName || '—'} />
-                <InfoRow icon={PhoneIcon} label="Phone" value={displayEmergencyPhone || '—'} />
+                <InfoRow icon={PersonIcon} label={t('name')} value={displayEmergencyName || '—'} />
+                <InfoRow icon={PhoneIcon} label={t('phone')} value={displayEmergencyPhone || '—'} />
                 {emergencySaved && (
                   <div style={{ padding: '10px 16px', fontSize: '13px', color: '#16a34a', background: '#f0fdf4', borderTop: '1px solid #dcfce7', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <CheckIcon /> Emergency contact updated
+                    <CheckIcon /> {t('emergency_updated')}
                   </div>
                 )}
               </>
@@ -479,18 +482,18 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
         {/* ── Credentials ── */}
         <div>
           <h2 style={{ fontSize: '13px', fontWeight: 700, color: '#6b7280', letterSpacing: '0.06em', textTransform: 'uppercase', margin: '0 0 8px 4px' }}>
-            Credentials{credentials.length > 0 ? ` (${credentials.length})` : ''}
+            {t('credentials')}{credentials.length > 0 ? ` (${credentials.length})` : ''}
           </h2>
           <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #f0f0f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             {credentials.length === 0 ? (
-              <EmptyState message="No credentials on file" />
+              <EmptyState message={t('no_credentials')} />
             ) : (
               <>
                 {activeCredentials.map(cred => <CredentialCard key={cred.id} cred={cred} />)}
                 {expiredCredentials.length > 0 && (
                   <>
                     <div style={{ fontSize: '11px', fontWeight: 700, color: '#9ca3af', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '4px 16px 2px' }}>
-                      Expired
+                      {t('expired_label')}
                     </div>
                     {expiredCredentials.map(cred => <CredentialCard key={cred.id} cred={cred} />)}
                   </>
@@ -501,7 +504,7 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
             {/* ── Credential file uploads ── */}
             <div style={{ borderTop: '1px solid #f3f4f6', padding: '16px' }}>
               <p style={{ fontSize: '12px', fontWeight: 600, color: '#6b7280', marginBottom: '10px' }}>
-                Supporting Documents
+                {t('supporting_docs')}
               </p>
 
               {/* Error */}
@@ -554,11 +557,11 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
                 ) : (
                   <>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                    Upload Credential Document
+                    {t('credential_upload')}
                   </>
                 )}
               </button>
-              <p style={{ fontSize: '11px', color: '#9ca3af', textAlign: 'center', marginTop: '6px' }}>PDF, Word, Excel, PNG, JPG — up to 50 MB</p>
+              <p style={{ fontSize: '11px', color: '#9ca3af', textAlign: 'center', marginTop: '6px' }}>{t('credential_file_types')}</p>
             </div>
           </div>
         </div>
@@ -566,13 +569,13 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
         {/* ── Language ── */}
         <div style={{ paddingTop: '8px' }}>
           <p style={{ fontSize: '12px', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
-            Language / Idioma
+            {t('language_section')}
           </p>
           <div style={{ display: 'flex', gap: '8px' }}>
             {(['en', 'es'] as const).map(l => (
               <button
                 key={l}
-                onClick={() => { setLang(l); startLangTransition(() => { void updatePreferredLanguage(volunteer.id, l) }) }}
+                onClick={() => { setLang(l); setLangCtx(l); startLangTransition(() => { void updatePreferredLanguage(volunteer.id, l) }) }}
                 disabled={langPending}
                 style={{
                   padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
@@ -616,7 +619,7 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
             }}
           >
             <SignOutIcon />
-            {isPending ? 'Signing out…' : 'Sign Out'}
+            {isPending ? t('signing_out') : t('sign_out')}
           </button>
         </div>
 

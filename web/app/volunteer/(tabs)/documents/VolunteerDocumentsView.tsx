@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { getOrgDocumentSignedUrl } from '@/app/dashboard/documents/actions'
 import type { OrgDocument, OnboardingProgress, OnboardingStage } from '@/types/database'
+import { useT } from '@/lib/volunteer-lang'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ function fmtDate(iso: string | null): string {
 }
 
 export default function VolunteerDocumentsView({ docs, onboardingProgress, volunteerCreatedAt }: Props) {
+  const t = useT()
   const [error, setError] = useState<string | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
 
@@ -79,7 +81,7 @@ export default function VolunteerDocumentsView({ docs, onboardingProgress, volun
           </div>
           <div>
             <h1 style={{ fontSize: '20px', fontWeight: 800, color: 'white', margin: 0, letterSpacing: '-0.3px' }}>
-              Documents
+              {t('docs_title')}
             </h1>
             <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.55)', margin: '2px 0 0' }}>
               {allDocs.length} document{allDocs.length !== 1 ? 's' : ''} available
@@ -110,8 +112,8 @@ export default function VolunteerDocumentsView({ docs, onboardingProgress, volun
             boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
           }}>
             <div style={{ fontSize: '32px', marginBottom: '8px' }}>📄</div>
-            <p style={{ fontSize: '15px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>No documents yet</p>
-            <p style={{ fontSize: '13px', color: '#9ca3af' }}>Check back soon</p>
+            <p style={{ fontSize: '15px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>{t('no_docs')}</p>
+            <p style={{ fontSize: '13px', color: '#9ca3af' }}>{t('no_docs_sub')}</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -124,7 +126,7 @@ export default function VolunteerDocumentsView({ docs, onboardingProgress, volun
                   textTransform: 'uppercase', letterSpacing: '0.08em',
                   marginBottom: '8px', paddingLeft: '4px',
                 }}>
-                  Forms &amp; Disclosures
+                  {t('forms_disclosures')}
                 </p>
                 <div style={{
                   background: 'white', borderRadius: '14px',
@@ -152,7 +154,7 @@ export default function VolunteerDocumentsView({ docs, onboardingProgress, volun
                   textTransform: 'uppercase', letterSpacing: '0.08em',
                   marginBottom: '8px', paddingLeft: '4px', marginTop: '6px',
                 }}>
-                  Additional Documents
+                  {t('additional_docs')}
                 </p>
                 <div style={{
                   background: 'white', borderRadius: '14px',
@@ -183,7 +185,7 @@ export default function VolunteerDocumentsView({ docs, onboardingProgress, volun
               textTransform: 'uppercase', letterSpacing: '0.08em',
               marginBottom: '8px', paddingLeft: '4px',
             }}>
-              Onboarding Checklist
+              {t('onboarding_checklist')}
             </p>
             <div style={{
               background: 'white', borderRadius: '14px',
@@ -195,7 +197,7 @@ export default function VolunteerDocumentsView({ docs, onboardingProgress, volun
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', borderBottom: onboardingProgress.length > 0 ? '1px solid #f9fafb' : 'none' }}>
                   <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '14px' }}>✓</div>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827', margin: 0 }}>Application Submitted</p>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827', margin: 0 }}>{t('application_submitted')}</p>
                     <p style={{ fontSize: '11px', color: '#9ca3af', margin: '2px 0 0' }}>{fmtDate(volunteerCreatedAt)}</p>
                   </div>
                 </div>
@@ -221,7 +223,7 @@ export default function VolunteerDocumentsView({ docs, onboardingProgress, volun
                           {p.onboarding_stages?.name ?? 'Stage'}
                         </p>
                         {p.completed_at && (
-                          <p style={{ fontSize: '11px', color: '#9ca3af', margin: '2px 0 0' }}>Completed {fmtDate(p.completed_at)}</p>
+                          <p style={{ fontSize: '11px', color: '#9ca3af', margin: '2px 0 0' }}>{t('completed_label')} {fmtDate(p.completed_at)}</p>
                         )}
                       </div>
                       <span style={{
@@ -229,7 +231,7 @@ export default function VolunteerDocumentsView({ docs, onboardingProgress, volun
                         background: done ? '#f0fdf4' : '#f3f4f6',
                         color: done ? '#15803d' : '#9ca3af',
                       }}>
-                        {done ? 'Done' : 'Pending'}
+                        {done ? t('done_label') : t('pending_label')}
                       </span>
                     </div>
                   )
@@ -256,6 +258,7 @@ function DocRow({
   isLoading: boolean
   onOpen: () => void
 }) {
+  const t = useT()
   const color = fileColor(doc.mime_type)
 
   return (
@@ -307,7 +310,7 @@ function DocRow({
         ) : (
           <OpenIcon />
         )}
-        {isLoading ? 'Opening…' : 'Open'}
+        {isLoading ? t('doc_opening') : t('doc_open')}
       </button>
     </div>
   )

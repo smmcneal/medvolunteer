@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { volunteerMoveShift } from './actions'
+import { useT } from '@/lib/volunteer-lang'
 
 interface ShiftOption {
   id: string
@@ -34,6 +35,7 @@ function formatShiftTime(startIso: string, endIso: string): string {
 export default function RescheduleModal({
   orgId, assignmentId, shiftName, currentShiftId, onClose, onMoved,
 }: Props) {
+  const t = useT()
   const [options, setOptions] = useState<ShiftOption[]>([])
   const [loading, setLoading] = useState(true)
   const [moving, setMoving] = useState<string | null>(null)
@@ -116,7 +118,7 @@ export default function RescheduleModal({
         <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: '#e5e7eb', margin: '0 auto 16px' }} />
 
         <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#1B2A4A', margin: '0 0 4px' }}>
-          Move to Different Time
+          {t('move_shift')}
         </h2>
         <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 18px' }}>
           Available times for &ldquo;{shiftName}&rdquo;
@@ -164,7 +166,7 @@ export default function RescheduleModal({
                     fontFamily: 'inherit', flexShrink: 0,
                   }}
                 >
-                  {moving === opt.id ? 'Moving…' : 'Select'}
+                  {moving === opt.id ? t('moving') : t('select_time')}
                 </button>
               </div>
             ))}
@@ -180,7 +182,7 @@ export default function RescheduleModal({
             cursor: 'pointer', fontFamily: 'inherit',
           }}
         >
-          Cancel
+          {t('cancel')}
         </button>
       </div>
     </div>

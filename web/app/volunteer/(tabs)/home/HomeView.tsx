@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useTransition, useContext } from 'react'
 import type { Volunteer, Shift, Credential } from '@/types/database'
 import { homeClockIn, homeClockOut } from './actions'
+import { useT, LangContext } from '@/lib/volunteer-lang'
 
 interface ShiftWithLocation extends Shift {
   locations: { name: string } | null
@@ -18,15 +19,8 @@ interface Props {
   activeEntry: { id: string; clock_in: string } | null
 }
 
-function greeting() {
-  const h = new Date().getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 17) return 'Good afternoon'
-  return 'Good evening'
-}
-
-function formatShiftTime(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
+function formatShiftTime(iso: string, lang: string) {
+  return new Date(iso).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
     hour: 'numeric', minute: '2-digit',
   })
@@ -37,11 +31,11 @@ function daysUntil(dateStr: string) {
   return Math.ceil(diff / (1000 * 60 * 60 * 24))
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  volunteer: 'Volunteer',
-  prospect:  'Prospect',
-  applicant: 'Applicant',
-  inactive:  'Inactive',
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  volunteer: 'status_volunteer',
+  prospect:  'status_prospect',
+  applicant: 'status_applicant',
+  inactive:  'status_inactive',
 }
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
@@ -60,8 +54,17 @@ export default function HomeView({
   expiringCredentials,
   activeEntry,
 }: Props) {
+  const t = useT()
+  const lang = useContext(LangContext)
   const statusColor = STATUS_COLORS[volunteer.status] ?? STATUS_COLORS.inactive
   const showOnboarding = ['applicant', 'prospect'].includes(volunteer.status) && onboardingTotal > 0
+
+  function greeting() {
+    const h = new Date().getHours()
+    if (h < 12) return t('greeting_morning')
+    if (h < 17) return t('greeting_afternoon')
+    return t('greeting_evening')
+  }
 
   return (
     <div style={{ fontFamily: "'Figtree', system-ui, sans-serif" }}>
@@ -99,7 +102,7 @@ export default function HomeView({
             padding: '4px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: 700,
             background: statusColor.bg, color: statusColor.text, flexShrink: 0,
           }}>
-            {STATUS_LABELS[volunteer.status] ?? volunteer.status}
+            {t(STATUS_LABEL_KEYS[volunteer.status] ?? 'status_inactive')}
           </span>
         </div>
       </div>
@@ -115,8 +118,8 @@ export default function HomeView({
           <Card>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <div>
-                <p style={cardTitleStyle}>Onboarding Progress</p>
-                <p style={cardSubStyle}>{onboardingCompleted} of {onboardingTotal} stages complete</p>
+                <p style={cardTitleStyle}>{t('onboarding_title')}</p>
+                <p style={cardSubStyle}>{onboardingCompleted} {t('onboarding_of')} {onboardingTotal} {t('onboarding_stages_complete')}</p>
               </div>
               <span style={{
                 fontSize: '22px', fontWeight: 800, color: '#1B2A4A',
@@ -133,7 +136,7 @@ export default function HomeView({
             </div>
             {onboardingPct === 100 && (
               <p style={{ fontSize: '13px', color: '#15803d', fontWeight: 600, marginTop: '10px' }}>
-                ✓ All stages complete — waiting for activation
+                {t('onboarding_waiting')}
               </p>
             )}
           </Card>
@@ -142,7 +145,7 @@ export default function HomeView({
         {/* Credential expiry warnings */}
         {expiringCredentials.length > 0 && (
           <div>
-            <SectionLabel>⚠ Credentials Expiring Soon</SectionLabel>
+            <SectionLabel>{t('expiring_creds')}</SectionLabel>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {expiringCredentials.map(cred => {
                 const days = daysUntil(cred.expiration_date!)
@@ -161,7 +164,7 @@ export default function HomeView({
                         {cred.type}
                       </p>
                       <p style={{ fontSize: '12px', color: '#6b7280', margin: '2px 0 0' }}>
-                        Expires {new Date(cred.expiration_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {lang === 'es' ? 'Vence' : 'Expires'} {new Date(cred.expiration_date!).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </p>
                     </div>
                     <span style={{
@@ -169,7 +172,11 @@ export default function HomeView({
                       background: urgent ? '#fee2e2' : warning ? '#fef3c7' : '#f3f4f6',
                       color: urgent ? '#dc2626' : warning ? '#b45309' : '#6b7280',
                     }}>
-                      {days === 0 ? 'Today' : days === 1 ? '1 day' : `${days} days`}
+                      {days === 0
+                      ? (lang === 'es' ? 'Hoy' : 'Today')
+                      : days === 1
+                        ? (lang === 'es' ? '1 día' : '1 day')
+                        : `${days} ${t('days')}`}
                     </span>
                   </div>
                 )
@@ -180,16 +187,16 @@ export default function HomeView({
 
         {/* Upcoming shifts */}
         <div>
-          <SectionLabel>Upcoming Shifts</SectionLabel>
+          <SectionLabel>{t('upcoming_shifts')}</SectionLabel>
           {upcomingShifts.length === 0 ? (
             <Card>
               <div style={{ textAlign: 'center', padding: '16px 0' }}>
                 <div style={{ fontSize: '36px', marginBottom: '8px' }}>📅</div>
                 <p style={{ fontSize: '14px', color: '#6b7280', margin: 0, fontWeight: 500 }}>
-                  No upcoming shifts scheduled
+                  {t('no_upcoming_shifts')}
                 </p>
                 <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>
-                  Check with your coordinator for assignments
+                  {t('check_coordinator')}
                 </p>
               </div>
             </Card>
@@ -225,7 +232,7 @@ export default function HomeView({
                       📍 {shift.locations?.name ?? 'Unknown location'}
                     </p>
                     <p style={{ fontSize: '13px', color: isNext ? 'rgba(255,255,255,0.7)' : '#6b7280', margin: 0 }}>
-                      🕐 {formatShiftTime(shift.start_time)} · {durationHrs}h
+                      🕐 {formatShiftTime(shift.start_time, lang)} · {durationHrs}h
                     </p>
                   </div>
                 )
@@ -242,6 +249,7 @@ export default function HomeView({
 // ─── Clock in / out card ──────────────────────────────────────────────────────
 
 function ClockCard({ initialEntry }: { initialEntry: { id: string; clock_in: string } | null }) {
+  const t = useT()
   const [entry, setEntry] = useState(initialEntry)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -293,22 +301,22 @@ function ClockCard({ initialEntry }: { initialEntry: { id: string; clock_in: str
           {isClockedIn ? (
             <>
               <p style={{ fontSize: '12px', fontWeight: 700, color: '#00897B', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 2px' }}>
-                ● Currently clocked in
+                {t('currently_clocked_in')}
               </p>
               <p style={{ fontSize: '28px', fontWeight: 800, color: 'white', margin: 0, letterSpacing: '-1px' }} suppressHydrationWarning>
                 {elapsed()}
               </p>
               <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', margin: '3px 0 0' }} suppressHydrationWarning>
-                Since {new Date(entry!.clock_in).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                {t('clocked_in_since')} {new Date(entry!.clock_in).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
               </p>
             </>
           ) : (
             <>
               <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827', margin: '0 0 2px' }}>
-                Ready to start?
+                {t('ready_to_start')}
               </p>
               <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>
-                Tap to clock in and start tracking your hours
+                {t('tap_to_clock')}
               </p>
             </>
           )}
@@ -331,8 +339,8 @@ function ClockCard({ initialEntry }: { initialEntry: { id: string; clock_in: str
           }}
         >
           {pending
-            ? (isClockedIn ? 'Clocking out…' : 'Clocking in…')
-            : isClockedIn ? 'Clock Out' : 'Clock In'}
+            ? (isClockedIn ? t('clocking_out') : t('clocking_in'))
+            : isClockedIn ? t('clock_out') : t('clock_in')}
         </button>
       </div>
       {error && (

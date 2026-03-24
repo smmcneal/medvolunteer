@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { AssignmentWithShift, AvailableShift, TimeEntryRow } from './page'
 import { volunteerClockIn, volunteerClockOut, volunteerSignUpForShift, volunteerDropShift, volunteerRequestReschedule } from './actions'
 import RescheduleModal from './RescheduleModal'
+import { useT } from '@/lib/volunteer-lang'
 
 interface Props {
   assignments: AssignmentWithShift[]
@@ -56,6 +57,7 @@ function isShiftActive(start: string, end: string) {
 }
 
 export default function ShiftsView({ assignments, volunteerId, orgId, availableShifts }: Props) {
+  const t = useT()
   const [tab, setTab] = useState<Tab>('upcoming')
   const [geo, setGeo] = useState<GeoState | null>(null)
   const [geoError, setGeoError] = useState<string | null>(null)
@@ -215,7 +217,7 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
     <div style={{ fontFamily: "'Figtree', system-ui, sans-serif" }}>
       {/* Header */}
       <div style={{ background: '#1B2A4A', padding: '52px 20px 20px', paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'white', margin: '0 0 12px' }}>My Shifts</h1>
+        <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'white', margin: '0 0 12px' }}>{t('shifts_title')}</h1>
 
         {/* Geolocation status strip */}
         <div style={{
@@ -304,12 +306,12 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
                 letterSpacing: '0.08em', textTransform: 'uppercase',
                 margin: '0 0 10px',
               }}>
-                My Shifts · {upcoming.length}
+                {t('my_shifts_label')} · {upcoming.length}
               </p>
             )}
 
             {upcoming.length === 0 && availableShifts.length === 0
-              ? <EmptyState icon="📅" msg="No upcoming shifts" sub="Check back later for available shifts" />
+              ? <EmptyState icon="📅" msg={t('no_shifts')} sub={t('no_shifts_sub')} />
               : upcoming.map(a => {
                   const canDrop = new Date(a.shift.start_time).getTime() - Date.now() > 24 * 60 * 60 * 1000
                   return (
@@ -339,7 +341,7 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
 
         {tab === 'past' && (
           past.length === 0
-            ? <EmptyState icon="🕐" msg="No past shifts yet" sub="Completed shifts will appear here" />
+            ? <EmptyState icon="🕐" msg={t('no_past_shifts')} sub={t('no_past_shifts_sub')} />
             : past.map(a => <PastCard key={a.id} assignment={a} />)
         )}
       </div>
@@ -364,7 +366,7 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
         >
           <div style={{ background: 'white', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '480px', padding: '20px 20px 32px' }}>
             <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: '#e5e7eb', margin: '0 auto 16px' }} />
-            <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#1B2A4A', margin: '0 0 6px' }}>Request Reschedule</h2>
+            <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#1B2A4A', margin: '0 0 6px' }}>{t('reschedule')}</h2>
             <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 16px' }}>
               Your request will be sent to the admin for &ldquo;{rescheduleAssignment.shift.name}&rdquo;.
             </p>
@@ -374,13 +376,13 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
                 disabled={isPending}
                 style={{ flex: 1, padding: '11px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, border: 'none', background: '#1B2A4A', color: 'white', cursor: isPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
               >
-                {isPending ? 'Sending…' : 'Send Request'}
+                {isPending ? t('saving') : t('reschedule')}
               </button>
               <button
                 onClick={() => setRescheduleAssignment(null)}
                 style={{ padding: '11px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: '1px solid #e5e7eb', background: 'white', color: '#374151', cursor: 'pointer', fontFamily: 'inherit' }}
               >
-                Cancel
+                {t('cancel')}
               </button>
             </div>
           </div>
@@ -437,6 +439,7 @@ function UpcomingCard({
   onMoveRequest: () => void
   onRescheduleRequest: () => void
 }) {
+  const t = useT()
   const { shift } = a
   const active = isShiftActive(shift.start_time, shift.end_time)
   const loc = shift.locations
@@ -518,7 +521,7 @@ function UpcomingCard({
                 border: '2px solid #dc2626', background: '#fef2f2', color: '#dc2626', cursor: 'pointer',
               }}
             >
-              {isClockingOut ? 'Clocking out…' : '⏹  Clock Out'}
+              {isClockingOut ? t('clocking_out') : `⏹  ${t('clock_out')}`}
             </button>
           ) : (
             <button
@@ -529,7 +532,7 @@ function UpcomingCard({
                 border: 'none', background: '#1B2A4A', color: 'white', cursor: 'pointer',
               }}
             >
-              {isClockingIn ? 'Clocking in…' : '▶  Clock In'}
+              {isClockingIn ? t('clocking_in') : `▶  ${t('clock_in')}`}
             </button>
           )
         )}
@@ -543,13 +546,13 @@ function UpcomingCard({
                 disabled={isDroppingShift}
                 style={{ flex: 1, padding: '9px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, border: '1.5px solid #dc2626', background: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}
               >
-                {isDroppingShift ? 'Dropping…' : 'Yes, drop shift'}
+                {isDroppingShift ? t('saving') : t('yes_drop_shift')}
               </button>
               <button
                 onClick={onDropCancel}
                 style={{ flex: 1, padding: '9px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, border: '1.5px solid #e5e7eb', background: 'transparent', color: '#6b7280', cursor: 'pointer' }}
               >
-                Keep it
+                {t('keep_shift')}
               </button>
             </div>
           ) : (
@@ -558,19 +561,19 @@ function UpcomingCard({
                 onClick={onMoveRequest}
                 style={{ padding: '7px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: '1.5px solid #bfdbfe', background: '#eff6ff', color: '#1B2A4A', cursor: 'pointer', fontFamily: 'inherit' }}
               >
-                Move
+                {t('move_shift')}
               </button>
               <button
                 onClick={onRescheduleRequest}
                 style={{ padding: '7px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: '1px solid #e5e7eb', background: 'transparent', color: '#374151', cursor: 'pointer', fontFamily: 'inherit' }}
               >
-                Request Reschedule
+                {t('reschedule')}
               </button>
               <button
                 onClick={onDropRequest}
                 style={{ padding: '7px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 500, border: '1px solid #e5e7eb', background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontFamily: 'inherit' }}
               >
-                Drop
+                {t('drop_shift')}
               </button>
             </div>
           )
