@@ -261,6 +261,35 @@ export async function uploadVolunteerDocument(
     return { error: dbError.message }
   }
 
+  // ─── Fire document automation alerts ──────────────────────────────────────
+  try {
+    const { data: rules } = await admin
+      .from('document_automation_rules')
+      .select('trigger_document_type, alert_message, assigned_to')
+
+    if (rules?.length) {
+      const lowerName = file.name.toLowerCase()
+      const matches = rules.filter(r =>
+        r.trigger_document_type &&
+        lowerName.includes(r.trigger_document_type.toLowerCase())
+      )
+      if (matches.length) {
+        await admin.from('internal_alerts').insert(
+          matches.map(r => ({
+            triggered_by:  user?.id ?? null,
+            assigned_to:   r.assigned_to ?? null,
+            volunteer_id:  volunteerId,
+            message:       r.alert_message,
+            action_type:   'document_added',
+          }))
+        )
+      }
+    }
+  } catch (err) {
+    // Alert creation is non-fatal — never block the upload response
+    console.error('[document-automation] alert insert failed:', err)
+  }
+
   revalidatePath(`/dashboard/volunteers/${volunteerId}`)
   return {}
 }
