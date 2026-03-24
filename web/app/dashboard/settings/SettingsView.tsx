@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule } from '@/types/database'
+import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule, Category } from '@/types/database'
 import {
   updateOrgProfile,
   updateOrgSettings,
@@ -22,19 +22,15 @@ import {
   removeCategoryCoordinator,
   saveDocumentAutomationRule,
   deleteDocumentAutomationRule,
+  addCategory,
+  archiveCategory,
+  restoreCategory,
 } from './actions'
 import TagsManager from './TagsManager'
 import FlagsManager from './FlagsManager'
 
 type Tab = 'profile' | 'locations' | 'integrations' | 'categories' | 'holidays' | 'automation' | 'tags' | 'flags'
 
-const VOLUNTEER_CATEGORIES: { value: string; label: string }[] = [
-  { value: 'medical_professional', label: 'Medical Professional' },
-  { value: 'support_staff',        label: 'Support Staff' },
-  { value: 'admin',                label: 'Admin' },
-  { value: 'trainee',              label: 'Trainee' },
-  { value: 'other',                label: 'Other' },
-]
 
 interface OrgSettings {
   checkr_api_key?: string
@@ -65,9 +61,10 @@ interface Props {
   initialCoordinators: CategoryCoordinator[]
   activeVolunteers: { id: string; first_name: string; last_name: string }[]
   initialDocRules: DocumentAutomationRule[]
+  categories: Category[]
 }
 
-export default function SettingsView({ org, locations: initialLocations, initialTags, initialFlags, initialHolidays, initialAutomationRules, initialAutoMessageRules, messageTemplates, initialCategoryRequirements, initialCoordinators, activeVolunteers, initialDocRules }: Props) {
+export default function SettingsView({ org, locations: initialLocations, initialTags, initialFlags, initialHolidays, initialAutomationRules, initialAutoMessageRules, messageTemplates, initialCategoryRequirements, initialCoordinators, activeVolunteers, initialDocRules, categories }: Props) {
   const [tab, setTab] = useState<Tab>('profile')
 
   return (
@@ -112,9 +109,9 @@ export default function SettingsView({ org, locations: initialLocations, initial
         {tab === 'profile'      && <ProfileTab org={org} />}
         {tab === 'locations'    && <LocationsTab locations={initialLocations} />}
         {tab === 'integrations' && <IntegrationsTab settings={(org?.settings as OrgSettings) ?? {}} />}
-        {tab === 'categories'   && <CategoriesTab descriptions={((org?.settings as OrgSettings)?.category_descriptions) ?? {}} requirements={initialCategoryRequirements} coordinators={initialCoordinators} activeVolunteers={activeVolunteers} />}
+        {tab === 'categories'   && <CategoriesTab descriptions={((org?.settings as OrgSettings)?.category_descriptions) ?? {}} requirements={initialCategoryRequirements} coordinators={initialCoordinators} activeVolunteers={activeVolunteers} categories={categories} />}
         {tab === 'holidays'    && <HolidaysTab initialHolidays={initialHolidays} />}
-        {tab === 'automation'  && <AutomationTab initialRules={initialAutomationRules} orgTags={initialTags} orgFlags={initialFlags} initialAutoMessageRules={initialAutoMessageRules} messageTemplates={messageTemplates} initialDocRules={initialDocRules} activeVolunteers={activeVolunteers} />}
+        {tab === 'automation'  && <AutomationTab initialRules={initialAutomationRules} orgTags={initialTags} orgFlags={initialFlags} initialAutoMessageRules={initialAutoMessageRules} messageTemplates={messageTemplates} initialDocRules={initialDocRules} activeVolunteers={activeVolunteers} categories={categories} />}
         {tab === 'tags'        && <TagsManager initialTags={initialTags} />}
         {tab === 'flags'        && <FlagsManager initialFlags={initialFlags} />}
       </div>
@@ -540,6 +537,7 @@ function AutomationTab({
   messageTemplates,
   initialDocRules,
   activeVolunteers,
+  categories,
 }: {
   initialRules: FormAutomationRule[]
   orgTags: OrgTag[]
@@ -548,6 +546,7 @@ function AutomationTab({
   messageTemplates: Pick<MessageTemplate, 'id' | 'name' | 'subject' | 'channel'>[]
   initialDocRules: DocumentAutomationRule[]
   activeVolunteers: { id: string; first_name: string; last_name: string }[]
+  categories: Category[]
 }) {
   const [rules, setRules] = useState(initialRules)
   const [fieldKey, setFieldKey] = useState('category')
@@ -651,14 +650,14 @@ function AutomationTab({
   }
 
   function actionValueOptions() {
-    if (actionType === 'assign_category') return VOLUNTEER_CATEGORIES.map(c => c.value)
+    if (actionType === 'assign_category') return categories.map(c => c.slug)
     if (actionType === 'assign_flag') return orgFlags.map(f => f.id)
     if (actionType === 'assign_tag') return orgTags.map(t => t.id)
     return []
   }
 
   function actionValueLabel(val: string) {
-    if (actionType === 'assign_category') return VOLUNTEER_CATEGORIES.find(c => c.value === val)?.label ?? val
+    if (actionType === 'assign_category') return categories.find(c => c.slug === val)?.name ?? val
     if (actionType === 'assign_flag') return orgFlags.find(f => f.id === val)?.name ?? val
     if (actionType === 'assign_tag') return orgTags.find(t => t.id === val)?.name ?? val
     return val
@@ -698,7 +697,7 @@ function AutomationTab({
           {actionType === 'assign_category' ? (
             <select value={actionValue} onChange={e => setActionValue(e.target.value)} required style={inputStyle}>
               <option value="">— select —</option>
-              {VOLUNTEER_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              {categories.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
             </select>
           ) : (
             <select value={actionValue} onChange={e => setActionValue(e.target.value)} required style={inputStyle}>
@@ -1048,11 +1047,30 @@ function HolidaysTab({ initialHolidays }: { initialHolidays: OrgHoliday[] }) {
 
 // ─── Categories Tab ───────────────────────────────────────────────────────────
 
-function CategoriesTab({ descriptions: initial, requirements: initialRequirements, coordinators: initialCoordinators, activeVolunteers }: { descriptions: Record<string, string>; requirements: CategoryRequirement[]; coordinators: CategoryCoordinator[]; activeVolunteers: { id: string; first_name: string; last_name: string }[] }) {
+function CategoriesTab({ descriptions: initial, requirements: initialRequirements, coordinators: initialCoordinators, activeVolunteers, categories: initialCategories }: { descriptions: Record<string, string>; requirements: CategoryRequirement[]; coordinators: CategoryCoordinator[]; activeVolunteers: { id: string; first_name: string; last_name: string }[]; categories: Category[] }) {
   const [descriptions, setDescriptions] = useState<Record<string, string>>(initial)
   const [isPending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Add / archive / restore category
+  const [categories, setCategories] = useState<Category[]>(initialCategories)
+  const [showAddCategory, setShowAddCategory] = useState(false)
+  const [newCatName, setNewCatName] = useState('')
+  const [newCatDesc, setNewCatDesc] = useState('')
+  const [catPending, setCatPending] = useState(false)
+  const [, startCatTransition] = useTransition()
+
+  async function handleAddCategory(e: React.FormEvent) {
+    e.preventDefault()
+    setCatPending(true)
+    const result = await addCategory(newCatName, newCatDesc)
+    setCatPending(false)
+    if (result.error) { alert(result.error); return }
+    setShowAddCategory(false)
+    setNewCatName('')
+    setNewCatDesc('')
+  }
 
   // Coordinators
   const [coordinators, setCoordinators] = useState<CategoryCoordinator[]>(initialCoordinators)
@@ -1140,9 +1158,42 @@ function CategoriesTab({ descriptions: initial, requirements: initialRequirement
       {error && <ErrorBanner msg={error} />}
       {saved && <SuccessBanner msg="Category descriptions saved" />}
 
+      {/* ── Add new category ── */}
+      {showAddCategory ? (
+        <form onSubmit={handleAddCategory} style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Name</label>
+            <input
+              value={newCatName} onChange={e => setNewCatName(e.target.value)}
+              placeholder="e.g. Community Engagement"
+              style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #d1d5db', borderRadius: '8px', fontSize: '14px' }}
+            />
+          </div>
+          <div style={{ flex: 2 }}>
+            <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Description (optional)</label>
+            <input
+              value={newCatDesc} onChange={e => setNewCatDesc(e.target.value)}
+              placeholder="What does this role involve?"
+              style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #d1d5db', borderRadius: '8px', fontSize: '14px' }}
+            />
+          </div>
+          <button type="submit" disabled={catPending} style={{ padding: '8px 16px', background: '#1B2A4A', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: 'pointer' }}>
+            Save
+          </button>
+          <button type="button" onClick={() => setShowAddCategory(false)} style={{ padding: '8px 12px', background: '#f3f4f6', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button onClick={() => setShowAddCategory(true)} style={{ marginBottom: '16px', padding: '8px 14px', background: '#f0f4ff', color: '#1B2A4A', border: '1.5px solid #c7d2fe', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+          + New Category
+        </button>
+      )}
+
+      {/* Active categories */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-        {VOLUNTEER_CATEGORIES.map(cat => (
-          <div key={cat.value} style={{
+        {categories.filter(cat => !cat.is_archived).map(cat => (
+          <div key={cat.id} style={{
             border: '1px solid #e5e7eb',
             borderRadius: '10px',
             padding: '14px 16px',
@@ -1156,13 +1207,18 @@ function CategoriesTab({ descriptions: initial, requirements: initialRequirement
                 fontWeight: 700,
                 background: '#f3f4f6',
                 color: '#374151',
-              }}>{cat.label}</span>
-              <code style={{ fontSize: '11px', color: '#9ca3af' }}>{cat.value}</code>
+              }}>{cat.name}</span>
+              <code style={{ fontSize: '11px', color: '#9ca3af' }}>{cat.slug}</code>
+              <button
+                onClick={() => { if (confirm(`Archive "${cat.name}"? Existing volunteers keep this category but it won't appear in the assignment list.`)) startCatTransition(() => { void archiveCategory(cat.id).then(() => setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, is_archived: true } : c))) }) }}
+                style={{ marginLeft: 'auto', fontSize: '12px', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}>
+                Archive
+              </button>
             </div>
             <input
-              value={descriptions[cat.value] ?? ''}
-              onChange={e => setDescriptions(prev => ({ ...prev, [cat.value]: e.target.value }))}
-              placeholder={`Describe the ${cat.label} role…`}
+              value={descriptions[cat.slug] ?? ''}
+              onChange={e => setDescriptions(prev => ({ ...prev, [cat.slug]: e.target.value }))}
+              placeholder={`Describe the ${cat.name} role…`}
               style={fieldStyle}
             />
           </div>
@@ -1171,23 +1227,50 @@ function CategoriesTab({ descriptions: initial, requirements: initialRequirement
 
       <SaveButton onClick={handleSave} isPending={isPending} />
 
+      {/* Archived categories */}
+      {categories.some(cat => cat.is_archived) && (
+        <div style={{ marginTop: '16px' }}>
+          <p style={{ fontSize: '13px', fontWeight: 600, color: '#9ca3af', marginBottom: '8px' }}>Archived</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {categories.filter(cat => cat.is_archived).map(cat => (
+              <div key={cat.id} style={{
+                border: '1px solid #e5e7eb',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                background: '#f9fafb',
+                opacity: 0.7,
+                display: 'flex', alignItems: 'center', gap: '8px',
+              }}>
+                <span style={{ padding: '2px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: 700, background: '#e5e7eb', color: '#6b7280' }}>{cat.name}</span>
+                <code style={{ fontSize: '11px', color: '#9ca3af' }}>{cat.slug}</code>
+                <button
+                  onClick={() => startCatTransition(() => { void restoreCategory(cat.id).then(() => setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, is_archived: false } : c))) })}
+                  style={{ marginLeft: 'auto', fontSize: '12px', color: '#059669', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}>
+                  Restore
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Requirements ── */}
       <div style={{ marginTop: '28px' }}>
         <p style={{ fontSize: '14px', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>Category Requirements</p>
         <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '14px', lineHeight: 1.5 }}>
           Define prerequisites volunteers must satisfy. Blocking requirements prevent shift sign-up until met.
         </p>
-        {VOLUNTEER_CATEGORIES.map(cat => {
-          const catReqs = requirements.filter(r => r.category_name === cat.value)
-          const isExpanded = expandedReqCat === cat.value
+        {categories.filter(cat => !cat.is_archived).map(cat => {
+          const catReqs = requirements.filter(r => r.category_name === cat.slug)
+          const isExpanded = expandedReqCat === cat.slug
           return (
-            <div key={cat.value} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', background: 'white', marginBottom: '8px', overflow: 'hidden' }}>
+            <div key={cat.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', background: 'white', marginBottom: '8px', overflow: 'hidden' }}>
               <button
-                onClick={() => setExpandedReqCat(isExpanded ? null : cat.value)}
+                onClick={() => setExpandedReqCat(isExpanded ? null : cat.slug)}
                 style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'inherit' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>{cat.label}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>{cat.name}</span>
                   {catReqs.length > 0 && (
                     <span style={{ fontSize: '11px', background: '#f3f4f6', color: '#6b7280', borderRadius: '10px', padding: '1px 7px', fontWeight: 600 }}>{catReqs.length}</span>
                   )}
@@ -1228,7 +1311,7 @@ function CategoriesTab({ descriptions: initial, requirements: initialRequirement
                         Blocking
                       </label>
                       <button
-                        onClick={() => handleAddRequirement(cat.value)}
+                        onClick={() => handleAddRequirement(cat.slug)}
                         disabled={!reqTitle.trim() || reqPending}
                         style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, background: '#1B2A4A', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit', opacity: !reqTitle.trim() ? 0.5 : 1 }}
                       >
@@ -1251,19 +1334,19 @@ function CategoriesTab({ descriptions: initial, requirements: initialRequirement
           Assign a lead volunteer for each category. Coordinators receive notifications when shifts are created for their category.
         </p>
         <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden', background: 'white' }}>
-          {VOLUNTEER_CATEGORIES.map((cat, idx) => {
-            const coord = coordinators.find(c => c.category === cat.value)
+          {categories.filter(cat => !cat.is_archived).map((cat, idx, arr) => {
+            const coord = coordinators.find(c => c.category === cat.slug)
             const currentVolId = coord?.coordinator_volunteer_id ?? ''
             return (
-              <div key={cat.value} style={{
+              <div key={cat.id} style={{
                 display: 'flex', alignItems: 'center', gap: '12px',
                 padding: '10px 16px',
-                borderBottom: idx < VOLUNTEER_CATEGORIES.length - 1 ? '1px solid #f3f4f6' : 'none',
+                borderBottom: idx < arr.length - 1 ? '1px solid #f3f4f6' : 'none',
               }}>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151', minWidth: '160px' }}>{cat.label}</span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151', minWidth: '160px' }}>{cat.name}</span>
                 <select
                   value={currentVolId}
-                  onChange={e => handleAssignCoordinator(cat.value, e.target.value)}
+                  onChange={e => handleAssignCoordinator(cat.slug, e.target.value)}
                   disabled={coordPending}
                   style={{ flex: 1, maxWidth: '260px', padding: '7px 10px', borderRadius: '7px', border: '1px solid #e5e7eb', fontSize: '13px', background: 'white', fontFamily: 'inherit', color: '#111827' }}
                 >
