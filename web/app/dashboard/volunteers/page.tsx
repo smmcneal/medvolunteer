@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_noStore as noStore } from 'next/cache'
 import VolunteersTable from './VolunteersTable'
 import VolunteersHeader from './VolunteersHeader'
-import type { VolunteerCategory, VolunteerStatus, PipelinePhase, Location } from '@/types/database'
+import type { VolunteerCategory, VolunteerStatus, PipelinePhase, Location, Category } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
@@ -152,6 +152,12 @@ async function fetchLocations() {
   return (data ?? []) as Pick<Location, 'id' | 'name'>[]
 }
 
+async function fetchCategories() {
+  const supabase = createAdminClient()
+  const { data } = await supabase.from('categories').select('*').eq('is_archived', false).order('sort_order')
+  return (data ?? []) as Category[]
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function VolunteersPage({
@@ -160,18 +166,20 @@ export default async function VolunteersPage({
   searchParams: Promise<{ category?: string; status?: string; location?: string }>
 }) {
   const params = await searchParams
-  const [volunteers, locations] = await Promise.all([
+  const [volunteers, locations, categories] = await Promise.all([
     fetchVolunteers(params),
     fetchLocations(),
+    fetchCategories(),
   ])
 
   return (
     <div className="vol-page">
-      <VolunteersHeader count={volunteers.length} locations={locations} />
+      <VolunteersHeader count={volunteers.length} locations={locations} categories={categories} />
       <VolunteersTable
         volunteers={volunteers}
         locations={locations}
         initialFilters={params}
+        categories={categories}
       />
     </div>
   )

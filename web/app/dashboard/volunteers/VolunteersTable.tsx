@@ -4,23 +4,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Search, ChevronUp, ChevronDown, ArrowRight, ChevronRight } from 'lucide-react'
 import type { VolunteerRow } from './page'
-import type { VolunteerCategory, VolunteerStatus, PipelinePhase } from '@/types/database'
-
-const CATEGORY_LABELS: Record<VolunteerCategory, string> = {
-  medical_professional: 'Medical',
-  support_staff:        'Support',
-  admin:                'Admin',
-  trainee:              'Trainee',
-  other:                'Other',
-}
-
-const CATEGORY_COLORS: Record<VolunteerCategory, { bg: string; text: string; ring: string }> = {
-  medical_professional: { bg: '#d1fae5', text: '#065f46', ring: 'rgba(6,95,70,0.18)' },
-  support_staff:        { bg: '#dbeafe', text: '#1e40af', ring: 'rgba(30,64,175,0.18)' },
-  admin:                { bg: '#ede9fe', text: '#5b21b6', ring: 'rgba(91,33,182,0.18)' },
-  trainee:              { bg: '#fef3c7', text: '#92400e', ring: 'rgba(146,64,14,0.18)' },
-  other:                { bg: '#f3f4f6', text: '#374151', ring: 'rgba(55,65,81,0.14)' },
-}
+import type { VolunteerStatus, PipelinePhase, Category } from '@/types/database'
 
 const STATUS_LABELS: Record<VolunteerStatus, string> = {
   applicant: 'Applicant',
@@ -56,15 +40,35 @@ function initials(first: string, last: string) {
 type SortKey = 'name' | 'category' | 'status' | 'hours_this_month'
 type SortDir = 'asc' | 'desc'
 
+const PALETTE = [
+  { bg: '#eff6ff', text: '#1d4ed8', ring: '#bfdbfe' },
+  { bg: '#f0fdf4', text: '#15803d', ring: '#bbf7d0' },
+  { bg: '#fdf4ff', text: '#7e22ce', ring: '#e9d5ff' },
+  { bg: '#fff7ed', text: '#c2410c', ring: '#fed7aa' },
+  { bg: '#f0f9ff', text: '#0369a1', ring: '#bae6fd' },
+  { bg: '#fefce8', text: '#a16207', ring: '#fef08a' },
+  { bg: '#fff1f2', text: '#be123c', ring: '#fecdd3' },
+  { bg: '#f8fafc', text: '#475569', ring: '#cbd5e1' },
+]
+
 export default function VolunteersTable({
   volunteers,
   locations,
   initialFilters,
+  categories,
 }: {
   volunteers: VolunteerRow[]
   locations: { id: string; name: string }[]
   initialFilters: { category?: string; status?: string; location?: string }
+  categories: Category[]
 }) {
+  function getCatStyle(slug: string) {
+    const idx = categories.findIndex(c => c.slug === slug)
+    return PALETTE[Math.max(idx, 0) % PALETTE.length]
+  }
+  function getCatLabel(slug: string) {
+    return categories.find(c => c.slug === slug)?.name ?? slug
+  }
   const [search, setSearch]     = useState('')
   const [category, setCategory] = useState(initialFilters.category ?? '')
   const [status, setStatus]     = useState(initialFilters.status ?? '')
@@ -167,8 +171,8 @@ export default function VolunteersTable({
             color: category ? 'var(--teal)' : 'var(--text-secondary)',
           }}>
             <option value="">All categories</option>
-            {(Object.keys(CATEGORY_LABELS) as VolunteerCategory[]).map(k => (
-              <option key={k} value={k}>{CATEGORY_LABELS[k]}</option>
+            {categories.map(c => (
+              <option key={c.slug} value={c.slug}>{c.name}</option>
             ))}
           </select>
           <ChevronDown style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', width: '11px', height: '11px', color: '#9098b1', pointerEvents: 'none' }} />
@@ -256,7 +260,7 @@ export default function VolunteersTable({
             </thead>
             <tbody>
               {filtered.map((v, i) => {
-                const catStyle  = CATEGORY_COLORS[v.volunteer_categories[0] ?? v.category] ?? CATEGORY_COLORS.other
+                const catStyle  = getCatStyle(v.volunteer_categories[0] ?? v.category)
                 const statStyle = STATUS_COLORS[v.status] ?? STATUS_COLORS.inactive
                 const step      = PHASE_STEP[v.pipeline_phase]
                 const total     = 6
@@ -290,10 +294,10 @@ export default function VolunteersTable({
                     <td style={{ padding: '12px 12px' }}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                         {v.volunteer_categories.map(cat => {
-                          const cs = CATEGORY_COLORS[cat] ?? CATEGORY_COLORS.other
+                          const cs = getCatStyle(cat)
                           return (
                             <span key={cat} style={{ fontSize: '12px', fontWeight: 500, padding: '3px 9px', borderRadius: '6px', background: cs.bg, color: cs.text, whiteSpace: 'nowrap' }}>
-                              {CATEGORY_LABELS[cat]}
+                              {getCatLabel(cat)}
                             </span>
                           )
                         })}
@@ -374,7 +378,7 @@ export default function VolunteersTable({
         {/* ── Mobile card list (hidden on desktop) ── */}
         <div className="vol-card-view">
           {filtered.map((v, i) => {
-            const catStyle  = CATEGORY_COLORS[v.volunteer_categories[0] ?? v.category] ?? CATEGORY_COLORS.other
+            const catStyle  = getCatStyle(v.volunteer_categories[0] ?? v.category)
             const statStyle = STATUS_COLORS[v.status] ?? STATUS_COLORS.inactive
             const step      = PHASE_STEP[v.pipeline_phase]
             const total     = 6
@@ -418,10 +422,10 @@ export default function VolunteersTable({
                   {/* Row 2: category badges + hours */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
                     {v.volunteer_categories.map(cat => {
-                      const cs = CATEGORY_COLORS[cat] ?? CATEGORY_COLORS.other
+                      const cs = getCatStyle(cat)
                       return (
                         <span key={cat} style={{ fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '5px', background: cs.bg, color: cs.text, whiteSpace: 'nowrap' }}>
-                          {CATEGORY_LABELS[cat]}
+                          {getCatLabel(cat)}
                         </span>
                       )
                     })}

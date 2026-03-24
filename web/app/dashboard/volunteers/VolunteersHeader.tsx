@@ -3,13 +3,15 @@
 import { useState } from 'react'
 import { UserPlus } from 'lucide-react'
 import AddVolunteerModal from './AddVolunteerModal'
+import type { Category } from '@/types/database'
 
 interface Props {
   count: number
   locations: { id: string; name: string }[]
+  categories: Category[]
 }
 
-export default function VolunteersHeader({ count, locations }: Props) {
+export default function VolunteersHeader({ count, locations, categories }: Props) {
   const [showModal, setShowModal] = useState(false)
 
   return (
@@ -68,6 +70,7 @@ export default function VolunteersHeader({ count, locations }: Props) {
       {showModal && (
         <AddVolunteerModal
           locations={locations}
+          categories={categories}
           onClose={() => setShowModal(false)}
         />
       )}

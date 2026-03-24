@@ -4,15 +4,7 @@ import { useState, useTransition, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, UserPlus, Loader2 } from 'lucide-react'
 import { createVolunteer } from './actions'
-import type { VolunteerCategory, VolunteerStatus } from '@/types/database'
-
-const CATEGORIES: { value: VolunteerCategory; label: string }[] = [
-  { value: 'medical_professional', label: 'Medical Professional' },
-  { value: 'support_staff',        label: 'Support Staff' },
-  { value: 'admin',                label: 'Admin' },
-  { value: 'trainee',              label: 'Trainee' },
-  { value: 'other',                label: 'Other' },
-]
+import type { VolunteerCategory, VolunteerStatus, Category } from '@/types/database'
 
 const STATUSES: { value: VolunteerStatus; label: string }[] = [
   { value: 'applicant', label: 'Applicant' },
@@ -23,6 +15,7 @@ const STATUSES: { value: VolunteerStatus; label: string }[] = [
 
 interface Props {
   locations: { id: string; name: string }[]
+  categories: Category[]
   onClose: () => void
 }
 
@@ -47,7 +40,7 @@ const labelStyle: React.CSSProperties = {
   marginBottom: '5px',
 }
 
-export default function AddVolunteerModal({ locations, onClose }: Props) {
+export default function AddVolunteerModal({ locations, categories, onClose }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -59,7 +52,7 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
-  const [category, setCategory] = useState<VolunteerCategory>('medical_professional')
+  const [category, setCategory] = useState<VolunteerCategory>(categories[0]?.slug ?? '')
   const [status, setStatus] = useState<VolunteerStatus>('applicant')
   const [locationIds, setLocationIds] = useState<string[]>([])
   const [sendInvite, setSendInvite] = useState(true)
@@ -273,8 +266,8 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
                   onChange={e => setCategory(e.target.value as VolunteerCategory)}
                   style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
                 >
-                  {CATEGORIES.map(c => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
+                  {categories.map(c => (
+                    <option key={c.slug} value={c.slug}>{c.name}</option>
                   ))}
                 </select>
               </div>
