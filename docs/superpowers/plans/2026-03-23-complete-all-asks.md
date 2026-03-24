@@ -91,6 +91,9 @@
   The column name `trigger_document_type` matches the schema in
   `supabase/migrations/20260323_internal_alerts.sql` — verify if unsure before continuing.
 
+  > `createClient` is already imported at the top of `actions.ts` (line 4) — no new import needed.
+  > The second `await createClient()` call in the alert block reuses the same import.
+
 - [ ] **Step 2: Build to verify no TypeScript errors**
 
   ```bash
@@ -167,11 +170,17 @@
 
 - [ ] **Step 2: Validate migration SQL syntax before pushing**
 
-  The `ALTER COLUMN ... TYPE text[] USING volunteer_categories::text[]` cast is the most
-  likely point of failure. If Postgres rejects the direct cast, the fallback is:
+  The migration uses this cast for the `volunteer_categories` column type change:
+  ```sql
+  USING volunteer_categories::text[]
+  ```
+  If Postgres rejects this (error: `cannot cast type volunteer_category[] to text[]`), open
+  the migration file and replace that USING clause with the explicit unnest form:
   ```sql
   USING ARRAY(SELECT unnest(volunteer_categories)::text)
   ```
+  Both forms are functionally identical. The second is more portable.
+
   **If you have a local Supabase running**, test now:
   ```bash
   supabase db push --local
@@ -635,6 +644,7 @@ This task stages and commits everything that was already implemented in the work
   ```bash
   git add web/app/api/cron/
   git add web/app/dashboard/alerts/
+  git add web/app/dashboard/reports/actions.ts
   git add web/lib/i18n/
   git add supabase/migrations/20260323_auto_message_rules.sql
   git add supabase/migrations/20260323_category_coordinators.sql
@@ -742,7 +752,7 @@ This task stages and commits everything that was already implemented in the work
   - [ ] Admin: Settings → Categories → add a new category "Community Engagement" — appears in list
   - [ ] Admin: Volunteer → edit volunteer → new category shows in multi-select
   - [ ] Admin: Shifts → verify week/day view buttons work
-  - [ ] Admin: Settings → Automation → create a document rule; upload a matching file for a volunteer → check Alerts page for the new alert
+  - [ ] Admin: Settings → Automation → Document Rules → create a rule with trigger keyword "cv" and assign it to your admin user. Then open any volunteer → Documents tab → upload a file named `volunteer_cv.pdf`. Go to Alerts — the new alert should appear unread.
   - [ ] Volunteer: log in → Shifts → verify "Move" / reschedule option appears
   - [ ] Volunteer: Profile → verify language toggle (EN / ES)
 
