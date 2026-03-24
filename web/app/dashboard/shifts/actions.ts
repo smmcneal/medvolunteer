@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'crypto'
 
 // ─── Shifts ───────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,110 @@ export async function createShift(data: {
   revalidatePath('/dashboard/shifts')
   revalidatePath('/volunteer/shifts')
   return { shiftId: shift.id }
+}
+
+// ─── Recurring Shifts ─────────────────────────────────────────────────────────
+
+export async function createRecurringShifts(data: {
+  name: string
+  location_id: string | null
+  start_time: string
+  end_time: string
+  required_count: number
+  notes: string
+}, frequency: 'weekly' | 'biweekly' | 'monthly', endDate: string | null) {
+  const admin = createAdminClient()
+
+  const { data: org } = await admin
+    .from('organizations')
+    .select('id')
+    .limit(1)
+    .single()
+  if (!org) throw new Error('No organization found')
+
+  const recurrence_group_id = randomUUID()
+  const intervalDays = frequency === 'monthly' ? null : frequency === 'biweekly' ? 14 : 7
+  const MAX_OCCURRENCES = 52
+
+  const rows: object[] = []
+  let start = new Date(data.start_time)
+  const durationMs = new Date(data.end_time).getTime() - start.getTime()
+  const cutoff = endDate ? new Date(endDate + 'T23:59:59Z') : null
+
+  for (let i = 0; i < MAX_OCCURRENCES; i++) {
+    if (cutoff && start > cutoff) break
+    rows.push({
+      org_id: org.id,
+      name: data.name,
+      location_id: data.location_id,
+      start_time: start.toISOString(),
+      end_time: new Date(start.getTime() + durationMs).toISOString(),
+      required_count: data.required_count,
+      notes: data.notes || null,
+      recurrence_rule: frequency,
+      recurrence_group_id,
+      recurrence_end_date: endDate ?? null,
+    })
+
+    if (frequency === 'monthly') {
+      const next = new Date(start)
+      next.setMonth(next.getMonth() + 1)
+      start = next
+    } else {
+      start = new Date(start.getTime() + intervalDays! * 86400000)
+    }
+  }
+
+  if (rows.length === 0) throw new Error('No occurrences generated for the given range')
+
+  const { error } = await admin.from('shifts').insert(rows)
+  if (error) throw new Error(error.message)
+  revalidatePath('/dashboard/shifts')
+  revalidatePath('/volunteer/shifts')
+}
+
+export async function bulkUpdateRecurringShifts(
+  groupId: string,
+  fromShiftId: string,
+  data: { name?: string; location_id?: string | null; required_count?: number; notes?: string },
+) {
+  const admin = createAdminClient()
+
+  const { data: refShift } = await admin
+    .from('shifts')
+    .select('start_time')
+    .eq('id', fromShiftId)
+    .single()
+  if (!refShift) throw new Error('Reference shift not found')
+
+  const { error } = await admin
+    .from('shifts')
+    .update(data)
+    .eq('recurrence_group_id', groupId)
+    .gte('start_time', refShift.start_time)
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/dashboard/shifts')
+}
+
+export async function bulkDeleteRecurringShifts(groupId: string, fromShiftId: string) {
+  const admin = createAdminClient()
+
+  const { data: refShift } = await admin
+    .from('shifts')
+    .select('start_time')
+    .eq('id', fromShiftId)
+    .single()
+  if (!refShift) throw new Error('Reference shift not found')
+
+  const { error } = await admin
+    .from('shifts')
+    .delete()
+    .eq('recurrence_group_id', groupId)
+    .gte('start_time', refShift.start_time)
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/dashboard/shifts')
 }
 
 export async function updateShift(id: string, data: {

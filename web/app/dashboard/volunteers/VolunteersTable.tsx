@@ -80,7 +80,7 @@ export default function VolunteersTable({
         v.email.toLowerCase().includes(q)
       )
     }
-    if (category) rows = rows.filter(v => v.category === category)
+    if (category) rows = rows.filter(v => v.volunteer_categories.includes(category as any))
     if (status)   rows = rows.filter(v => v.status === status)
     if (location) rows = rows.filter(v => v.locations.some(l => l.toLowerCase().includes(location.toLowerCase())))
     rows.sort((a, b) => {
@@ -256,7 +256,7 @@ export default function VolunteersTable({
             </thead>
             <tbody>
               {filtered.map((v, i) => {
-                const catStyle  = CATEGORY_COLORS[v.category] ?? CATEGORY_COLORS.other
+                const catStyle  = CATEGORY_COLORS[v.volunteer_categories[0] ?? v.category] ?? CATEGORY_COLORS.other
                 const statStyle = STATUS_COLORS[v.status] ?? STATUS_COLORS.inactive
                 const step      = PHASE_STEP[v.pipeline_phase]
                 const total     = 6
@@ -288,9 +288,16 @@ export default function VolunteersTable({
                     </td>
                     {/* Category */}
                     <td style={{ padding: '12px 12px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 500, padding: '3px 9px', borderRadius: '6px', background: catStyle.bg, color: catStyle.text }}>
-                        {CATEGORY_LABELS[v.category]}
-                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {v.volunteer_categories.map(cat => {
+                          const cs = CATEGORY_COLORS[cat] ?? CATEGORY_COLORS.other
+                          return (
+                            <span key={cat} style={{ fontSize: '12px', fontWeight: 500, padding: '3px 9px', borderRadius: '6px', background: cs.bg, color: cs.text, whiteSpace: 'nowrap' }}>
+                              {CATEGORY_LABELS[cat]}
+                            </span>
+                          )
+                        })}
+                      </div>
                     </td>
                     {/* Status */}
                     <td style={{ padding: '12px 12px' }}>
@@ -367,7 +374,7 @@ export default function VolunteersTable({
         {/* ── Mobile card list (hidden on desktop) ── */}
         <div className="vol-card-view">
           {filtered.map((v, i) => {
-            const catStyle  = CATEGORY_COLORS[v.category] ?? CATEGORY_COLORS.other
+            const catStyle  = CATEGORY_COLORS[v.volunteer_categories[0] ?? v.category] ?? CATEGORY_COLORS.other
             const statStyle = STATUS_COLORS[v.status] ?? STATUS_COLORS.inactive
             const step      = PHASE_STEP[v.pipeline_phase]
             const total     = 6
@@ -408,11 +415,16 @@ export default function VolunteersTable({
                     <ChevronRight style={{ width: '15px', height: '15px', color: 'var(--text-faint)', flexShrink: 0, marginTop: '2px' }} />
                   </div>
 
-                  {/* Row 2: category badge + hours */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '5px', background: catStyle.bg, color: catStyle.text }}>
-                      {CATEGORY_LABELS[v.category]}
-                    </span>
+                  {/* Row 2: category badges + hours */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
+                    {v.volunteer_categories.map(cat => {
+                      const cs = CATEGORY_COLORS[cat] ?? CATEGORY_COLORS.other
+                      return (
+                        <span key={cat} style={{ fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '5px', background: cs.bg, color: cs.text, whiteSpace: 'nowrap' }}>
+                          {CATEGORY_LABELS[cat]}
+                        </span>
+                      )
+                    })}
                     {v.active_flags.length > 0 && (
                       <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '5px', background: v.active_flags[0].severity === 'critical' ? '#fef2f2' : v.active_flags[0].severity === 'warning' ? '#fffbeb' : '#eff6ff', color: v.active_flags[0].severity === 'critical' ? '#dc2626' : v.active_flags[0].severity === 'warning' ? '#f59e0b' : '#3b82f6' }}>
                         {v.active_flags.length} flag{v.active_flags.length !== 1 ? 's' : ''}

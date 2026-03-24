@@ -29,6 +29,7 @@ interface EditState {
   email: string
   phone: string
   category: VolunteerCategory
+  volunteer_categories: VolunteerCategory[]
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -55,13 +56,28 @@ export default function InfoTab({
   const [editLocationIds, setEditLocationIds] = useState<string[]>([])
 
   function makeForm(vol: VolunteerDetail): EditState {
+    const cats = (vol as any).volunteer_categories?.length
+      ? (vol as any).volunteer_categories as VolunteerCategory[]
+      : [vol.category]
     return {
-      first_name: vol.first_name,
-      last_name:  vol.last_name,
-      email:      vol.email,
-      phone:      vol.phone ?? '',
-      category:   vol.category,
+      first_name:           vol.first_name,
+      last_name:            vol.last_name,
+      email:                vol.email,
+      phone:                vol.phone ?? '',
+      category:             cats[0],
+      volunteer_categories: cats,
     }
+  }
+
+  function toggleCategory(cat: VolunteerCategory) {
+    setForm(prev => {
+      const has = prev.volunteer_categories.includes(cat)
+      if (has && prev.volunteer_categories.length === 1) return prev // require at least one
+      const next = has
+        ? prev.volunteer_categories.filter(c => c !== cat)
+        : [...prev.volunteer_categories, cat]
+      return { ...prev, volunteer_categories: next, category: next[0] }
+    })
   }
 
   function startEdit() {
@@ -88,7 +104,7 @@ export default function InfoTab({
     setError(null)
 
     const [infoResult, locResult] = await Promise.all([
-      updateVolunteerInfo(v.id, form),
+      updateVolunteerInfo(v.id, { ...form, volunteer_categories: form.volunteer_categories }),
       updateVolunteerLocations(v.id, editLocationIds),
     ])
 
@@ -107,7 +123,7 @@ export default function InfoTab({
       last_name:  form.last_name.trim(),
       email:      form.email.trim().toLowerCase(),
       phone:      form.phone.trim() || null,
-      category:   form.category,
+      category:   form.volunteer_categories[0] ?? form.category,
       locations:  newLocations,
     }))
     setEditing(false)
@@ -198,16 +214,34 @@ export default function InfoTab({
           <EditField label="Last Name"  value={form.last_name}  onChange={v => field('last_name', v)}  required />
           <EditField label="Email"      value={form.email}      onChange={v => field('email', v)}      type="email" required />
           <EditField label="Phone"      value={form.phone}      onChange={v => field('phone', v)}      type="tel" />
-          {/* Category dropdown */}
-          <div>
-            <label style={labelStyle}>Category</label>
-            <select
-              value={form.category}
-              onChange={e => field('category', e.target.value as VolunteerCategory)}
-              style={inputStyle}
-            >
-              {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+          {/* Category multi-select — spans full width */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>
+              Category <span style={{ fontSize: '10px', fontWeight: 400, color: '#d1d5db' }}>(select all that apply)</span>
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '2px' }}>
+              {CATEGORY_OPTIONS.map(o => {
+                const checked = form.volunteer_categories.includes(o.value)
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => toggleCategory(o.value)}
+                    style={{
+                      padding: '6px 14px', borderRadius: '8px', cursor: 'pointer',
+                      fontSize: '13px', fontWeight: 600, border: '1.5px solid',
+                      borderColor: checked ? '#1B2A4A' : '#e5e7eb',
+                      background: checked ? '#1B2A4A' : 'white',
+                      color: checked ? 'white' : '#374151',
+                      transition: 'all 0.15s',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    {o.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
           {/* Status — read-only, controlled by pipeline */}
           <ReadonlyField label="Status" value={STATUS_LABELS[v.status] ?? v.status} hint="Managed via Pipeline tab" />
@@ -254,7 +288,6 @@ export default function InfoTab({
             { label: 'Last Name',         value: v.last_name },
             { label: 'Email',             value: v.email },
             { label: 'Phone',             value: v.phone ?? '—' },
-            { label: 'Category',          value: CATEGORY_OPTIONS.find(o => o.value === v.category)?.label ?? v.category },
             { label: 'Status',            value: STATUS_LABELS[v.status] ?? v.status },
             { label: 'Emergency Contact', value: v.emergency_contact_name ?? '—' },
             { label: 'Emergency Phone',   value: v.emergency_contact_phone ?? '—' },
@@ -269,6 +302,22 @@ export default function InfoTab({
               <p style={{ fontSize: '14px', color: '#111827', fontWeight: 500 }}>{value}</p>
             </div>
           ))}
+          {/* Categories — full width */}
+          <div style={{ gridColumn: '1 / -1', padding: '14px 16px', background: '#fafafa', borderRadius: '8px', border: '1px solid #f3f4f6' }}>
+            <p style={{ fontSize: '11px', fontWeight: 500, color: '#9ca3af', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {((v as any).volunteer_categories?.length ?? 0) > 1 ? 'Categories' : 'Category'}
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {((v as any).volunteer_categories?.length
+                ? (v as any).volunteer_categories as VolunteerCategory[]
+                : [v.category]
+              ).map((cat: VolunteerCategory) => (
+                <span key={cat} style={{ fontSize: '13px', fontWeight: 500, padding: '3px 10px', borderRadius: '6px', background: '#1B2A4A1a', color: '#1B2A4A', border: '1px solid #1B2A4A33' }}>
+                  {CATEGORY_OPTIONS.find(o => o.value === cat)?.label ?? cat}
+                </span>
+              ))}
+            </div>
+          </div>
           {/* Locations — full-width row */}
           <div style={{
             gridColumn: '1 / -1',

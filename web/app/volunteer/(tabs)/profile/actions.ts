@@ -242,6 +242,33 @@ export async function updateEmergencyContact(
   return {}
 }
 
+// ─── Preferred Language ───────────────────────────────────────────────────────
+
+export async function updatePreferredLanguage(
+  volunteerId: string,
+  lang: string,
+): Promise<{ error?: string }> {
+  if (!['en', 'es'].includes(lang)) return { error: 'Invalid language.' }
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+  const admin = createAdminClient()
+  const { data: vol } = await admin
+    .from('volunteers')
+    .select('id')
+    .eq('id', volunteerId)
+    .eq('user_id', user.id)
+    .single()
+  if (!vol) return { error: 'Permission denied.' }
+  const { error } = await admin
+    .from('volunteers')
+    .update({ preferred_language: lang })
+    .eq('id', volunteerId)
+  if (error) return { error: error.message }
+  revalidatePath('/volunteer/profile')
+  return {}
+}
+
 // ─── Signed URL ───────────────────────────────────────────────────────────────
 
 export async function getUploadSignedUrl(

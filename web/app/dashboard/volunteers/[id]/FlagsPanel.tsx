@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { raiseFlag, resolveFlag } from './actions'
+import { raiseFlag, resolveFlag, unresolveFlag } from './actions'
 import type { OrgFlag, VolunteerFlag, FlagSeverity } from '@/types/database'
 
 const SEV_STYLES: Record<FlagSeverity, { bg: string; text: string; icon: string; border: string }> = {
@@ -70,6 +70,21 @@ export default function FlagsPanel({
         // Roll back
         setActive(a => [...a, entry])
         setResolved(r => r.filter(f => f.id !== id))
+      }
+    })
+  }
+
+  function handleUnresolve(id: string) {
+    const entry = resolved.find(f => f.id === id)
+    if (!entry) return
+    setResolved(r => r.filter(f => f.id !== id))
+    setActive(a => [...a, { ...entry, resolved_at: null }])
+    startTransition(async () => {
+      const res = await unresolveFlag(id)
+      if (res.error) {
+        // Roll back
+        setResolved(r => [...r, entry])
+        setActive(a => a.filter(f => f.id !== id))
       }
     })
   }
@@ -243,13 +258,20 @@ export default function FlagsPanel({
           {showResolved && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {resolved.map(vf => (
-                <div key={vf.id} style={{ background: '#f9fafb', border: '1px solid #f0f0f0', borderRadius: 8, padding: '8px 14px', opacity: 0.7 }}>
+                <div key={vf.id} style={{ background: '#f9fafb', border: '1px solid #f0f0f0', borderRadius: 8, padding: '8px 14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 13, color: '#6b7280' }}>✓</span>
                     <span style={{ fontSize: 13, color: '#6b7280', textDecoration: 'line-through' }}>{vf.flag.name}</span>
-                    <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 'auto' }} suppressHydrationWarning>
+                    <span style={{ fontSize: 11, color: '#9ca3af' }} suppressHydrationWarning>
                       Resolved {vf.resolved_at ? new Date(vf.resolved_at).toLocaleDateString() : ''}
                     </span>
+                    <button
+                      onClick={() => handleUnresolve(vf.id)}
+                      disabled={pending}
+                      style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: '#6b7280', background: 'none', border: '1px solid #e5e7eb', borderRadius: 5, padding: '3px 8px', cursor: 'pointer', flexShrink: 0 }}
+                    >
+                      Unresolve
+                    </button>
                   </div>
                 </div>
               ))}

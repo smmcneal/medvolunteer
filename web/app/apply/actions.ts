@@ -27,7 +27,7 @@ export async function submitApplication(input: ApplicationInput): Promise<{ erro
     .maybeSingle()
   if (existing) return { error: 'An application with this email already exists.' }
 
-  const { error } = await admin.from('volunteers').insert({
+  const { data: newVol, error } = await admin.from('volunteers').insert({
     org_id: org.id,
     first_name: input.first_name.trim(),
     last_name: input.last_name.trim(),
@@ -37,25 +37,46 @@ export async function submitApplication(input: ApplicationInput): Promise<{ erro
     status: 'applicant',
     pipeline_phase: 'intake',
     user_id: null,
-    // Store the message as a note — will be created after volunteer insert
-  })
+  }).select('id').single()
 
-  if (error) return { error: error.message }
+  if (error || !newVol) return { error: error?.message ?? 'Failed to submit application.' }
 
   // Add the message as the first note if provided
   if (input.message.trim()) {
-    const { data: volunteer } = await admin
-      .from('volunteers')
-      .select('id')
-      .eq('email', input.email.trim().toLowerCase())
-      .single()
+    await admin.from('volunteer_notes').insert({
+      volunteer_id: newVol.id,
+      content: `Application message: ${input.message.trim()}`,
+      created_by: null,
+    })
+  }
 
-    if (volunteer) {
-      await admin.from('volunteer_notes').insert({
-        volunteer_id: volunteer.id,
-        content: `Application message: ${input.message.trim()}`,
-        created_by: null,
-      })
+  // Evaluate form automation rules
+  const { data: rules } = await admin
+    .from('form_automation_rules')
+    .select('*')
+    .eq('org_id', org.id)
+
+  if (rules && rules.length > 0) {
+    const formData: Record<string, string> = { category: input.category }
+    for (const rule of rules) {
+      if (!(rule.field_key in formData) || formData[rule.field_key] !== rule.field_value) continue
+      if (rule.action_type === 'assign_category') {
+        const allCats = [input.category, rule.action_value]
+        await admin.from('volunteers').update({
+          volunteer_categories: allCats,
+        }).eq('id', newVol.id)
+      } else if (rule.action_type === 'assign_flag') {
+        await admin.from('volunteer_flags').insert({
+          volunteer_id: newVol.id,
+          flag_id: rule.action_value,
+          notes: 'Auto-assigned by form automation',
+        })
+      } else if (rule.action_type === 'assign_tag') {
+        await admin.from('volunteer_tags').insert({
+          volunteer_id: newVol.id,
+          tag_id: rule.action_value,
+        })
+      }
     }
   }
 

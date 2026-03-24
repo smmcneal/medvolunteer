@@ -2,9 +2,9 @@
 
 import { useState, useTransition, useMemo } from 'react'
 import type { MessageWithRecipients } from './page'
-import type { Volunteer, MessageChannel, VolunteerCategory } from '@/types/database'
-import { sendMessage } from './actions'
-import { ChevronLeft, Send, CheckCheck, Eye, Users, Inbox } from 'lucide-react'
+import type { Volunteer, MessageChannel, VolunteerCategory, MessageTemplate } from '@/types/database'
+import { sendMessage, saveTemplate, deleteTemplate } from './actions'
+import { ChevronLeft, Send, CheckCheck, Eye, Users, Inbox, FileText, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -46,9 +46,10 @@ function formatDate(dateStr: string) {
 interface Props {
   initialMessages: MessageWithRecipients[]
   volunteers: Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'email' | 'phone' | 'category' | 'status'>[]
+  templates: MessageTemplate[]
 }
 
-export default function MessagesView({ initialMessages, volunteers }: Props) {
+export default function MessagesView({ initialMessages, volunteers, templates }: Props) {
   // Mobile panel state — 'list' shows sidebar, 'main' shows compose/detail
   const [mobilePanel, setMobilePanel] = useState<'list' | 'main'>('main')
 
@@ -67,6 +68,13 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
+  // Template state
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [isPendingTemplate, startTemplateTransition] = useTransition()
+  const [templateError, setTemplateError] = useState<string | null>(null)
 
   const recipientIds = useMemo(() => {
     if (recipientType === 'all') return volunteers.map(v => v.id)
@@ -104,6 +112,15 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
   }
 
   function openCompose() {
+    setView('compose')
+    setSelectedMsg(null)
+    setMobilePanel('main')
+  }
+
+  function useTemplateInCompose(t: MessageTemplate) {
+    setSubject(t.subject)
+    setBody(t.body)
+    setChannel(t.channel)
     setView('compose')
     setSelectedMsg(null)
     setMobilePanel('main')
@@ -189,7 +206,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
         </div>
 
         {/* Message list */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ flex: '1 1 0', overflowY: 'auto', minHeight: 0 }}>
           {filteredMessages.length === 0 && (
             <div style={{ padding: '48px 24px', textAlign: 'center' }}>
               <Inbox style={{ width: '28px', height: '28px', color: 'var(--surface-border)', margin: '0 auto 8px' }} />
@@ -247,6 +264,80 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
               </div>
             )
           })}
+        </div>
+
+        {/* Templates section */}
+        <div style={{ borderTop: '1px solid var(--surface-border-sub)', flexShrink: 0 }}>
+          <button
+            onClick={() => setShowTemplates(!showTemplates)}
+            style={{
+              width: '100%', padding: '10px 16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 700,
+              fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.06em',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <FileText style={{ width: '12px', height: '12px' }} />
+              Templates
+              <span style={{
+                padding: '1px 6px', borderRadius: '99px', fontSize: '10px',
+                background: 'var(--surface-bg)', color: 'var(--text-muted)',
+                border: '1px solid var(--surface-border)',
+                textTransform: 'none', letterSpacing: 0,
+              }}>{templates.length}</span>
+            </span>
+            {showTemplates
+              ? <ChevronDown style={{ width: '13px', height: '13px' }} />
+              : <ChevronRight style={{ width: '13px', height: '13px' }} />}
+          </button>
+          {showTemplates && (
+            <div style={{ borderTop: '1px solid var(--surface-border-sub)', maxHeight: 180, overflowY: 'auto' }}>
+              {templates.length === 0 ? (
+                <p style={{ fontSize: '12px', color: 'var(--text-faint)', padding: '12px 16px', textAlign: 'center' }}>
+                  No templates yet. Compose a message and save it as a template.
+                </p>
+              ) : templates.map(t => (
+                <div
+                  key={t.id}
+                  style={{
+                    padding: '8px 16px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
+                    borderBottom: '1px solid var(--surface-border-sub)',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', margin: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{t.name}</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{t.subject || '(no subject)'}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                    <button
+                      onClick={() => useTemplateInCompose(t)}
+                      style={{
+                        padding: '3px 9px', borderRadius: '6px', border: 'none',
+                        background: 'var(--navy)', color: 'white',
+                        fontSize: '10px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                        letterSpacing: '0.02em',
+                      }}
+                    >Use</button>
+                    <button
+                      onClick={() => startTemplateTransition(async () => { await deleteTemplate(t.id) })}
+                      style={{
+                        padding: '3px 6px', borderRadius: '6px',
+                        border: '1px solid var(--surface-border)',
+                        background: 'transparent', color: 'var(--text-muted)',
+                        fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      }}
+                      title="Delete template"
+                    >
+                      <Trash2 style={{ width: '11px', height: '11px' }} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -448,27 +539,90 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
               />
             </div>
 
-            {/* Send */}
-            <button
-              onClick={handleSend}
-              disabled={!canSend}
-              style={{
-                padding: '11px 24px', borderRadius: '9px',
-                fontSize: '13px', fontWeight: 700, border: 'none',
-                cursor: canSend ? 'pointer' : 'not-allowed',
-                background: canSend ? 'var(--navy)' : 'var(--surface-border)',
-                color: canSend ? 'white' : 'var(--text-faint)',
-                display: 'flex', alignItems: 'center', gap: '7px',
-                fontFamily: 'inherit', letterSpacing: '-0.01em',
-                boxShadow: canSend ? '0 2px 8px rgba(27,42,74,0.2)' : 'none',
-                transition: 'background 0.15s, box-shadow 0.15s',
-              }}
-            >
-              <Send style={{ width: '13px', height: '13px' }} />
-              {isPending
-                ? 'Sending…'
-                : `Send ${CHANNEL_CONFIG[channel].icon} to ${recipientIds.length} volunteer${recipientIds.length !== 1 ? 's' : ''}`}
-            </button>
+            {/* Send + Save as Template */}
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <button
+                onClick={handleSend}
+                disabled={!canSend}
+                style={{
+                  padding: '11px 24px', borderRadius: '9px',
+                  fontSize: '13px', fontWeight: 700, border: 'none',
+                  cursor: canSend ? 'pointer' : 'not-allowed',
+                  background: canSend ? 'var(--navy)' : 'var(--surface-border)',
+                  color: canSend ? 'white' : 'var(--text-faint)',
+                  display: 'flex', alignItems: 'center', gap: '7px',
+                  fontFamily: 'inherit', letterSpacing: '-0.01em',
+                  boxShadow: canSend ? '0 2px 8px rgba(27,42,74,0.2)' : 'none',
+                  transition: 'background 0.15s, box-shadow 0.15s',
+                }}
+              >
+                <Send style={{ width: '13px', height: '13px' }} />
+                {isPending
+                  ? 'Sending…'
+                  : `Send ${CHANNEL_CONFIG[channel].icon} to ${recipientIds.length} volunteer${recipientIds.length !== 1 ? 's' : ''}`}
+              </button>
+              <button
+                onClick={() => { setSavingTemplate(true); setTemplateName(''); setTemplateError(null) }}
+                style={{
+                  padding: '11px 18px', borderRadius: '9px',
+                  border: '1px solid var(--surface-border)',
+                  background: 'var(--surface-card)', color: 'var(--text-secondary)',
+                  fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  fontFamily: 'inherit',
+                }}
+              >
+                <FileText style={{ width: '13px', height: '13px' }} />
+                Save as Template
+              </button>
+            </div>
+
+            {/* Save template inline form */}
+            {savingTemplate && (
+              <div style={{ marginTop: '12px', padding: '12px 14px', borderRadius: '9px', background: 'rgba(27,42,74,0.04)', border: '1px solid rgba(27,42,74,0.10)' }}>
+                <label style={labelStyle}>Template name</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    value={templateName}
+                    onChange={e => setTemplateName(e.target.value)}
+                    placeholder="e.g. Shift reminder, HIPAA notice…"
+                    autoFocus
+                    style={fieldStyle}
+                  />
+                  <button
+                    onClick={() => {
+                      setTemplateError(null)
+                      startTemplateTransition(async () => {
+                        try {
+                          await saveTemplate({ name: templateName, subject: subject, body: body, channel })
+                          setSavingTemplate(false)
+                        } catch (e) {
+                          setTemplateError(e instanceof Error ? e.message : 'Failed to save')
+                        }
+                      })
+                    }}
+                    disabled={isPendingTemplate || !templateName.trim()}
+                    style={{
+                      padding: '9px 16px', borderRadius: '8px', border: 'none',
+                      background: 'var(--navy)', color: 'white',
+                      fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                      fontFamily: 'inherit', whiteSpace: 'nowrap',
+                      opacity: isPendingTemplate ? 0.7 : 1,
+                    }}
+                  >{isPendingTemplate ? 'Saving…' : 'Save'}</button>
+                  <button
+                    onClick={() => setSavingTemplate(false)}
+                    style={{
+                      padding: '9px 12px', borderRadius: '8px',
+                      border: '1px solid var(--surface-border)',
+                      background: 'transparent', color: 'var(--text-secondary)',
+                      fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >Cancel</button>
+                </div>
+                {templateError && <p style={{ fontSize: '12px', color: '#dc2626', marginTop: '6px' }}>{templateError}</p>}
+              </div>
+            )}
           </div>
         )}
 

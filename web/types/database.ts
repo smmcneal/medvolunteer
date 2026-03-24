@@ -71,11 +71,13 @@ export interface Volunteer {
   phone: string | null
   photo_url: string | null
   category: VolunteerCategory
+  volunteer_categories: VolunteerCategory[]
   status: VolunteerStatus
   pipeline_phase: PipelinePhase
   onboarding_workflow_id: string | null
   emergency_contact_name: string | null
   emergency_contact_phone: string | null
+  preferred_language: string
   handbook_signed_at: string | null
   handbook_signed_name: string | null
   checklist_bg_form_signed: boolean
@@ -165,6 +167,9 @@ export interface Shift {
   required_count: number
   role_requirements: unknown[]
   notes: string | null
+  recurrence_rule: string | null
+  recurrence_group_id: string | null
+  recurrence_end_date: string | null
   created_at: string
 }
 
@@ -315,6 +320,75 @@ export interface MessageRecipient {
   read_at: string | null
 }
 
+export interface MessageTemplate {
+  id: string
+  org_id: string
+  name: string
+  subject: string
+  body: string
+  channel: MessageChannel
+  created_at: string
+}
+
+export interface AutoMessageRule {
+  id: string
+  org_id: string
+  name: string
+  trigger_type: 'shift_reminder' | 'cert_expiry' | 'open_shift'
+  template_id: string | null
+  days_before: number
+  channel: 'email' | 'sms' | 'push'
+  is_active: boolean
+  created_at: string
+}
+
+export interface FormAutomationRule {
+  id: string
+  org_id: string
+  field_key: string
+  field_value: string
+  action_type: 'assign_category' | 'assign_flag' | 'assign_tag'
+  action_value: string
+  created_at: string
+}
+
+export interface CategoryCoordinator {
+  id: string
+  category: string
+  coordinator_volunteer_id: string
+  created_at: string
+}
+
+export interface CategoryRequirement {
+  id: string
+  org_id: string
+  category_name: string
+  title: string
+  description: string | null
+  is_blocking: boolean
+  created_at: string
+}
+
+export interface InternalAlert {
+  id: string
+  triggered_by: string | null
+  assigned_to: string | null
+  volunteer_id: string | null
+  message: string
+  action_type: string
+  is_read: boolean
+  created_at: string
+  volunteer?: { id: string; first_name: string; last_name: string } | null
+}
+
+export interface DocumentAutomationRule {
+  id: string
+  trigger_document_type: string
+  alert_message: string
+  assigned_to: string | null
+  created_at: string
+}
+
 export interface PushSubscription {
   id: string
   volunteer_id: string
@@ -374,4 +448,13 @@ export interface ExpiringCredential extends Credential {
 export interface RecentCheckIn extends TimeEntry {
   volunteer: Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'photo_url' | 'category'>
   location: Pick<Location, 'id' | 'name'> | null
+}
+
+export interface OrgHoliday {
+  id: string
+  org_id: string
+  name: string
+  date: string          // 'YYYY-MM-DD'
+  is_recurring: boolean
+  created_at: string
 }

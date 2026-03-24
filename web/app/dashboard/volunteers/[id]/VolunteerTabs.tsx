@@ -65,6 +65,7 @@ export default function VolunteerTabs({
   orgTags,
   orgFlags,
   orgLocations,
+  jotformApiKey,
 }: {
   volunteer: VolunteerDetail
   credentials: Credential[]
@@ -81,6 +82,7 @@ export default function VolunteerTabs({
   orgTags: OrgTag[]
   orgFlags: OrgFlag[]
   orgLocations?: Pick<Location, 'id' | 'name'>[]
+  jotformApiKey?: string | null
 }) {
   const [activeTab, setActiveTab] = useState<Tab>('Info')
 
@@ -591,6 +593,7 @@ export default function VolunteerTabs({
             volunteerId={volunteer.id}
             uploads={uploads.filter(u => u.category !== 'credential')}
             signedDocuments={documents}
+            jotformApiKey={jotformApiKey}
           />
         )}
 

@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_noStore as noStore } from 'next/cache'
 import ShiftsView from './ShiftsView'
-import type { Location, Volunteer, TimeEntry } from '@/types/database'
+import type { Location, Volunteer, TimeEntry, OrgHoliday } from '@/types/database'
 
 // Force dynamic rendering so router.refresh() always re-runs this page
 export const dynamic = 'force-dynamic'
@@ -27,6 +27,9 @@ export interface ShiftWithRoster {
   end_time: string
   required_count: number
   notes: string | null
+  recurrence_rule: string | null
+  recurrence_group_id: string | null
+  recurrence_end_date: string | null
   assignments: AssignmentWithVolunteer[]
 }
 
@@ -44,11 +47,12 @@ async function fetchShiftsData() {
   rangeEnd.setMonth(rangeEnd.getMonth() + 4)
   rangeEnd.setDate(0)
 
-  const [shiftsRes, locationsRes, volunteersRes] = await Promise.all([
+  const [shiftsRes, locationsRes, volunteersRes, holidaysRes] = await Promise.all([
     supabase
       .from('shifts')
       .select(`
         id, name, location_id, start_time, end_time, required_count, notes,
+        recurrence_rule, recurrence_group_id, recurrence_end_date,
         location:locations(id, name),
         shift_assignments(
           id, role, status, volunteer_id, mentor_id,
@@ -70,6 +74,10 @@ async function fetchShiftsData() {
       .select('id, first_name, last_name, category, status, pipeline_phase')
       .in('status', ['volunteer', 'prospect'])
       .order('first_name'),
+
+    supabase
+      .from('org_holidays')
+      .select('id, name, date, is_recurring'),
   ])
 
   // Fetch time entries for all these shifts
@@ -97,6 +105,9 @@ async function fetchShiftsData() {
     end_time: s.end_time,
     required_count: s.required_count,
     notes: s.notes,
+    recurrence_rule: (s as any).recurrence_rule ?? null,
+    recurrence_group_id: (s as any).recurrence_group_id ?? null,
+    recurrence_end_date: (s as any).recurrence_end_date ?? null,
     assignments: ((s.shift_assignments ?? []) as unknown as AssignmentWithVolunteer[]).map(a => ({
       ...a,
       time_entry: teByKey[`${s.id}_${a.volunteer_id}`] ?? null,
@@ -107,17 +118,18 @@ async function fetchShiftsData() {
     shifts,
     locations: (locationsRes.data ?? []) as Pick<Location, 'id' | 'name'>[],
     volunteers: (volunteersRes.data ?? []) as Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'category' | 'status' | 'pipeline_phase'>[],
+    holidays: (holidaysRes.data ?? []) as Pick<OrgHoliday, 'id' | 'name' | 'date' | 'is_recurring'>[],
   }
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function ShiftsPage() {
-  const { shifts, locations, volunteers } = await fetchShiftsData()
+  const { shifts, locations, volunteers, holidays } = await fetchShiftsData()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <ShiftsView shifts={shifts} locations={locations} volunteers={volunteers} />
+      <ShiftsView shifts={shifts} locations={locations} volunteers={volunteers} holidays={holidays} />
     </div>
   )
 }

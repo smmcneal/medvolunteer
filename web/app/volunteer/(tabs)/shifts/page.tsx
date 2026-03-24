@@ -167,6 +167,7 @@ export default async function ShiftsPage() {
     <ShiftsView
       assignments={enriched}
       volunteerId={volunteer.id}
+      orgId={volunteer.org_id}
       availableShifts={availableShifts}
     />
   )

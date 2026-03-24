@@ -30,7 +30,7 @@ async function fetchVolunteer(id: string) {
   const supabase = createAdminClient()
 
   const [volunteerRes, credsRes, docsRes, bgCheckRes, timeRes, learningRes,
-         notesRes, volTagsRes, volFlagsRes, orgTagsRes, orgFlagsRes, uploadsRes, orgLocationsRes] = await Promise.all([
+         notesRes, volTagsRes, volFlagsRes, orgTagsRes, orgFlagsRes, uploadsRes, orgLocationsRes, orgSettingsRes] = await Promise.all([
     supabase
       .from('volunteers')
       .select('*, volunteer_locations(location:locations(*))')
@@ -48,6 +48,7 @@ async function fetchVolunteer(id: string) {
     supabase.from('org_flags').select('*').order('name'),
     supabase.from('volunteer_uploads').select('*').eq('volunteer_id', id).order('uploaded_at', { ascending: false }),
     supabase.from('locations').select('id, name').eq('is_active', true).order('name'),
+    supabase.from('organizations').select('settings').limit(1).single(),
   ])
 
   if (!volunteerRes.data) return null
@@ -83,6 +84,8 @@ async function fetchVolunteer(id: string) {
   const activeFlags   = allFlags.filter(f => !f.resolved_at)
   const resolvedFlags = allFlags.filter(f => !!f.resolved_at)
 
+  const jotformApiKey = ((orgSettingsRes.data?.settings as Record<string, unknown>)?.jotform_api_key as string) ?? null
+
   return {
     volunteer,
     credentials:       (credsRes.data ?? []) as Credential[],
@@ -99,6 +102,7 @@ async function fetchVolunteer(id: string) {
     orgTags:      (orgTagsRes.data ?? []) as OrgTag[],
     orgFlags:     (orgFlagsRes.data ?? []) as OrgFlag[],
     orgLocations: (orgLocationsRes.data ?? []) as Pick<Location, 'id' | 'name'>[],
+    jotformApiKey,
   }
 }
 
@@ -137,6 +141,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
     volunteer, credentials, documents, uploads, backgroundCheck,
     timeEntries, onboardingStages, lessonCompletions,
     notes, appliedTags, activeFlags, resolvedFlags, orgTags, orgFlags, orgLocations,
+    jotformApiKey,
   } = data
 
   const statStyle = STATUS_COLORS[volunteer.status] ?? STATUS_COLORS.inactive
@@ -244,6 +249,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
         orgTags={orgTags}
         orgFlags={orgFlags}
         orgLocations={orgLocations}
+        jotformApiKey={jotformApiKey}
       />
     </div>
   )

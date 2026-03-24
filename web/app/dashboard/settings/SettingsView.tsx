@@ -1,18 +1,40 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import type { Organization, Location, OrgTag, OrgFlag } from '@/types/database'
+import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule } from '@/types/database'
 import {
   updateOrgProfile,
   updateOrgSettings,
   createLocation,
   updateLocation,
   deleteLocation,
+  updateCategoryDescriptions,
+  addHoliday,
+  deleteHoliday,
+  saveFormAutomationRule,
+  deleteFormAutomationRule,
+  saveAutoMessageRule,
+  deleteAutoMessageRule,
+  toggleAutoMessageRule,
+  addCategoryRequirement,
+  deleteCategoryRequirement,
+  assignCategoryCoordinator,
+  removeCategoryCoordinator,
+  saveDocumentAutomationRule,
+  deleteDocumentAutomationRule,
 } from './actions'
 import TagsManager from './TagsManager'
 import FlagsManager from './FlagsManager'
 
-type Tab = 'profile' | 'locations' | 'integrations' | 'tags' | 'flags'
+type Tab = 'profile' | 'locations' | 'integrations' | 'categories' | 'holidays' | 'automation' | 'tags' | 'flags'
+
+const VOLUNTEER_CATEGORIES: { value: string; label: string }[] = [
+  { value: 'medical_professional', label: 'Medical Professional' },
+  { value: 'support_staff',        label: 'Support Staff' },
+  { value: 'admin',                label: 'Admin' },
+  { value: 'trainee',              label: 'Trainee' },
+  { value: 'other',                label: 'Other' },
+]
 
 interface OrgSettings {
   checkr_api_key?: string
@@ -25,6 +47,9 @@ interface OrgSettings {
   vapid_public_key?: string
   vapid_private_key?: string
   vapid_subject?: string
+  category_descriptions?: Record<string, string>
+  jotform_api_key?: string
+  require_hour_approval?: boolean
 }
 
 interface Props {
@@ -32,9 +57,17 @@ interface Props {
   locations: Location[]
   initialTags: OrgTag[]
   initialFlags: OrgFlag[]
+  initialHolidays: OrgHoliday[]
+  initialAutomationRules: FormAutomationRule[]
+  initialAutoMessageRules: AutoMessageRule[]
+  messageTemplates: Pick<MessageTemplate, 'id' | 'name' | 'subject' | 'channel'>[]
+  initialCategoryRequirements: CategoryRequirement[]
+  initialCoordinators: CategoryCoordinator[]
+  activeVolunteers: { id: string; first_name: string; last_name: string }[]
+  initialDocRules: DocumentAutomationRule[]
 }
 
-export default function SettingsView({ org, locations: initialLocations, initialTags, initialFlags }: Props) {
+export default function SettingsView({ org, locations: initialLocations, initialTags, initialFlags, initialHolidays, initialAutomationRules, initialAutoMessageRules, messageTemplates, initialCategoryRequirements, initialCoordinators, activeVolunteers, initialDocRules }: Props) {
   const [tab, setTab] = useState<Tab>('profile')
 
   return (
@@ -51,7 +84,10 @@ export default function SettingsView({ org, locations: initialLocations, initial
           { key: 'profile',      label: '🏢 Org Profile' },
           { key: 'locations',    label: '📍 Locations' },
           { key: 'integrations', label: '🔗 Integrations' },
-          { key: 'tags',         label: '🏷 Tags' },
+          { key: 'categories',   label: '🗂 Categories' },
+          { key: 'holidays',    label: '📅 Holidays' },
+          { key: 'automation',  label: '⚡ Automation' },
+          { key: 'tags',        label: '🏷 Tags' },
           { key: 'flags',        label: '🚩 Flags' },
         ] as { key: Tab; label: string }[]).map(t => (
           <button
@@ -76,7 +112,10 @@ export default function SettingsView({ org, locations: initialLocations, initial
         {tab === 'profile'      && <ProfileTab org={org} />}
         {tab === 'locations'    && <LocationsTab locations={initialLocations} />}
         {tab === 'integrations' && <IntegrationsTab settings={(org?.settings as OrgSettings) ?? {}} />}
-        {tab === 'tags'         && <TagsManager initialTags={initialTags} />}
+        {tab === 'categories'   && <CategoriesTab descriptions={((org?.settings as OrgSettings)?.category_descriptions) ?? {}} requirements={initialCategoryRequirements} coordinators={initialCoordinators} activeVolunteers={activeVolunteers} />}
+        {tab === 'holidays'    && <HolidaysTab initialHolidays={initialHolidays} />}
+        {tab === 'automation'  && <AutomationTab initialRules={initialAutomationRules} orgTags={initialTags} orgFlags={initialFlags} initialAutoMessageRules={initialAutoMessageRules} messageTemplates={messageTemplates} initialDocRules={initialDocRules} activeVolunteers={activeVolunteers} />}
+        {tab === 'tags'        && <TagsManager initialTags={initialTags} />}
         {tab === 'flags'        && <FlagsManager initialFlags={initialFlags} />}
       </div>
     </div>
@@ -416,6 +455,21 @@ function IntegrationsTab({ settings: initialSettings }: { settings: OrgSettings 
         docsUrl="https://checkr.com"
       />
 
+      {/* Jotform */}
+      <IntegrationCard
+        name="Jotform"
+        description="Send forms to volunteers for signatures and document collection"
+        icon="📋"
+        color="#FF6100"
+        saved={saved === 'jotform'}
+        isPending={isPending}
+        fields={[
+          { label: 'API Key', key: 'jotform_api_key', placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', value: initialSettings.jotform_api_key ?? '', secret: true },
+        ]}
+        onSave={(vals) => saveSection('jotform', vals)}
+        docsUrl="https://api.jotform.com"
+      />
+
       {/* DocuSign */}
       <IntegrationCard
         name="DocuSign"
@@ -448,6 +502,781 @@ function IntegrationsTab({ settings: initialSettings }: { settings: OrgSettings 
         onSave={(vals) => saveSection('vapid', vals)}
         docsUrl="https://web.dev/push-notifications-web-push-protocol"
       />
+
+      {/* Hour approval toggle */}
+      <div style={{ marginTop: 24, padding: '16px 20px', background: '#f9fafb', borderRadius: 10, border: '1px solid #f0f0f0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 3 }}>Require manual hour approval</p>
+            <p style={{ fontSize: 12, color: '#6b7280' }}>
+              When enabled, hours clocked out by volunteers appear as &quot;pending&quot; in Reports until an admin approves them.
+            </p>
+          </div>
+          <button
+            disabled={isPending}
+            onClick={() => saveSection('hour_approval', { require_hour_approval: !initialSettings.require_hour_approval })}
+            style={{
+              padding: '7px 16px', borderRadius: 7, fontSize: 13, fontWeight: 600,
+              border: '1px solid #e5e7eb', cursor: 'pointer', flexShrink: 0,
+              background: initialSettings.require_hour_approval ? '#1B2A4A' : '#fff',
+              color: initialSettings.require_hour_approval ? '#fff' : '#374151',
+            }}
+          >
+            {initialSettings.require_hour_approval ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Automation Tab ───────────────────────────────────────────────────────────
+
+function AutomationTab({
+  initialRules,
+  orgTags,
+  orgFlags,
+  initialAutoMessageRules,
+  messageTemplates,
+  initialDocRules,
+  activeVolunteers,
+}: {
+  initialRules: FormAutomationRule[]
+  orgTags: OrgTag[]
+  orgFlags: OrgFlag[]
+  initialAutoMessageRules: AutoMessageRule[]
+  messageTemplates: Pick<MessageTemplate, 'id' | 'name' | 'subject' | 'channel'>[]
+  initialDocRules: DocumentAutomationRule[]
+  activeVolunteers: { id: string; first_name: string; last_name: string }[]
+}) {
+  const [rules, setRules] = useState(initialRules)
+  const [fieldKey, setFieldKey] = useState('category')
+  const [fieldValue, setFieldValue] = useState('')
+  const [actionType, setActionType] = useState<FormAutomationRule['action_type']>('assign_category')
+  const [actionValue, setActionValue] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  // Document automation
+  const [docRules, setDocRules] = useState<DocumentAutomationRule[]>(initialDocRules)
+  const [docType, setDocType] = useState('')
+  const [docMessage, setDocMessage] = useState('')
+  const [docAssignedTo, setDocAssignedTo] = useState('')
+  const [docError, setDocError] = useState<string | null>(null)
+  const [docPending, startDocTransition] = useTransition()
+
+  function handleAddDocRule(e: React.FormEvent) {
+    e.preventDefault()
+    setDocError(null)
+    startDocTransition(async () => {
+      try {
+        await saveDocumentAutomationRule({ trigger_document_type: docType, alert_message: docMessage, assigned_to: docAssignedTo || null })
+        setDocType('')
+        setDocMessage('')
+        setDocAssignedTo('')
+      } catch (err: unknown) {
+        setDocError(err instanceof Error ? err.message : 'Failed to save')
+      }
+    })
+  }
+
+  function handleDeleteDocRule(ruleId: string) {
+    setDocRules(prev => prev.filter(r => r.id !== ruleId))
+    startDocTransition(async () => { await deleteDocumentAutomationRule(ruleId) })
+  }
+
+  // Auto Message Rules state
+  const [msgRules, setMsgRules] = useState(initialAutoMessageRules)
+  const [msgName, setMsgName] = useState('')
+  const [msgTrigger, setMsgTrigger] = useState('shift_reminder')
+  const [msgTemplateId, setMsgTemplateId] = useState(messageTemplates[0]?.id ?? '')
+  const [msgDaysBefore, setMsgDaysBefore] = useState(1)
+  const [msgChannel, setMsgChannel] = useState('email')
+  const [msgError, setMsgError] = useState<string | null>(null)
+  const [msgPending, startMsgTransition] = useTransition()
+
+  function handleAddMsg(e: React.FormEvent) {
+    e.preventDefault()
+    setMsgError(null)
+    startMsgTransition(async () => {
+      try {
+        await saveAutoMessageRule({ name: msgName, triggerType: msgTrigger, templateId: msgTemplateId, daysBefore: msgDaysBefore, channel: msgChannel })
+        setMsgName('')
+      } catch (err: unknown) {
+        setMsgError(err instanceof Error ? err.message : 'Failed to save')
+      }
+    })
+  }
+
+  function handleDeleteMsg(ruleId: string) {
+    startMsgTransition(async () => {
+      await deleteAutoMessageRule(ruleId)
+      setMsgRules(prev => prev.filter(r => r.id !== ruleId))
+    })
+  }
+
+  function handleToggleMsg(ruleId: string, current: boolean) {
+    startMsgTransition(async () => {
+      await toggleAutoMessageRule(ruleId, !current)
+      setMsgRules(prev => prev.map(r => r.id === ruleId ? { ...r, is_active: !current } : r))
+    })
+  }
+
+  const MSG_TRIGGER_LABELS: Record<string, string> = {
+    shift_reminder: 'Shift Reminder',
+    cert_expiry: 'Credential Expiry',
+    open_shift: 'Open Shift Broadcast',
+  }
+
+  function handleAdd(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    startTransition(async () => {
+      try {
+        await saveFormAutomationRule({ fieldKey, fieldValue, actionType, actionValue })
+        setFieldValue('')
+        setActionValue('')
+        // Optimistically add a placeholder — page will refresh on next load
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to save')
+      }
+    })
+  }
+
+  function handleDelete(ruleId: string) {
+    startTransition(async () => {
+      await deleteFormAutomationRule(ruleId)
+      setRules(prev => prev.filter(r => r.id !== ruleId))
+    })
+  }
+
+  function actionValueOptions() {
+    if (actionType === 'assign_category') return VOLUNTEER_CATEGORIES.map(c => c.value)
+    if (actionType === 'assign_flag') return orgFlags.map(f => f.id)
+    if (actionType === 'assign_tag') return orgTags.map(t => t.id)
+    return []
+  }
+
+  function actionValueLabel(val: string) {
+    if (actionType === 'assign_category') return VOLUNTEER_CATEGORIES.find(c => c.value === val)?.label ?? val
+    if (actionType === 'assign_flag') return orgFlags.find(f => f.id === val)?.name ?? val
+    if (actionType === 'assign_tag') return orgTags.find(t => t.id === val)?.name ?? val
+    return val
+  }
+
+  const inputStyle: React.CSSProperties = {
+    padding: '7px 10px', fontSize: '13px',
+    border: '1px solid #e5e7eb', borderRadius: '7px',
+    fontFamily: 'inherit', outline: 'none', width: '100%', boxSizing: 'border-box' as const,
+  }
+
+  return (
+    <div>
+      <SectionHeader title="Form Automation" desc="Auto-assign categories, flags, or tags when an applicant's field matches a value." />
+
+      <form onSubmit={handleAdd} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '20px' }}>
+        <div style={{ flex: '1 1 110px' }}>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Field</label>
+          <select value={fieldKey} onChange={e => setFieldKey(e.target.value)} style={inputStyle}>
+            <option value="category">Category</option>
+          </select>
+        </div>
+        <div style={{ flex: '1 1 130px' }}>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Equals</label>
+          <input required value={fieldValue} onChange={e => setFieldValue(e.target.value)} placeholder="Value" style={inputStyle} />
+        </div>
+        <div style={{ flex: '1 1 140px' }}>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Action</label>
+          <select value={actionType} onChange={e => { setActionType(e.target.value as FormAutomationRule['action_type']); setActionValue('') }} style={inputStyle}>
+            <option value="assign_category">Assign Category</option>
+            <option value="assign_flag">Raise Flag</option>
+            <option value="assign_tag">Add Tag</option>
+          </select>
+        </div>
+        <div style={{ flex: '1 1 150px' }}>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Value</label>
+          {actionType === 'assign_category' ? (
+            <select value={actionValue} onChange={e => setActionValue(e.target.value)} required style={inputStyle}>
+              <option value="">— select —</option>
+              {VOLUNTEER_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          ) : (
+            <select value={actionValue} onChange={e => setActionValue(e.target.value)} required style={inputStyle}>
+              <option value="">— select —</option>
+              {actionValueOptions().map(v => <option key={v} value={v}>{actionValueLabel(v)}</option>)}
+            </select>
+          )}
+        </div>
+        <button type="submit" disabled={isPending}
+          style={{
+            padding: '7px 14px', borderRadius: '7px', fontSize: '13px', fontWeight: 600,
+            border: 'none', background: '#1B2A4A', color: 'white',
+            cursor: isPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+            opacity: isPending ? 0.7 : 1, flexShrink: 0,
+          }}
+        >
+          + Add Rule
+        </button>
+        {error && <p style={{ width: '100%', fontSize: '12px', color: '#dc2626', margin: 0 }}>{error}</p>}
+      </form>
+
+      {rules.length === 0 ? (
+        <p style={{ fontSize: '13px', color: '#9ca3af', textAlign: 'center', padding: '20px 0' }}>No automation rules yet</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {rules.map(rule => (
+            <div key={rule.id} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 14px', borderRadius: '8px',
+              border: '1px solid #f3f4f6', background: 'white', gap: '12px',
+            }}>
+              <span style={{ fontSize: '13px', color: '#374151' }}>
+                If <strong>{rule.field_key}</strong> = &ldquo;<strong>{rule.field_value}</strong>&rdquo;
+                &nbsp;→ <strong>{rule.action_type.replace('_', ' ')}</strong>{' '}
+                <em>{actionValueLabel(rule.action_value)}</em>
+              </span>
+              <button onClick={() => handleDelete(rule.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d1d5db', padding: '2px', display: 'flex', flexShrink: 0 }}
+                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = '#ef4444')}
+                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = '#d1d5db')}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Auto Messages ── */}
+      <div style={{ marginTop: '32px' }}>
+        <SectionHeader title="Auto Messages" desc="Send automated messages to volunteers based on shift reminders, expiring credentials, or open shifts." />
+
+        <form onSubmit={handleAddMsg} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '20px' }}>
+          <div style={{ flex: '1 1 130px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Rule Name</label>
+            <input required value={msgName} onChange={e => setMsgName(e.target.value)} placeholder="e.g. Shift reminder 2d" style={inputStyle} />
+          </div>
+          <div style={{ flex: '1 1 150px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Trigger</label>
+            <select value={msgTrigger} onChange={e => setMsgTrigger(e.target.value)} style={inputStyle}>
+              <option value="shift_reminder">Shift Reminder</option>
+              <option value="cert_expiry">Credential Expiry</option>
+              <option value="open_shift">Open Shift Broadcast</option>
+            </select>
+          </div>
+          <div style={{ flex: '0 0 70px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Days Before</label>
+            <input type="number" min={0} max={90} value={msgDaysBefore} onChange={e => setMsgDaysBefore(Number(e.target.value))} style={{ ...inputStyle, width: '70px' }} />
+          </div>
+          <div style={{ flex: '1 1 150px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Template</label>
+            {messageTemplates.length === 0 ? (
+              <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>No templates — create one in Messages.</p>
+            ) : (
+              <select value={msgTemplateId} onChange={e => setMsgTemplateId(e.target.value)} required style={inputStyle}>
+                {messageTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            )}
+          </div>
+          <div style={{ flex: '0 0 auto' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Channel</label>
+            <select value={msgChannel} onChange={e => setMsgChannel(e.target.value)} style={{ ...inputStyle, width: 'auto' }}>
+              <option value="email">Email</option>
+              <option value="sms">SMS</option>
+              <option value="push">Push</option>
+            </select>
+          </div>
+          <button type="submit" disabled={msgPending || messageTemplates.length === 0}
+            style={{
+              padding: '7px 14px', borderRadius: '7px', fontSize: '13px', fontWeight: 600,
+              border: 'none', background: '#1B2A4A', color: 'white',
+              cursor: (msgPending || messageTemplates.length === 0) ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit', opacity: (msgPending || messageTemplates.length === 0) ? 0.7 : 1, flexShrink: 0,
+            }}
+          >
+            + Add Rule
+          </button>
+          {msgError && <p style={{ width: '100%', fontSize: '12px', color: '#dc2626', margin: 0 }}>{msgError}</p>}
+        </form>
+
+        {msgRules.length === 0 ? (
+          <p style={{ fontSize: '13px', color: '#9ca3af', textAlign: 'center', padding: '20px 0' }}>No auto message rules yet</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {msgRules.map(rule => {
+              const tpl = messageTemplates.find(t => t.id === rule.template_id)
+              return (
+                <div key={rule.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '10px 14px', borderRadius: '8px',
+                  border: '1px solid #f3f4f6', background: 'white',
+                }}>
+                  <span style={{
+                    fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px',
+                    background: rule.is_active ? '#ecfdf5' : '#f3f4f6',
+                    color: rule.is_active ? '#065f46' : '#9ca3af',
+                    flexShrink: 0,
+                  }}>
+                    {rule.is_active ? 'Active' : 'Paused'}
+                  </span>
+                  <span style={{ fontSize: '13px', color: '#374151', flex: 1 }}>
+                    <strong>{rule.name}</strong>
+                    <span style={{ color: '#9ca3af' }}> · {MSG_TRIGGER_LABELS[rule.trigger_type] ?? rule.trigger_type}, {rule.days_before}d before · {tpl?.name ?? rule.template_id} · {rule.channel}</span>
+                  </span>
+                  <button
+                    onClick={() => handleToggleMsg(rule.id, rule.is_active)}
+                    disabled={msgPending}
+                    style={{
+                      padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600,
+                      border: '1px solid #e5e7eb', background: 'white', color: '#374151',
+                      cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+                    }}
+                  >
+                    {rule.is_active ? 'Pause' : 'Resume'}
+                  </button>
+                  <button onClick={() => handleDeleteMsg(rule.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d1d5db', padding: '2px', display: 'flex', flexShrink: 0 }}
+                    onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = '#ef4444')}
+                    onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = '#d1d5db')}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Document Automation Rules ── */}
+      <div style={{ marginTop: '24px' }}>
+        <p style={{ fontSize: '14px', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>Document Alerts</p>
+        <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '14px' }}>
+          When a document of a specific type is added, send an internal alert to a staff member for follow-up.
+        </p>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden', background: 'white', marginBottom: '10px' }}>
+          {docRules.length === 0 ? (
+            <p style={{ fontSize: '13px', color: '#9ca3af', padding: '12px 16px' }}>No rules yet.</p>
+          ) : (
+            docRules.map((rule, idx) => {
+              const assignedVol = activeVolunteers.find(v => v.id === rule.assigned_to)
+              return (
+                <div key={rule.id} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: '12px',
+                  padding: '10px 16px',
+                  borderBottom: idx < docRules.length - 1 ? '1px solid #f3f4f6' : 'none',
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>When: <span style={{ color: '#1B2A4A' }}>{rule.trigger_document_type}</span> added</p>
+                    <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>Alert: {rule.alert_message}</p>
+                    {assignedVol && <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>→ {assignedVol.first_name} {assignedVol.last_name}</p>}
+                  </div>
+                  <button onClick={() => handleDeleteDocRule(rule.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d1d5db', padding: '2px' }}>✕</button>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        <form onSubmit={handleAddDocRule} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <input
+              value={docType}
+              onChange={e => setDocType(e.target.value)}
+              placeholder="Document type (e.g. Background Check)"
+              style={{ flex: '1 1 180px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '13px', fontFamily: 'inherit' }}
+            />
+            <input
+              value={docMessage}
+              onChange={e => setDocMessage(e.target.value)}
+              placeholder="Alert message"
+              style={{ flex: '2 1 200px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '13px', fontFamily: 'inherit' }}
+            />
+            <select
+              value={docAssignedTo}
+              onChange={e => setDocAssignedTo(e.target.value)}
+              style={{ flex: '1 1 150px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '13px', fontFamily: 'inherit', background: 'white' }}
+            >
+              <option value="">— Assign to (optional) —</option>
+              {activeVolunteers.map(v => (
+                <option key={v.id} value={v.id}>{v.first_name} {v.last_name}</option>
+              ))}
+            </select>
+          </div>
+          {docError && <p style={{ fontSize: '12px', color: '#dc2626' }}>{docError}</p>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="submit"
+              disabled={!docType.trim() || !docMessage.trim() || docPending}
+              style={{
+                padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
+                background: '#1B2A4A', color: 'white', border: 'none', cursor: 'pointer',
+                fontFamily: 'inherit', opacity: !docType.trim() || !docMessage.trim() ? 0.5 : 1,
+              }}
+            >
+              + Add Alert Rule
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Holidays Tab ─────────────────────────────────────────────────────────────
+
+function HolidaysTab({ initialHolidays }: { initialHolidays: OrgHoliday[] }) {
+  const [holidays, setHolidays] = useState<OrgHoliday[]>(initialHolidays)
+  const [name, setName] = useState('')
+  const [date, setDate] = useState('')
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  function handleAdd() {
+    if (!name.trim() || !date) return
+    setError(null)
+    startTransition(async () => {
+      try {
+        await addHoliday({ name: name.trim(), date, is_recurring: isRecurring })
+        setName('')
+        setDate('')
+        setIsRecurring(false)
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to add holiday')
+      }
+    })
+  }
+
+  function handleDelete(id: string) {
+    setError(null)
+    startTransition(async () => {
+      try {
+        await deleteHoliday(id)
+        setHolidays(prev => prev.filter(h => h.id !== id))
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to delete holiday')
+      }
+    })
+  }
+
+  function formatDate(dateStr: string) {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  return (
+    <div>
+      <SectionHeader
+        title="Holidays & Closures"
+        desc="Holidays are shown on the shift calendar. Recurring holidays repeat on the same month and day every year."
+      />
+
+      {error && <ErrorBanner msg={error} />}
+
+      {/* Add form */}
+      <div style={{
+        border: '1px solid #e5e7eb', borderRadius: '10px',
+        padding: '16px', background: '#f9fafb', marginBottom: '16px',
+      }}>
+        <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+          Add Holiday
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', alignItems: 'flex-end' }}>
+          <div>
+            <label style={labelStyle}>Holiday Name</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Thanksgiving"
+              style={fieldStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              style={{ ...fieldStyle, width: 'auto' }}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginTop: '10px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#374151', cursor: 'pointer' }}>
+            <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} />
+            Repeat every year (recurring)
+          </label>
+          <button
+            onClick={handleAdd}
+            disabled={!name.trim() || !date || isPending}
+            style={{ ...primaryBtn, opacity: !name.trim() || !date ? 0.5 : 1, cursor: !name.trim() || !date ? 'not-allowed' : 'pointer' }}
+          >
+            + Add Holiday
+          </button>
+        </div>
+      </div>
+
+      {/* Holiday list */}
+      {holidays.length === 0 ? (
+        <EmptyState icon="📅" msg="No holidays configured yet." />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {[...holidays].sort((a, b) => a.date.localeCompare(b.date)).map(h => (
+            <div key={h.id} style={{
+              border: '1px solid #e5e7eb', borderRadius: '10px', background: 'white',
+              padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
+            }}>
+              <span style={{ fontSize: '20px' }}>📅</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{h.name}</div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                  {formatDate(h.date)}
+                  {h.is_recurring && ' · Recurring yearly'}
+                </div>
+              </div>
+              <button
+                onClick={() => handleDelete(h.id)}
+                disabled={isPending}
+                style={{ ...ghostBtnSm, color: '#dc2626', borderColor: '#fca5a5' }}
+              >✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Categories Tab ───────────────────────────────────────────────────────────
+
+function CategoriesTab({ descriptions: initial, requirements: initialRequirements, coordinators: initialCoordinators, activeVolunteers }: { descriptions: Record<string, string>; requirements: CategoryRequirement[]; coordinators: CategoryCoordinator[]; activeVolunteers: { id: string; first_name: string; last_name: string }[] }) {
+  const [descriptions, setDescriptions] = useState<Record<string, string>>(initial)
+  const [isPending, startTransition] = useTransition()
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Coordinators
+  const [coordinators, setCoordinators] = useState<CategoryCoordinator[]>(initialCoordinators)
+  const [coordPending, startCoordTransition] = useTransition()
+
+  function handleAssignCoordinator(category: string, volId: string) {
+    if (!volId) {
+      handleRemoveCoordinator(category)
+      return
+    }
+    const existing = coordinators.find(c => c.category === category)
+    if (existing) {
+      setCoordinators(cs => cs.map(c => c.category === category ? { ...c, coordinator_volunteer_id: volId } : c))
+    } else {
+      const temp: CategoryCoordinator = { id: crypto.randomUUID(), category, coordinator_volunteer_id: volId, created_at: new Date().toISOString() }
+      setCoordinators(cs => [...cs, temp])
+    }
+    startCoordTransition(async () => {
+      try { await assignCategoryCoordinator(category, volId) } catch { /* ignore */ }
+    })
+  }
+
+  function handleRemoveCoordinator(category: string) {
+    setCoordinators(cs => cs.filter(c => c.category !== category))
+    startCoordTransition(async () => {
+      try { await removeCategoryCoordinator(category) } catch { /* ignore */ }
+    })
+  }
+
+  // Requirements
+  const [requirements, setRequirements] = useState<CategoryRequirement[]>(initialRequirements)
+  const [expandedReqCat, setExpandedReqCat] = useState<string | null>(null)
+  const [reqTitle, setReqTitle] = useState('')
+  const [reqDesc, setReqDesc] = useState('')
+  const [reqBlocking, setReqBlocking] = useState(false)
+  const [reqPending, startReqTransition] = useTransition()
+  const [reqError, setReqError] = useState<string | null>(null)
+
+  function handleSave() {
+    setError(null)
+    setSaved(false)
+    startTransition(async () => {
+      try {
+        await updateCategoryDescriptions(descriptions)
+        setSaved(true)
+        setTimeout(() => setSaved(false), 3000)
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to save')
+      }
+    })
+  }
+
+  function handleAddRequirement(categoryName: string) {
+    if (!reqTitle.trim()) return
+    setReqError(null)
+    startReqTransition(async () => {
+      try {
+        await addCategoryRequirement({ category_name: categoryName, title: reqTitle.trim(), description: reqDesc.trim() || undefined, is_blocking: reqBlocking })
+        // Optimistically add to local state while page refreshes
+        setReqTitle('')
+        setReqDesc('')
+        setReqBlocking(false)
+      } catch (e: unknown) {
+        setReqError(e instanceof Error ? e.message : 'Failed to add requirement')
+      }
+    })
+  }
+
+  function handleDeleteRequirement(reqId: string) {
+    startReqTransition(async () => {
+      try {
+        await deleteCategoryRequirement(reqId)
+        setRequirements(prev => prev.filter(r => r.id !== reqId))
+      } catch {}
+    })
+  }
+
+  return (
+    <div>
+      <SectionHeader
+        title="Volunteer Categories"
+        desc="Add descriptions to each role to help volunteers and admins understand what each category means."
+      />
+
+      {error && <ErrorBanner msg={error} />}
+      {saved && <SuccessBanner msg="Category descriptions saved" />}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+        {VOLUNTEER_CATEGORIES.map(cat => (
+          <div key={cat.value} style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: '10px',
+            padding: '14px 16px',
+            background: 'white',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <span style={{
+                padding: '2px 10px',
+                borderRadius: '99px',
+                fontSize: '12px',
+                fontWeight: 700,
+                background: '#f3f4f6',
+                color: '#374151',
+              }}>{cat.label}</span>
+              <code style={{ fontSize: '11px', color: '#9ca3af' }}>{cat.value}</code>
+            </div>
+            <input
+              value={descriptions[cat.value] ?? ''}
+              onChange={e => setDescriptions(prev => ({ ...prev, [cat.value]: e.target.value }))}
+              placeholder={`Describe the ${cat.label} role…`}
+              style={fieldStyle}
+            />
+          </div>
+        ))}
+      </div>
+
+      <SaveButton onClick={handleSave} isPending={isPending} />
+
+      {/* ── Requirements ── */}
+      <div style={{ marginTop: '28px' }}>
+        <p style={{ fontSize: '14px', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>Category Requirements</p>
+        <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '14px', lineHeight: 1.5 }}>
+          Define prerequisites volunteers must satisfy. Blocking requirements prevent shift sign-up until met.
+        </p>
+        {VOLUNTEER_CATEGORIES.map(cat => {
+          const catReqs = requirements.filter(r => r.category_name === cat.value)
+          const isExpanded = expandedReqCat === cat.value
+          return (
+            <div key={cat.value} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', background: 'white', marginBottom: '8px', overflow: 'hidden' }}>
+              <button
+                onClick={() => setExpandedReqCat(isExpanded ? null : cat.value)}
+                style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'inherit' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>{cat.label}</span>
+                  {catReqs.length > 0 && (
+                    <span style={{ fontSize: '11px', background: '#f3f4f6', color: '#6b7280', borderRadius: '10px', padding: '1px 7px', fontWeight: 600 }}>{catReqs.length}</span>
+                  )}
+                  {catReqs.some(r => r.is_blocking) && (
+                    <span style={{ fontSize: '10px', background: '#fef2f2', color: '#dc2626', borderRadius: '6px', padding: '1px 6px', fontWeight: 700 }}>BLOCKING</span>
+                  )}
+                </div>
+                <span style={{ fontSize: '11px', color: '#9ca3af' }}>{isExpanded ? '▲' : '▼'}</span>
+              </button>
+              {isExpanded && (
+                <div style={{ borderTop: '1px solid #f3f4f6', padding: '14px 16px' }}>
+                  {catReqs.length === 0 ? (
+                    <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '12px' }}>No requirements yet.</p>
+                  ) : (
+                    <div style={{ marginBottom: '14px' }}>
+                      {catReqs.map(req => (
+                        <div key={req.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '8px 0', borderBottom: '1px solid #f9fafb' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{req.title}</span>
+                              {req.is_blocking && (
+                                <span style={{ fontSize: '10px', background: '#fef2f2', color: '#dc2626', borderRadius: '4px', padding: '1px 5px', fontWeight: 700 }}>Blocking</span>
+                              )}
+                            </div>
+                            {req.description && <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>{req.description}</p>}
+                          </div>
+                          <button onClick={() => handleDeleteRequirement(req.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d1d5db', padding: '2px', flexShrink: 0, fontSize: '16px' }}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <input value={reqTitle} onChange={e => setReqTitle(e.target.value)} placeholder="Requirement title (e.g. Valid CPR Certification)" style={fieldStyle} />
+                    <input value={reqDesc} onChange={e => setReqDesc(e.target.value)} placeholder="Description (optional)" style={{ ...fieldStyle, fontSize: '12px' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#374151', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={reqBlocking} onChange={e => setReqBlocking(e.target.checked)} />
+                        Blocking
+                      </label>
+                      <button
+                        onClick={() => handleAddRequirement(cat.value)}
+                        disabled={!reqTitle.trim() || reqPending}
+                        style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, background: '#1B2A4A', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit', opacity: !reqTitle.trim() ? 0.5 : 1 }}
+                      >
+                        + Add
+                      </button>
+                    </div>
+                    {reqError && <p style={{ fontSize: '12px', color: '#dc2626' }}>{reqError}</p>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── Coordinators per category ── */}
+      <div style={{ marginTop: '24px' }}>
+        <p style={{ fontSize: '14px', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>Category Coordinators</p>
+        <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '14px' }}>
+          Assign a lead volunteer for each category. Coordinators receive notifications when shifts are created for their category.
+        </p>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden', background: 'white' }}>
+          {VOLUNTEER_CATEGORIES.map((cat, idx) => {
+            const coord = coordinators.find(c => c.category === cat.value)
+            const currentVolId = coord?.coordinator_volunteer_id ?? ''
+            return (
+              <div key={cat.value} style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                padding: '10px 16px',
+                borderBottom: idx < VOLUNTEER_CATEGORIES.length - 1 ? '1px solid #f3f4f6' : 'none',
+              }}>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151', minWidth: '160px' }}>{cat.label}</span>
+                <select
+                  value={currentVolId}
+                  onChange={e => handleAssignCoordinator(cat.value, e.target.value)}
+                  disabled={coordPending}
+                  style={{ flex: 1, maxWidth: '260px', padding: '7px 10px', borderRadius: '7px', border: '1px solid #e5e7eb', fontSize: '13px', background: 'white', fontFamily: 'inherit', color: '#111827' }}
+                >
+                  <option value="">— No coordinator —</option>
+                  {activeVolunteers.map(v => (
+                    <option key={v.id} value={v.id}>{v.first_name} {v.last_name}</option>
+                  ))}
+                </select>
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }

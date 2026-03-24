@@ -7,8 +7,11 @@ import {
   MapPin, Clock, Users, Trash2, UserPlus, X,
   LogIn, LogOut, AlertCircle, Search, ArrowLeft, GraduationCap,
 } from 'lucide-react'
+import CalendarWeekView from './CalendarWeekView'
+import CalendarDayView from './CalendarDayView'
 import {
   createShift, deleteShift,
+  createRecurringShifts, bulkUpdateRecurringShifts, bulkDeleteRecurringShifts,
   assignVolunteer, assignTraineeWithMentor, removeAssignment,
   manualClockIn, manualClockOut,
 } from './actions'
@@ -95,18 +98,28 @@ export default function ShiftsView({
   shifts,
   locations,
   volunteers,
+  holidays = [],
 }: {
   shifts: ShiftWithRoster[]
   locations: Pick<Location, 'id' | 'name'>[]
   volunteers: VolunteerLike[]
+  holidays?: { id: string; name: string; date: string; is_recurring: boolean }[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
   const today = new Date()
-  const [view, setView]         = useState<'calendar' | 'list'>('calendar')
+  const [view, setView]         = useState<'calendar' | 'list' | 'week' | 'day'>('calendar')
   const [calYear, setCalYear]   = useState(today.getFullYear())
   const [calMonth, setCalMonth] = useState(today.getMonth())
+  const [weekStart, setWeekStart] = useState<Date>(() => {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    d.setDate(d.getDate() - d.getDay())
+    return d
+  })
+  const [selectedDayView, setSelectedDayView] = useState<Date>(() =>
+    new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  )
   const [selectedId, setSelectedId]     = useState<string | null>(null)
   const [showCreate, setShowCreate]     = useState(false)
   const [createForm, setCreateForm]     = useState<CreateForm>(EMPTY_CREATE)
@@ -122,6 +135,12 @@ export default function ShiftsView({
   // Mentor-pairing state: when a trainee is selected, wait for mentor pick
   const [pendingTrainee, setPendingTrainee] = useState<VolunteerLike | null>(null)
   const [mentorSearch, setMentorSearch]     = useState('')
+
+  // Recurring shift creation state
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [recurFrequency, setRecurFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly')
+  const [recurEndDate, setRecurEndDate] = useState('')
+
 
   const selected = shifts.find(s => s.id === selectedId) ?? null
 
@@ -158,6 +177,21 @@ export default function ShiftsView({
     }
     return map
   }, [shifts])
+
+  const holidayByDay = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const h of holidays) {
+      if (h.is_recurring) {
+        const [, mm, dd] = h.date.split('-')
+        for (let y = calYear - 1; y <= calYear + 1; y++) {
+          map.set(`${y}-${mm}-${dd}`, h.name)
+        }
+      } else {
+        map.set(h.date, h.name)
+      }
+    }
+    return map
+  }, [holidays, calYear])
 
   function prevMonth() {
     if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11) }
@@ -210,15 +244,31 @@ export default function ShiftsView({
     if (!createForm.name || !createForm.start_date || !createForm.start_time || !createForm.end_date || !createForm.end_time) return
     run(async () => {
       const shiftDate = new Date(buildISO(createForm.start_date, createForm.start_time))
-      const { shiftId } = await createShift({
+      const shiftData = {
         name: createForm.name,
         location_id: createForm.location_id || null,
         start_time: buildISO(createForm.start_date, createForm.start_time),
         end_time: buildISO(createForm.end_date, createForm.end_time),
         required_count: parseInt(createForm.required_count) || 1,
         notes: createForm.notes,
-        volunteer_ids: [...createVolunteerIds],
-      })
+      }
+
+      if (isRecurring) {
+        await createRecurringShifts(shiftData, recurFrequency, recurEndDate || null)
+        setCreateForm(EMPTY_CREATE)
+        setIsRecurring(false)
+        setRecurFrequency('weekly')
+        setRecurEndDate('')
+        setCreateVolunteerIds(new Set())
+        setCreateVolSearch('')
+        setShowCreate(false)
+        setCalYear(shiftDate.getFullYear())
+        setCalMonth(shiftDate.getMonth())
+        setView('calendar')
+        return
+      }
+
+      const { shiftId } = await createShift({ ...shiftData, volunteer_ids: [...createVolunteerIds] })
       setCreateForm(EMPTY_CREATE)
       setCreateVolunteerIds(new Set())
       setCreateVolSearch('')
@@ -232,8 +282,19 @@ export default function ShiftsView({
   }
 
   function handleDelete(id: string) {
-    if (!confirm('Delete this shift?')) return
-    run(async () => { await deleteShift(id); setSelectedId(null) })
+    const s = shifts.find(x => x.id === id)
+    if (s?.recurrence_group_id) {
+      // For recurring shifts, show a two-option confirm
+      const choice = window.confirm('Delete all future shifts in this series?\n\nOK = Delete this and all future shifts\nCancel = Delete only this shift')
+      if (choice) {
+        run(async () => { await bulkDeleteRecurringShifts(s.recurrence_group_id!, id); setSelectedId(null) })
+      } else {
+        run(async () => { await deleteShift(id); setSelectedId(null) })
+      }
+    } else {
+      if (!confirm('Delete this shift?')) return
+      run(async () => { await deleteShift(id); setSelectedId(null) })
+    }
   }
 
   function handlePickVolunteer(v: VolunteerLike) {
@@ -323,16 +384,22 @@ export default function ShiftsView({
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {/* View toggle */}
           <div style={{ display: 'flex', border: '1px solid var(--surface-border)', borderRadius: '8px', overflow: 'hidden', background: 'white' }}>
-            {(['calendar', 'list'] as const).map(v => (
-              <button key={v} onClick={() => setView(v)} className="shift-view-toggle-btn" style={{
-                padding: '7px 14px', border: 'none', cursor: 'pointer',
-                background: view === v ? NAVY : 'transparent',
-                color: view === v ? 'white' : 'var(--text-muted)',
-                fontSize: '13px', fontWeight: 500,
-                display: 'flex', alignItems: 'center', gap: '5px',
+            {([
+              { key: 'calendar', label: 'Month', icon: <Calendar style={{ width: '13px', height: '13px' }} /> },
+              { key: 'week',     label: 'Week',  icon: null },
+              { key: 'day',      label: 'Day',   icon: null },
+              { key: 'list',     label: 'List',  icon: <List style={{ width: '13px', height: '13px' }} /> },
+            ] as const).map(({ key, label, icon }) => (
+              <button key={key} onClick={() => setView(key as any)} className="shift-view-toggle-btn" style={{
+                padding: '7px 12px', border: 'none', cursor: 'pointer',
+                background: view === key ? NAVY : 'transparent',
+                color: view === key ? 'white' : 'var(--text-muted)',
+                fontSize: '12px', fontWeight: 500,
+                display: 'flex', alignItems: 'center', gap: '4px',
+                borderLeft: key !== 'calendar' ? '1px solid var(--surface-border)' : 'none',
               }}>
-                {v === 'calendar' ? <Calendar style={{ width: '13px', height: '13px' }} /> : <List style={{ width: '13px', height: '13px' }} />}
-                {v.charAt(0).toUpperCase() + v.slice(1)}
+                {icon}
+                {label}
               </button>
             ))}
           </div>
@@ -418,17 +485,18 @@ export default function ShiftsView({
                   const dayShifts = shiftsByDate[key] ?? []
                   const isToday = cell.toDateString() === today.toDateString()
                   const isPast = cell < today && !isToday
+                  const holidayName = holidayByDay.get(key) ?? null
 
                   return (
                     <div key={i} className="shift-cal-cell" style={{
-                      background: isPast ? 'var(--surface-bg)' : 'var(--surface-card)',
+                      background: holidayName ? '#fef9f0' : isPast ? 'var(--surface-bg)' : 'var(--surface-card)',
                       minHeight: '100px', padding: '7px 6px',
                       position: 'relative',
                     }}>
                       <div style={{
                         width: '24px', height: '24px', borderRadius: '50%',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        marginBottom: '5px',
+                        marginBottom: '3px',
                         background: isToday ? TEAL : 'transparent',
                         color: isToday ? 'white' : isPast ? 'var(--text-faint)' : 'var(--text-secondary)',
                         fontSize: '12px', fontWeight: isToday ? 700 : 500,
@@ -436,6 +504,17 @@ export default function ShiftsView({
                       }}>
                         {cell.getDate()}
                       </div>
+
+                      {holidayName && (
+                        <div style={{
+                          fontSize: '9.5px', fontWeight: 600, color: '#92400e',
+                          background: '#fde68a', borderRadius: '3px',
+                          padding: '1px 4px', marginBottom: '3px',
+                          overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                        }} title={holidayName}>
+                          🏖 {holidayName}
+                        </div>
+                      )}
 
                       {dayShifts.slice(0, 2).map(s => {
                         const color = locationColor(s.location_id, locations)
@@ -534,7 +613,18 @@ export default function ShiftsView({
                             <td style={{ padding: '13px 20px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <div style={{ width: '3px', height: '30px', borderRadius: '2px', background: color, flexShrink: 0 }} />
-                                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</span>
+                                <div>
+                                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</span>
+                                  {s.recurrence_rule && (
+                                    <span style={{
+                                      marginLeft: '7px', fontSize: '10px', fontWeight: 700,
+                                      padding: '1px 6px', borderRadius: '4px',
+                                      background: '#ede9fe', color: '#6d28d9',
+                                    }}>
+                                      ↻ {s.recurrence_rule === 'biweekly' ? 'Biweekly' : s.recurrence_rule.charAt(0).toUpperCase() + s.recurrence_rule.slice(1)}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
                             <td style={{ padding: '13px 20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
@@ -574,6 +664,67 @@ export default function ShiftsView({
               )}
             </div>
           )}
+
+          {/* ── Week view ──────────────────────────────────────── */}
+          {view === 'week' && (
+            <div style={{ background: 'var(--surface-card)', borderRadius: '12px', border: '1px solid var(--surface-border)', overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 16px', borderBottom: '1px solid var(--surface-border-sub)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <button onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <ChevronLeft style={{ width: '14px', height: '14px' }} />
+                  </button>
+                  <button onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <ChevronRight style={{ width: '14px', height: '14px' }} />
+                  </button>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(weekStart)}
+                    {' – '}
+                    {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(weekStart.getTime() + 6 * 86400000))}
+                  </span>
+                </div>
+                <button onClick={() => { const t = new Date(); const d = new Date(t.getFullYear(), t.getMonth(), t.getDate()); d.setDate(d.getDate() - d.getDay()); setWeekStart(d) }} style={{ fontSize: '12px', fontWeight: 600, padding: '4px 10px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  This week
+                </button>
+              </div>
+              <CalendarWeekView
+                weekStart={weekStart}
+                shifts={shifts}
+                onSelectShift={id => setSelectedId(id)}
+                holidays={holidays ?? []}
+              />
+            </div>
+          )}
+
+          {/* ── Day view ───────────────────────────────────────── */}
+          {view === 'day' && (
+            <div style={{ background: 'var(--surface-card)', borderRadius: '12px', border: '1px solid var(--surface-border)', overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 16px', borderBottom: '1px solid var(--surface-border-sub)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <button onClick={() => { const d = new Date(selectedDayView); d.setDate(d.getDate() - 1); setSelectedDayView(d) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <ChevronLeft style={{ width: '14px', height: '14px' }} />
+                  </button>
+                  <button onClick={() => { const d = new Date(selectedDayView); d.setDate(d.getDate() + 1); setSelectedDayView(d) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <ChevronRight style={{ width: '14px', height: '14px' }} />
+                  </button>
+                </div>
+                <button onClick={() => { const t = new Date(); setSelectedDayView(new Date(t.getFullYear(), t.getMonth(), t.getDate())) }} style={{ fontSize: '12px', fontWeight: 600, padding: '4px 10px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  Today
+                </button>
+              </div>
+              <CalendarDayView
+                day={selectedDayView}
+                shifts={shifts}
+                onSelectShift={id => setSelectedId(id)}
+                holidays={holidays ?? []}
+              />
+            </div>
+          )}
         </div>
 
         {/* ── Right: Roster panel ───────────────────────────────── */}
@@ -586,7 +737,19 @@ export default function ShiftsView({
             {/* Panel header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--surface-border-sub)' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', flex: 1, marginRight: '8px', fontFamily: 'var(--font-display)', letterSpacing: '-0.2px', lineHeight: 1.3 }}>{selected.name}</h3>
+                <div style={{ flex: 1, marginRight: '8px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.2px', lineHeight: 1.3 }}>{selected.name}</h3>
+                  {selected.recurrence_rule && (
+                    <span style={{
+                      display: 'inline-block', marginTop: '4px',
+                      fontSize: '10px', fontWeight: 700,
+                      padding: '2px 7px', borderRadius: '4px',
+                      background: '#ede9fe', color: '#6d28d9',
+                    }}>
+                      ↻ {selected.recurrence_rule === 'biweekly' ? 'Biweekly' : selected.recurrence_rule.charAt(0).toUpperCase() + selected.recurrence_rule.slice(1)} recurring
+                    </span>
+                  )}
+                </div>
                 <button onClick={() => { setSelectedId(null); setShowAssign(false); setPendingTrainee(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: '2px', borderRadius: '4px' }}>
                   <X style={{ width: '16px', height: '16px' }} />
                 </button>
@@ -931,7 +1094,7 @@ export default function ShiftsView({
                 <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.2px' }}>New Shift</h2>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Fill in the details below to create a shift</p>
               </div>
-              <button onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: '4px', borderRadius: '6px' }}>
+              <button onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch(''); setIsRecurring(false); setRecurFrequency('weekly'); setRecurEndDate('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: '4px', borderRadius: '6px' }}>
                 <X style={{ width: '18px', height: '18px' }} />
               </button>
             </div>
@@ -979,6 +1142,52 @@ export default function ShiftsView({
               <div>
                 <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</label>
                 <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '56px', lineHeight: 1.5 }} value={createForm.notes} onChange={e => setCreateForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" />
+              </div>
+
+              {/* Repeat toggle */}
+              <div style={{ borderTop: '1px solid var(--surface-border-sub)', paddingTop: '14px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: isRecurring ? '10px' : 0 }}>
+                  <div
+                    onClick={() => setIsRecurring(p => !p)}
+                    style={{
+                      width: '36px', height: '20px', borderRadius: '10px',
+                      background: isRecurring ? TEAL : '#d1d5db',
+                      position: 'relative', flexShrink: 0, cursor: 'pointer',
+                      transition: 'background 0.2s',
+                    }}
+                  >
+                    <div style={{
+                      position: 'absolute', top: '2px',
+                      left: isRecurring ? '18px' : '2px',
+                      width: '16px', height: '16px', borderRadius: '50%',
+                      background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      transition: 'left 0.2s',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Repeat this shift
+                  </span>
+                </label>
+                {isRecurring && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Frequency</label>
+                      <select
+                        style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
+                        value={recurFrequency}
+                        onChange={e => setRecurFrequency(e.target.value as 'weekly' | 'biweekly' | 'monthly')}
+                      >
+                        <option value="weekly">Weekly</option>
+                        <option value="biweekly">Every 2 weeks</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>End date <span style={{ fontWeight: 400 }}>(opt)</span></label>
+                      <input type="date" style={inputStyle} value={recurEndDate} onChange={e => setRecurEndDate(e.target.value)} />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Volunteer picker */}
@@ -1075,9 +1284,9 @@ export default function ShiftsView({
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '22px', paddingTop: '18px', borderTop: '1px solid var(--surface-border-sub)' }}>
               <button className="shift-new-btn" style={btnPrimary} onClick={handleCreate} disabled={!createForm.name || !createForm.start_date || !createForm.start_time || !createForm.end_date || !createForm.end_time || isPending}>
-                Create Shift
+                {isRecurring ? 'Create Recurring Shifts' : 'Create Shift'}
               </button>
-              <button style={btnSecondary} onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch('') }}>
+              <button style={btnSecondary} onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch(''); setIsRecurring(false); setRecurFrequency('weekly'); setRecurEndDate('') }}>
                 Cancel
               </button>
             </div>

@@ -3,11 +3,13 @@
 import { useState, useEffect, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { AssignmentWithShift, AvailableShift, TimeEntryRow } from './page'
-import { volunteerClockIn, volunteerClockOut, volunteerSignUpForShift, volunteerDropShift } from './actions'
+import { volunteerClockIn, volunteerClockOut, volunteerSignUpForShift, volunteerDropShift, volunteerRequestReschedule } from './actions'
+import RescheduleModal from './RescheduleModal'
 
 interface Props {
   assignments: AssignmentWithShift[]
   volunteerId: string
+  orgId: string
   availableShifts: AvailableShift[]
 }
 
@@ -53,7 +55,7 @@ function isShiftActive(start: string, end: string) {
   return now >= s - 15 * 60000 && now <= e // 15 min before start to end
 }
 
-export default function ShiftsView({ assignments, volunteerId, availableShifts }: Props) {
+export default function ShiftsView({ assignments, volunteerId, orgId, availableShifts }: Props) {
   const [tab, setTab] = useState<Tab>('upcoming')
   const [geo, setGeo] = useState<GeoState | null>(null)
   const [geoError, setGeoError] = useState<string | null>(null)
@@ -63,6 +65,9 @@ export default function ShiftsView({ assignments, volunteerId, availableShifts }
   const [signingUpShiftId, setSigningUpShiftId] = useState<string | null>(null)
   const [dropConfirmId, setDropConfirmId] = useState<string | null>(null)
   const [droppingAssignmentId, setDroppingAssignmentId] = useState<string | null>(null)
+  const [moveAssignment, setMoveAssignment] = useState<AssignmentWithShift | null>(null)
+  const [rescheduleAssignment, setRescheduleAssignment] = useState<AssignmentWithShift | null>(null)
+  const [rescheduleSuccess, setRescheduleSuccess] = useState(false)
   const autoFiredRef = useRef<Set<string>>(new Set())
   const watchIdRef = useRef<number | null>(null)
   const router = useRouter()
@@ -189,6 +194,21 @@ export default function ShiftsView({ assignments, volunteerId, availableShifts }
     })
   }
 
+  function handleRequestReschedule(a: AssignmentWithShift, note: string) {
+    setActionError(null)
+    startTransition(async () => {
+      try {
+        await volunteerRequestReschedule(a.id, note)
+        setRescheduleAssignment(null)
+        setRescheduleSuccess(true)
+        setTimeout(() => setRescheduleSuccess(false), 4000)
+      } catch (e: unknown) {
+        setActionError(e instanceof Error ? e.message : 'Could not send request')
+        setRescheduleAssignment(null)
+      }
+    })
+  }
+
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -308,6 +328,8 @@ export default function ShiftsView({ assignments, volunteerId, availableShifts }
                       onDropRequest={() => setDropConfirmId(a.id)}
                       onDropConfirm={() => handleDropShift(a.id)}
                       onDropCancel={() => setDropConfirmId(null)}
+                      onMoveRequest={() => setMoveAssignment(a)}
+                      onRescheduleRequest={() => setRescheduleAssignment(a)}
                     />
                   )
                 })
@@ -321,6 +343,61 @@ export default function ShiftsView({ assignments, volunteerId, availableShifts }
             : past.map(a => <PastCard key={a.id} assignment={a} />)
         )}
       </div>
+
+      {/* Reschedule request success toast */}
+      {rescheduleSuccess && (
+        <div style={{
+          position: 'fixed', bottom: '80px', left: '50%', transform: 'translateX(-50%)',
+          background: '#1B2A4A', color: 'white', padding: '10px 18px', borderRadius: '10px',
+          fontSize: '13px', fontWeight: 600, zIndex: 200,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+        }}>
+          ✓ Reschedule request sent
+        </div>
+      )}
+
+      {/* Reschedule request modal */}
+      {rescheduleAssignment && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget) setRescheduleAssignment(null) }}
+        >
+          <div style={{ background: 'white', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '480px', padding: '20px 20px 32px' }}>
+            <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: '#e5e7eb', margin: '0 auto 16px' }} />
+            <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#1B2A4A', margin: '0 0 6px' }}>Request Reschedule</h2>
+            <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 16px' }}>
+              Your request will be sent to the admin for &ldquo;{rescheduleAssignment.shift.name}&rdquo;.
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => handleRequestReschedule(rescheduleAssignment, '')}
+                disabled={isPending}
+                style={{ flex: 1, padding: '11px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, border: 'none', background: '#1B2A4A', color: 'white', cursor: isPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+              >
+                {isPending ? 'Sending…' : 'Send Request'}
+              </button>
+              <button
+                onClick={() => setRescheduleAssignment(null)}
+                style={{ padding: '11px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: '1px solid #e5e7eb', background: 'white', color: '#374151', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move to different time modal */}
+      {moveAssignment && (
+        <RescheduleModal
+          orgId={orgId}
+          assignmentId={moveAssignment.id}
+          shiftName={moveAssignment.shift.name}
+          currentShiftId={moveAssignment.shift.id}
+          onClose={() => setMoveAssignment(null)}
+          onMoved={() => { setMoveAssignment(null); router.refresh() }}
+        />
+      )}
     </div>
   )
 }
@@ -341,6 +418,8 @@ function UpcomingCard({
   onDropRequest,
   onDropConfirm,
   onDropCancel,
+  onMoveRequest,
+  onRescheduleRequest,
 }: {
   assignment: AssignmentWithShift
   geo: GeoState | null
@@ -355,6 +434,8 @@ function UpcomingCard({
   onDropRequest: () => void
   onDropConfirm: () => void
   onDropCancel: () => void
+  onMoveRequest: () => void
+  onRescheduleRequest: () => void
 }) {
   const { shift } = a
   const active = isShiftActive(shift.start_time, shift.end_time)
@@ -453,41 +534,45 @@ function UpcomingCard({
           )
         )}
 
-        {/* Drop shift */}
+        {/* Shift management actions (only for future, non-active shifts) */}
         {canDrop && !active && (
           showDropConfirm ? (
             <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
               <button
                 onClick={onDropConfirm}
                 disabled={isDroppingShift}
-                style={{
-                  flex: 1, padding: '9px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-                  border: '1.5px solid #dc2626', background: '#fef2f2', color: '#dc2626', cursor: 'pointer',
-                }}
+                style={{ flex: 1, padding: '9px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, border: '1.5px solid #dc2626', background: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}
               >
                 {isDroppingShift ? 'Dropping…' : 'Yes, drop shift'}
               </button>
               <button
                 onClick={onDropCancel}
-                style={{
-                  flex: 1, padding: '9px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-                  border: '1.5px solid #e5e7eb', background: 'transparent', color: '#6b7280', cursor: 'pointer',
-                }}
+                style={{ flex: 1, padding: '9px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, border: '1.5px solid #e5e7eb', background: 'transparent', color: '#6b7280', cursor: 'pointer' }}
               >
                 Keep it
               </button>
             </div>
           ) : (
-            <button
-              onClick={onDropRequest}
-              style={{
-                marginTop: '10px', width: '100%', padding: '8px', borderRadius: '8px',
-                fontSize: '12px', fontWeight: 600, border: '1px solid #e5e7eb',
-                background: 'transparent', color: '#9ca3af', cursor: 'pointer',
-              }}
-            >
-              Drop shift
-            </button>
+            <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
+              <button
+                onClick={onMoveRequest}
+                style={{ padding: '7px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: '1.5px solid #bfdbfe', background: '#eff6ff', color: '#1B2A4A', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Move
+              </button>
+              <button
+                onClick={onRescheduleRequest}
+                style={{ padding: '7px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: '1px solid #e5e7eb', background: 'transparent', color: '#374151', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Request Reschedule
+              </button>
+              <button
+                onClick={onDropRequest}
+                style={{ padding: '7px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 500, border: '1px solid #e5e7eb', background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Drop
+              </button>
+            </div>
           )
         )}
       </div>

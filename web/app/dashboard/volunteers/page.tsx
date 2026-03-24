@@ -16,6 +16,7 @@ export interface VolunteerRow {
   phone: string | null
   photo_url: string | null
   category: VolunteerCategory
+  volunteer_categories: VolunteerCategory[]
   status: VolunteerStatus
   pipeline_phase: PipelinePhase
   created_at: string
@@ -43,13 +44,13 @@ async function fetchVolunteers(filters: {
     .from('volunteers')
     .select(`
       id, first_name, last_name, email, phone, photo_url,
-      category, status, pipeline_phase, created_at, onboarding_workflow_id,
+      category, volunteer_categories, status, pipeline_phase, created_at, onboarding_workflow_id,
       volunteer_locations(location:locations(id, name)),
       volunteer_tags(tag:org_tags(id, name, color))
     `)
     .order('created_at', { ascending: false })
 
-  if (filters.category) query = query.eq('category', filters.category)
+  if (filters.category) query = query.contains('volunteer_categories', [filters.category])
   if (filters.status)   query = query.eq('status', filters.status)
 
   const { data: volunteers } = await query
@@ -127,6 +128,7 @@ async function fetchVolunteers(filters: {
         phone: v.phone,
         photo_url: v.photo_url,
         category: v.category,
+        volunteer_categories: (v as any).volunteer_categories?.length ? (v as any).volunteer_categories : [v.category],
         status: v.status,
         pipeline_phase: v.pipeline_phase,
         created_at: v.created_at,

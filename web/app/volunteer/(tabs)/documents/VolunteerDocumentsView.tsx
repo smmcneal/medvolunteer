@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { getOrgDocumentSignedUrl } from '@/app/dashboard/documents/actions'
-import type { OrgDocument } from '@/types/database'
+import type { OrgDocument, OnboardingProgress, OnboardingStage } from '@/types/database'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -24,11 +24,20 @@ function extBadge(name: string, mime: string): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+type ProgressWithStage = OnboardingProgress & { onboarding_stages: OnboardingStage | null }
+
 interface Props {
   docs: OrgDocument[]
+  onboardingProgress: ProgressWithStage[]
+  volunteerCreatedAt: string | null
 }
 
-export default function VolunteerDocumentsView({ docs }: Props) {
+function fmtDate(iso: string | null): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+export default function VolunteerDocumentsView({ docs, onboardingProgress, volunteerCreatedAt }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
 
@@ -165,6 +174,70 @@ export default function VolunteerDocumentsView({ docs }: Props) {
 
           </div>
         )}
+
+        {/* ── Onboarding Checklist ── */}
+        {(onboardingProgress.length > 0 || volunteerCreatedAt) && (
+          <div style={{ marginTop: '20px' }}>
+            <p style={{
+              fontSize: '11px', fontWeight: 700, color: '#9ca3af',
+              textTransform: 'uppercase', letterSpacing: '0.08em',
+              marginBottom: '8px', paddingLeft: '4px',
+            }}>
+              Onboarding Checklist
+            </p>
+            <div style={{
+              background: 'white', borderRadius: '14px',
+              border: '1px solid #f0f0f0', overflow: 'hidden',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+            }}>
+              {/* Application submitted — always present */}
+              {volunteerCreatedAt && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', borderBottom: onboardingProgress.length > 0 ? '1px solid #f9fafb' : 'none' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '14px' }}>✓</div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827', margin: 0 }}>Application Submitted</p>
+                    <p style={{ fontSize: '11px', color: '#9ca3af', margin: '2px 0 0' }}>{fmtDate(volunteerCreatedAt)}</p>
+                  </div>
+                </div>
+              )}
+              {[...onboardingProgress]
+                .sort((a, b) => (a.onboarding_stages?.order_index ?? 0) - (b.onboarding_stages?.order_index ?? 0))
+                .map((p, i) => {
+                  const done = !!p.completed_at
+                  return (
+                    <div key={p.id} style={{
+                      display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px',
+                      borderTop: i === 0 && !volunteerCreatedAt ? 'none' : '1px solid #f9fafb',
+                    }}>
+                      <div style={{
+                        width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px',
+                        background: done ? '#dcfce7' : '#f3f4f6',
+                      }}>
+                        {done ? '✓' : '○'}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: '13px', fontWeight: 600, color: done ? '#111827' : '#9ca3af', margin: 0 }}>
+                          {p.onboarding_stages?.name ?? 'Stage'}
+                        </p>
+                        {p.completed_at && (
+                          <p style={{ fontSize: '11px', color: '#9ca3af', margin: '2px 0 0' }}>Completed {fmtDate(p.completed_at)}</p>
+                        )}
+                      </div>
+                      <span style={{
+                        fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px',
+                        background: done ? '#f0fdf4' : '#f3f4f6',
+                        color: done ? '#15803d' : '#9ca3af',
+                      }}>
+                        {done ? 'Done' : 'Pending'}
+                      </span>
+                    </div>
+                  )
+                })}
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   )
