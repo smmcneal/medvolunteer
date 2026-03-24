@@ -8,7 +8,7 @@ import type { ChecklistField } from './actions'
 import type {
   Volunteer, Credential, Document, BackgroundCheck,
   TimeEntry, LessonCompletion, Location,
-  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload,
+  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload, Category,
 } from '@/types/database'
 import type { VolunteerDetail, OnboardingStageWithProgress } from './page'
 import PipelinePhaseBar from './PipelinePhaseBar'
@@ -65,6 +65,7 @@ export default function VolunteerTabs({
   orgTags,
   orgFlags,
   orgLocations,
+  categories,
   jotformApiKey,
 }: {
   volunteer: VolunteerDetail
@@ -82,6 +83,7 @@ export default function VolunteerTabs({
   orgTags: OrgTag[]
   orgFlags: OrgFlag[]
   orgLocations?: Pick<Location, 'id' | 'name'>[]
+  categories?: Category[]
   jotformApiKey?: string | null
 }) {
   const [activeTab, setActiveTab] = useState<Tab>('Info')
@@ -157,7 +159,7 @@ export default function VolunteerTabs({
 
         {/* ── Info ── */}
         {activeTab === 'Info' && (
-          <InfoTab volunteer={volunteer} appliedTags={appliedTags} orgTags={orgTags} orgLocations={orgLocations ?? []} />
+          <InfoTab volunteer={volunteer} appliedTags={appliedTags} orgTags={orgTags} orgLocations={orgLocations ?? []} categories={categories ?? []} />
         )}
 
         {/* ── Onboarding ── */}

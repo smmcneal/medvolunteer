@@ -8,7 +8,7 @@ import type {
   Volunteer, Credential, Document, BackgroundCheck,
   OnboardingStage, OnboardingProgress, TimeEntry,
   LessonCompletion, Location,
-  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload,
+  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload, Category,
 } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -30,7 +30,7 @@ async function fetchVolunteer(id: string) {
   const supabase = createAdminClient()
 
   const [volunteerRes, credsRes, docsRes, bgCheckRes, timeRes, learningRes,
-         notesRes, volTagsRes, volFlagsRes, orgTagsRes, orgFlagsRes, uploadsRes, orgLocationsRes, orgSettingsRes] = await Promise.all([
+         notesRes, volTagsRes, volFlagsRes, orgTagsRes, orgFlagsRes, uploadsRes, orgLocationsRes, orgSettingsRes, categoriesRes] = await Promise.all([
     supabase
       .from('volunteers')
       .select('*, volunteer_locations(location:locations(*))')
@@ -49,6 +49,7 @@ async function fetchVolunteer(id: string) {
     supabase.from('volunteer_uploads').select('*').eq('volunteer_id', id).order('uploaded_at', { ascending: false }),
     supabase.from('locations').select('id, name').eq('is_active', true).order('name'),
     supabase.from('organizations').select('settings').limit(1).single(),
+    supabase.from('categories').select('*').eq('is_archived', false).order('sort_order'),
   ])
 
   if (!volunteerRes.data) return null
@@ -102,6 +103,7 @@ async function fetchVolunteer(id: string) {
     orgTags:      (orgTagsRes.data ?? []) as OrgTag[],
     orgFlags:     (orgFlagsRes.data ?? []) as OrgFlag[],
     orgLocations: (orgLocationsRes.data ?? []) as Pick<Location, 'id' | 'name'>[],
+    categories:   (categoriesRes.data ?? []) as Category[],
     jotformApiKey,
   }
 }
@@ -141,7 +143,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
     volunteer, credentials, documents, uploads, backgroundCheck,
     timeEntries, onboardingStages, lessonCompletions,
     notes, appliedTags, activeFlags, resolvedFlags, orgTags, orgFlags, orgLocations,
-    jotformApiKey,
+    categories, jotformApiKey,
   } = data
 
   const statStyle = STATUS_COLORS[volunteer.status] ?? STATUS_COLORS.inactive
@@ -249,6 +251,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
         orgTags={orgTags}
         orgFlags={orgFlags}
         orgLocations={orgLocations}
+        categories={categories}
         jotformApiKey={jotformApiKey}
       />
     </div>

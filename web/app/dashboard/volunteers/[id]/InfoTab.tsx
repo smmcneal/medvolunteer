@@ -1,18 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import type { VolunteerCategory, Location, OrgTag } from '@/types/database'
+import type { Location, OrgTag, Category } from '@/types/database'
 import type { VolunteerDetail } from './page'
 import TagsPanel from './TagsPanel'
 import { updateVolunteerInfo, updateVolunteerLocations } from './actions'
-
-const CATEGORY_OPTIONS: { value: VolunteerCategory; label: string }[] = [
-  { value: 'medical_professional', label: 'Medical Professional' },
-  { value: 'support_staff',        label: 'Support Staff' },
-  { value: 'admin',                label: 'Admin' },
-  { value: 'trainee',              label: 'Trainee' },
-  { value: 'other',                label: 'Other' },
-]
 
 const STATUS_LABELS: Record<string, string> = {
   applicant: 'Applicant',
@@ -28,8 +20,8 @@ interface EditState {
   last_name: string
   email: string
   phone: string
-  category: VolunteerCategory
-  volunteer_categories: VolunteerCategory[]
+  category: string
+  volunteer_categories: string[]
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -39,11 +31,13 @@ export default function InfoTab({
   appliedTags,
   orgTags,
   orgLocations = [],
+  categories = [],
 }: {
   volunteer: VolunteerDetail
   appliedTags: OrgTag[]
   orgTags: OrgTag[]
   orgLocations?: Pick<Location, 'id' | 'name'>[]
+  categories?: Category[]
 }) {
   // Local copy of mutable fields so saves reflect immediately
   const [v, setV] = useState(initialVolunteer)
@@ -56,8 +50,8 @@ export default function InfoTab({
   const [editLocationIds, setEditLocationIds] = useState<string[]>([])
 
   function makeForm(vol: VolunteerDetail): EditState {
-    const cats = (vol as any).volunteer_categories?.length
-      ? (vol as any).volunteer_categories as VolunteerCategory[]
+    const cats: string[] = (vol as any).volunteer_categories?.length
+      ? (vol as any).volunteer_categories as string[]
       : [vol.category]
     return {
       first_name:           vol.first_name,
@@ -69,13 +63,13 @@ export default function InfoTab({
     }
   }
 
-  function toggleCategory(cat: VolunteerCategory) {
+  function toggleCategory(slug: string) {
     setForm(prev => {
-      const has = prev.volunteer_categories.includes(cat)
+      const has = prev.volunteer_categories.includes(slug)
       if (has && prev.volunteer_categories.length === 1) return prev // require at least one
       const next = has
-        ? prev.volunteer_categories.filter(c => c !== cat)
-        : [...prev.volunteer_categories, cat]
+        ? prev.volunteer_categories.filter(c => c !== slug)
+        : [...prev.volunteer_categories, slug]
       return { ...prev, volunteer_categories: next, category: next[0] }
     })
   }
@@ -220,13 +214,13 @@ export default function InfoTab({
               Category <span style={{ fontSize: '10px', fontWeight: 400, color: '#d1d5db' }}>(select all that apply)</span>
             </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '2px' }}>
-              {CATEGORY_OPTIONS.map(o => {
-                const checked = form.volunteer_categories.includes(o.value)
+              {categories.map(o => {
+                const checked = form.volunteer_categories.includes(o.slug)
                 return (
                   <button
-                    key={o.value}
+                    key={o.slug}
                     type="button"
-                    onClick={() => toggleCategory(o.value)}
+                    onClick={() => toggleCategory(o.slug)}
                     style={{
                       padding: '6px 14px', borderRadius: '8px', cursor: 'pointer',
                       fontSize: '13px', fontWeight: 600, border: '1.5px solid',
@@ -237,7 +231,7 @@ export default function InfoTab({
                       fontFamily: 'inherit',
                     }}
                   >
-                    {o.label}
+                    {o.name}
                   </button>
                 )
               })}
@@ -309,11 +303,11 @@ export default function InfoTab({
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {((v as any).volunteer_categories?.length
-                ? (v as any).volunteer_categories as VolunteerCategory[]
+                ? (v as any).volunteer_categories as string[]
                 : [v.category]
-              ).map((cat: VolunteerCategory) => (
+              ).map((cat: string) => (
                 <span key={cat} style={{ fontSize: '13px', fontWeight: 500, padding: '3px 10px', borderRadius: '6px', background: '#1B2A4A1a', color: '#1B2A4A', border: '1px solid #1B2A4A33' }}>
-                  {CATEGORY_OPTIONS.find(o => o.value === cat)?.label ?? cat}
+                  {categories.find(o => o.slug === cat)?.name ?? cat}
                 </span>
               ))}
             </div>

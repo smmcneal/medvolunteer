@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { PipelinePhase, VolunteerStatus, VolunteerCategory } from '@/types/database'
+import type { PipelinePhase, VolunteerStatus } from '@/types/database'
 
 // Phase → status mapping (single source of truth)
 const PHASE_STATUS_MAP: Record<PipelinePhase, VolunteerStatus> = {
@@ -24,8 +24,8 @@ export async function updateVolunteerInfo(
     last_name: string
     email: string
     phone: string
-    category: VolunteerCategory
-    volunteer_categories?: VolunteerCategory[]
+    category: string
+    volunteer_categories?: string[]
   },
 ): Promise<{ error?: string }> {
   if (!data.first_name.trim()) return { error: 'First name is required.' }
