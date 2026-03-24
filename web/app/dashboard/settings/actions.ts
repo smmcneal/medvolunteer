@@ -244,6 +244,56 @@ export async function deleteDocumentAutomationRule(ruleId: string) {
   revalidatePath('/dashboard/settings')
 }
 
+// ─── Dynamic categories ───────────────────────────────────────────────────────
+
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+}
+
+export async function addCategory(
+  name: string,
+  description: string,
+): Promise<{ error?: string }> {
+  if (!name.trim()) return { error: 'Category name is required.' }
+  const admin = createAdminClient()
+  const slug = slugify(name.trim())
+  const { error } = await admin.from('categories').insert({
+    slug,
+    name: name.trim(),
+    description: description.trim() || null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/settings')
+  return {}
+}
+
+export async function updateCategoryDescription(
+  id: string,
+  description: string,
+): Promise<{ error?: string }> {
+  const admin = createAdminClient()
+  const { error } = await admin.from('categories').update({ description: description.trim() || null }).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/settings')
+  return {}
+}
+
+export async function archiveCategory(id: string): Promise<{ error?: string }> {
+  const admin = createAdminClient()
+  const { error } = await admin.from('categories').update({ is_archived: true }).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/settings')
+  return {}
+}
+
+export async function restoreCategory(id: string): Promise<{ error?: string }> {
+  const admin = createAdminClient()
+  const { error } = await admin.from('categories').update({ is_archived: false }).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/settings')
+  return {}
+}
+
 // ─── Category Descriptions ────────────────────────────────────────────────────
 
 export async function updateCategoryDescriptions(descriptions: Record<string, string>) {
