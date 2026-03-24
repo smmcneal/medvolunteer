@@ -71,11 +71,16 @@ type Tab = typeof TABS[number]['key']
 
 const PIPELINE_PHASES_LIST = ['intake', 'orientation', 'review', 'training', 'active', 'offboarding']
 
-function GlobalFilterBar({ allCategories, allStatuses, appliedFilters }: {
+function GlobalFilterBar({ allCategories, allStatuses, appliedFilters, categories }: {
   allCategories: string[]
   allStatuses: string[]
   appliedFilters: FilterParams
+  categories: Category[]
 }) {
+  function getCatLabel(slug: string) {
+    return categories.find(c => c.slug === slug)?.name ?? slug
+  }
+
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -154,7 +159,7 @@ function GlobalFilterBar({ allCategories, allStatuses, appliedFilters }: {
             <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Category</label>
             <select value={category} onChange={e => setCategory(e.target.value)} style={iStyle}>
               <option value="">All</option>
-              {allCategories.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>)}
+              {allCategories.map(c => <option key={c} value={c}>{getCatLabel(c)}</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -287,7 +292,8 @@ export default function ReportsView({
   }
   function getCatStyle(slug: string) {
     const idx = categories.findIndex(c => c.slug === slug)
-    return PALETTE[Math.max(idx, 0) % 8]
+    if (idx === -1) return { bg: '#f3f4f6', text: '#6b7280' }
+    return PALETTE[idx % 8]
   }
   const searchParams = useSearchParams()
   const initialTab = (searchParams.get('tab') as Tab | null) ?? 'hours'
@@ -362,7 +368,7 @@ export default function ReportsView({
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
 
       {/* Global Filters */}
-      <GlobalFilterBar allCategories={allCategories} allStatuses={allStatuses} appliedFilters={appliedFilters} />
+      <GlobalFilterBar allCategories={allCategories} allStatuses={allStatuses} appliedFilters={appliedFilters} categories={categories} />
 
       {/* Pending Hours */}
       {requireHourApproval && (

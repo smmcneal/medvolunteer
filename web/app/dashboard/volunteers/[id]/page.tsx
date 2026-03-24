@@ -110,14 +110,6 @@ async function fetchVolunteer(id: string) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const CATEGORY_LABELS: Record<string, string> = {
-  medical_professional: 'Medical Professional',
-  support_staff: 'Support Staff',
-  admin: 'Admin',
-  trainee: 'Trainee',
-  other: 'Other',
-}
-
 const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
   applicant: { bg: '#f3f4f6', text: '#374151', dot: '#9ca3af' },
   prospect:  { bg: '#eff6ff', text: '#1d4ed8', dot: '#3b82f6' },
@@ -194,7 +186,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
             )}
           </div>
           <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '10px' }}>
-            {CATEGORY_LABELS[volunteer.category]}
+            {categories.find(c => c.slug === volunteer.category)?.name ?? volunteer.category}
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: '#374151' }}>

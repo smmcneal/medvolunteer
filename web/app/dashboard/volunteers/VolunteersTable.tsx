@@ -64,7 +64,8 @@ export default function VolunteersTable({
 }) {
   function getCatStyle(slug: string) {
     const idx = categories.findIndex(c => c.slug === slug)
-    return PALETTE[Math.max(idx, 0) % PALETTE.length]
+    if (idx === -1) return { bg: '#f3f4f6', text: '#6b7280', ring: '#e5e7eb' }
+    return PALETTE[idx % PALETTE.length]
   }
   function getCatLabel(slug: string) {
     return categories.find(c => c.slug === slug)?.name ?? slug

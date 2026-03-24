@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule, Category } from '@/types/database'
 import {
   updateOrgProfile,
@@ -1048,6 +1049,7 @@ function HolidaysTab({ initialHolidays }: { initialHolidays: OrgHoliday[] }) {
 // ─── Categories Tab ───────────────────────────────────────────────────────────
 
 function CategoriesTab({ descriptions: initial, requirements: initialRequirements, coordinators: initialCoordinators, activeVolunteers, categories: initialCategories }: { descriptions: Record<string, string>; requirements: CategoryRequirement[]; coordinators: CategoryCoordinator[]; activeVolunteers: { id: string; first_name: string; last_name: string }[]; categories: Category[] }) {
+  const router = useRouter()
   const [descriptions, setDescriptions] = useState<Record<string, string>>(initial)
   const [isPending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
@@ -1070,6 +1072,7 @@ function CategoriesTab({ descriptions: initial, requirements: initialRequirement
     setShowAddCategory(false)
     setNewCatName('')
     setNewCatDesc('')
+    router.refresh()
   }
 
   // Coordinators
