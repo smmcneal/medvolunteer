@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_noStore as noStore } from 'next/cache'
 import { Suspense } from 'react'
 import ReportsView from './ReportsView'
+import type { Category } from '@/types/database'
 
 export interface ActiveVolunteerActivity {
   id: string
@@ -316,6 +317,8 @@ export default async function ReportsPage({
 
   // Pending hours
   const supabase = createAdminClient()
+  const { data: categoriesData } = await supabase.from('categories').select('*').eq('is_archived', false).order('sort_order')
+  const categories = (categoriesData ?? []) as Category[]
   const { data: orgData } = await supabase.from('organizations').select('settings').limit(1).single()
   const requireHourApproval = !!(orgData?.settings as Record<string, unknown>)?.require_hour_approval
 
@@ -364,6 +367,7 @@ export default async function ReportsPage({
           appliedFilters={filters}
           requireHourApproval={requireHourApproval}
           pendingHours={pendingHours}
+          categories={categories}
         />
       </Suspense>
     </div>

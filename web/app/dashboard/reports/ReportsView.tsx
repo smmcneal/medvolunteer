@@ -5,6 +5,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Download, TrendingUp, Clock, ShieldCheck, AlertTriangle, UserX, Filter, X } from 'lucide-react'
 import type { HoursRow, OnboardingRow, PipelinePhaseCount, VolunteerOnboardingRow, BgCheckRow, CredentialExpiryRow, ActiveVolunteerActivity, FilterParams } from './page'
 import { bulkMarkInactive, approveHoursEntry, rejectHoursEntry } from './actions'
+import type { Category } from '@/types/database'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -28,21 +29,6 @@ const PIPELINE_PHASE_COLORS: Record<string, { bg: string; text: string; bar: str
   offboarding: { bg: '#fef2f2', text: '#991b1b', bar: '#ef4444' },
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  medical_professional: 'Medical',
-  support_staff: 'Support',
-  admin: 'Admin',
-  trainee: 'Trainee',
-  other: 'Other',
-}
-
-const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
-  medical_professional: { bg: '#d1fae5', text: '#065f46' },
-  support_staff:        { bg: '#dbeafe', text: '#1e40af' },
-  admin:                { bg: '#ede9fe', text: '#5b21b6' },
-  trainee:              { bg: '#fef3c7', text: '#92400e' },
-  other:                { bg: '#f3f4f6', text: '#374151' },
-}
 
 const BG_RESULT_COLORS: Record<string, { bg: string; text: string }> = {
   clear:     { bg: '#f0fdf4', text: '#15803d' },
@@ -256,6 +242,17 @@ function MedVolPendingHoursPanel({ entries }: { entries: PendingHoursEntry[] }) 
   )
 }
 
+const PALETTE: Record<number, { bg: string; text: string }> = {
+  0: { bg: '#d1fae5', text: '#065f46' },
+  1: { bg: '#dbeafe', text: '#1e40af' },
+  2: { bg: '#ede9fe', text: '#5b21b6' },
+  3: { bg: '#fef3c7', text: '#92400e' },
+  4: { bg: '#f0f9ff', text: '#0369a1' },
+  5: { bg: '#fff1f2', text: '#be123c' },
+  6: { bg: '#fefce8', text: '#a16207' },
+  7: { bg: '#f3f4f6', text: '#374151' },
+}
+
 export default function ReportsView({
   hoursRows,
   onboardingRows,
@@ -269,6 +266,7 @@ export default function ReportsView({
   appliedFilters = {},
   requireHourApproval = false,
   pendingHours = [],
+  categories = [],
 }: {
   hoursRows: HoursRow[]
   onboardingRows: OnboardingRow[]
@@ -282,7 +280,15 @@ export default function ReportsView({
   appliedFilters?: FilterParams
   requireHourApproval?: boolean
   pendingHours?: PendingHoursEntry[]
+  categories?: Category[]
 }) {
+  function getCatLabel(slug: string) {
+    return categories.find(c => c.slug === slug)?.name ?? slug
+  }
+  function getCatStyle(slug: string) {
+    const idx = categories.findIndex(c => c.slug === slug)
+    return PALETTE[Math.max(idx, 0) % 8]
+  }
   const searchParams = useSearchParams()
   const initialTab = (searchParams.get('tab') as Tab | null) ?? 'hours'
   const [activeTab, setActiveTab] = useState<Tab>(
@@ -427,13 +433,13 @@ export default function ReportsView({
             />
             <select style={selectStyle} value={hoursCategory} onChange={e => setHoursCategory(e.target.value)}>
               <option value="">All categories</option>
-              {Object.entries(CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {categories.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
             </select>
             <button
               onClick={() => downloadCSV(
                 filteredHours.map(r => ({
                   Name: r.name,
-                  Category: CATEGORY_LABELS[r.category] ?? r.category,
+                  Category: getCatLabel(r.category),
                   'Total Hours': (r.total_minutes / 60).toFixed(2),
                   Sessions: r.session_count,
                 })),
@@ -471,7 +477,7 @@ export default function ReportsView({
                 </thead>
                 <tbody>
                   {filteredHours.map((r, i) => {
-                    const catStyle = CATEGORY_COLORS[r.category] ?? CATEGORY_COLORS.other
+                    const catStyle = getCatStyle(r.category)
                     const maxMins  = hoursRows[0]?.total_minutes ?? 1
                     const pct      = Math.round((r.total_minutes / maxMins) * 100)
                     return (
@@ -479,7 +485,7 @@ export default function ReportsView({
                         <td style={{ padding: '12px 20px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>{r.name}</td>
                         <td style={{ padding: '12px 20px' }}>
                           <span style={{ fontSize: '12px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px', background: catStyle.bg, color: catStyle.text }}>
-                            {CATEGORY_LABELS[r.category] ?? r.category}
+                            {getCatLabel(r.category)}
                           </span>
                         </td>
                         <td style={{ padding: '12px 20px', fontSize: '13px', color: '#374151' }}>{r.session_count}</td>
@@ -567,7 +573,7 @@ export default function ReportsView({
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {onboardingRows.map(row => {
-                  const catStyle = row.category ? (CATEGORY_COLORS[row.category] ?? CATEGORY_COLORS.other) : { bg: '#f3f4f6', text: '#374151' }
+                  const catStyle = row.category ? getCatStyle(row.category) : { bg: '#f3f4f6', text: '#374151' }
                   return (
                     <div key={row.workflow_id} style={{
                       background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', padding: '18px 22px',
@@ -576,7 +582,7 @@ export default function ReportsView({
                         <div>
                           <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>{row.workflow_name}</h3>
                           <span style={{ fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '5px', background: catStyle.bg, color: catStyle.text }}>
-                            {row.category ? CATEGORY_LABELS[row.category] ?? row.category : 'All categories'}
+                            {row.category ? getCatLabel(row.category) : 'All categories'}
                           </span>
                         </div>
                         <div style={{ textAlign: 'right' }}>
@@ -625,7 +631,7 @@ export default function ReportsView({
                   onClick={() => downloadCSV(
                     filteredOnboardingVols.map(r => ({
                       Name: r.name,
-                      Category: CATEGORY_LABELS[r.category] ?? r.category,
+                      Category: getCatLabel(r.category),
                       'Pipeline Phase': PIPELINE_PHASE_LABELS[r.pipeline_phase] ?? r.pipeline_phase,
                       Workflow: r.workflow_name ?? '—',
                       'Stages Completed': r.stages_completed,
@@ -667,7 +673,7 @@ export default function ReportsView({
                   </thead>
                   <tbody>
                     {filteredOnboardingVols.map((r, i) => {
-                      const catStyle   = CATEGORY_COLORS[r.category] ?? CATEGORY_COLORS.other
+                      const catStyle   = getCatStyle(r.category)
                       const phaseStyle = PIPELINE_PHASE_COLORS[r.pipeline_phase] ?? PIPELINE_PHASE_COLORS.intake
                       const pct        = r.completion_pct
                       const barColor   = pct === 100 ? '#22c55e' : pct >= 60 ? NAVY : '#f59e0b'
@@ -676,7 +682,7 @@ export default function ReportsView({
                           <td style={{ padding: '12px 20px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>{r.name}</td>
                           <td style={{ padding: '12px 20px' }}>
                             <span style={{ fontSize: '12px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px', background: catStyle.bg, color: catStyle.text }}>
-                              {CATEGORY_LABELS[r.category] ?? r.category}
+                              {getCatLabel(r.category)}
                             </span>
                           </td>
                           <td style={{ padding: '12px 20px' }}>

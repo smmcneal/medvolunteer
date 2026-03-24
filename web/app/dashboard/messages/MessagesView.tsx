@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from 'react'
 import type { MessageWithRecipients } from './page'
-import type { Volunteer, MessageChannel, VolunteerCategory, MessageTemplate } from '@/types/database'
+import type { Volunteer, MessageChannel, MessageTemplate, Category } from '@/types/database'
 import { sendMessage, saveTemplate, deleteTemplate } from './actions'
 import { ChevronLeft, Send, CheckCheck, Eye, Users, Inbox, FileText, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 
@@ -14,13 +14,6 @@ const CHANNEL_CONFIG: Record<MessageChannel, { label: string; icon: string; colo
   push:  { label: 'Push',  icon: '🔔', color: '#8b5cf6', bg: '#faf5ff', desc: 'App notify'    },
 }
 
-const CATEGORY_LABELS: Record<VolunteerCategory, string> = {
-  medical_professional: 'Medical Professionals',
-  support_staff:        'Support Staff',
-  admin:                'Administrators',
-  trainee:              'Trainees',
-  other:                'Other',
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -47,9 +40,10 @@ interface Props {
   initialMessages: MessageWithRecipients[]
   volunteers: Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'email' | 'phone' | 'category' | 'status'>[]
   templates: MessageTemplate[]
+  categories: Category[]
 }
 
-export default function MessagesView({ initialMessages, volunteers, templates }: Props) {
+export default function MessagesView({ initialMessages, volunteers, templates, categories }: Props) {
   // Mobile panel state — 'list' shows sidebar, 'main' shows compose/detail
   const [mobilePanel, setMobilePanel] = useState<'list' | 'main'>('main')
 
@@ -62,7 +56,7 @@ export default function MessagesView({ initialMessages, volunteers, templates }:
   const [body, setBody] = useState('')
   const [channel, setChannel] = useState<MessageChannel>('email')
   const [recipientType, setRecipientType] = useState<'all' | 'group' | 'individual'>('all')
-  const [selectedCategory, setSelectedCategory] = useState<VolunteerCategory | ''>('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [selectedVolunteerIds, setSelectedVolunteerIds] = useState<Set<string>>(new Set())
   const [volunteerSearch, setVolunteerSearch] = useState('')
   const [isPending, startTransition] = useTransition()
@@ -458,13 +452,13 @@ export default function MessagesView({ initialMessages, volunteers, templates }:
               {recipientType === 'group' && (
                 <select
                   value={selectedCategory}
-                  onChange={e => setSelectedCategory(e.target.value as VolunteerCategory | '')}
+                  onChange={e => setSelectedCategory(e.target.value)}
                   style={fieldStyle}
                 >
                   <option value="">Select a category…</option>
-                  {(Object.keys(CATEGORY_LABELS) as VolunteerCategory[]).map(cat => (
-                    <option key={cat} value={cat}>
-                      {CATEGORY_LABELS[cat]} ({volunteers.filter(v => v.category === cat).length})
+                  {categories.map(cat => (
+                    <option key={cat.slug} value={cat.slug}>
+                      {cat.name} ({volunteers.filter(v => v.category === cat.slug).length})
                     </option>
                   ))}
                 </select>
