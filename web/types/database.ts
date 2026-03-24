@@ -1,12 +1,18 @@
 // Auto-generated from supabase/migrations/20260313221607_initial_schema.sql
 // Update by running: supabase gen types typescript --local > web/types/database.ts
 
-export type VolunteerCategory =
-  | 'medical_professional'
-  | 'support_staff'
-  | 'admin'
-  | 'trainee'
-  | 'other'
+// Dynamic — values now come from the `categories` table
+export type VolunteerCategory = string
+
+export interface Category {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  is_archived: boolean
+  sort_order: number
+  created_at: string
+}
 
 export type VolunteerStatus =
   | 'applicant'
