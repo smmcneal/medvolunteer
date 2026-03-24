@@ -1088,6 +1088,7 @@ export default function ShiftsView({
             padding: '28px', width: '100%', maxWidth: '490px',
             boxShadow: '0 24px 64px rgba(10,15,30,0.2), 0 4px 16px rgba(10,15,30,0.1)',
             border: '1px solid var(--surface-border)',
+            maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px' }}>
               <div>
@@ -1120,7 +1121,7 @@ export default function ShiftsView({
                 </div>
                 <div>
                   <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Start Time *</label>
-                  <input style={inputStyle} type="time" value={createForm.start_time} onChange={e => setCreateForm(f => ({ ...f, start_time: e.target.value }))} />
+                  <input style={inputStyle} type="time" value={createForm.start_time} onChange={e => { if (e.target.value) setCreateForm(f => ({ ...f, start_time: e.target.value })) }} />
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -1130,7 +1131,7 @@ export default function ShiftsView({
                 </div>
                 <div>
                   <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>End Time *</label>
-                  <input style={inputStyle} type="time" value={createForm.end_time} onChange={e => setCreateForm(f => ({ ...f, end_time: e.target.value }))} />
+                  <input style={inputStyle} type="time" value={createForm.end_time} onChange={e => { if (e.target.value) setCreateForm(f => ({ ...f, end_time: e.target.value })) }} />
                 </div>
               </div>
 
