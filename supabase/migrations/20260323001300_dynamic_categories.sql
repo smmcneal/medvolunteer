@@ -38,12 +38,8 @@ ALTER TABLE volunteers
 -- 5. Recreate GIN index for the new text[] column
 CREATE INDEX idx_volunteers_categories ON volunteers USING GIN (volunteer_categories);
 
--- 6. Fix category_requirements table (uses volunteer_category type)
-ALTER TABLE category_requirements
-  ALTER COLUMN category TYPE text
-  USING category::text;
-
--- 7. Fix org_category_coordinators table (uses volunteer_category type)
+-- 6. Fix org_category_coordinators table (uses volunteer_category type)
+--    category_requirements uses category_name (TEXT) so no conversion needed there.
 ALTER TABLE org_category_coordinators
   ALTER COLUMN category TYPE text
   USING category::text;
