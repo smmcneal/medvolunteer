@@ -1,6 +1,5 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 
@@ -10,19 +9,19 @@ export async function updateOrgProfile(data: {
   name: string
   logo_url: string | null
 }) {
-  const supabase = await createClient()
-  const { data: org } = await supabase.from('organizations').select('id').limit(1).single()
+  const admin = createAdminClient()
+  const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
-  const { error } = await supabase.from('organizations').update(data).eq('id', org.id)
+  const { error } = await admin.from('organizations').update(data).eq('id', org.id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/settings')
 }
 
 export async function updateOrgSettings(settings: Record<string, unknown>) {
-  const supabase = await createClient()
-  const { data: org } = await supabase.from('organizations').select('id, settings').limit(1).single()
+  const admin = createAdminClient()
+  const { data: org } = await admin.from('organizations').select('id, settings').limit(1).single()
   if (!org) throw new Error('No organization found')
-  const { error } = await supabase
+  const { error } = await admin
     .from('organizations')
     .update({ settings: { ...(org.settings as Record<string, unknown> ?? {}), ...settings } })
     .eq('id', org.id)
@@ -39,10 +38,10 @@ export async function createLocation(data: {
   lng: number | null
   geofence_radius_meters: number
 }) {
-  const supabase = await createClient()
-  const { data: org } = await supabase.from('organizations').select('id').limit(1).single()
+  const admin = createAdminClient()
+  const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
-  const { error } = await supabase.from('locations').insert({ org_id: org.id, ...data })
+  const { error } = await admin.from('locations').insert({ org_id: org.id, ...data })
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/settings')
 }
@@ -55,15 +54,15 @@ export async function updateLocation(id: string, data: {
   geofence_radius_meters?: number
   is_active?: boolean
 }) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('locations').update(data).eq('id', id)
+  const admin = createAdminClient()
+  const { error } = await admin.from('locations').update(data).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/settings')
 }
 
 export async function deleteLocation(id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('locations').delete().eq('id', id)
+  const admin = createAdminClient()
+  const { error } = await admin.from('locations').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/settings')
 }
@@ -73,10 +72,10 @@ export async function deleteLocation(id: string) {
 export async function addHoliday(data: { name: string; date: string; is_recurring: boolean }) {
   if (!data.name.trim()) throw new Error('Name cannot be empty')
   if (!data.date) throw new Error('Date cannot be empty')
-  const supabase = await createClient()
-  const { data: org } = await supabase.from('organizations').select('id').limit(1).single()
+  const admin = createAdminClient()
+  const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
-  const { error } = await supabase
+  const { error } = await admin
     .from('org_holidays')
     .insert({ org_id: org.id, name: data.name.trim(), date: data.date, is_recurring: data.is_recurring })
   if (error) throw new Error(error.message)
@@ -85,8 +84,8 @@ export async function addHoliday(data: { name: string; date: string; is_recurrin
 }
 
 export async function deleteHoliday(holidayId: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('org_holidays').delete().eq('id', holidayId)
+  const admin = createAdminClient()
+  const { error } = await admin.from('org_holidays').delete().eq('id', holidayId)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/settings')
   revalidatePath('/dashboard/shifts')
@@ -297,11 +296,11 @@ export async function restoreCategory(id: string): Promise<{ error?: string }> {
 // ─── Category Descriptions ────────────────────────────────────────────────────
 
 export async function updateCategoryDescriptions(descriptions: Record<string, string>) {
-  const supabase = await createClient()
-  const { data: org } = await supabase.from('organizations').select('id, settings').limit(1).single()
+  const admin = createAdminClient()
+  const { data: org } = await admin.from('organizations').select('id, settings').limit(1).single()
   if (!org) throw new Error('No organization found')
   const existing = (org.settings as Record<string, unknown>) ?? {}
-  const { error } = await supabase
+  const { error } = await admin
     .from('organizations')
     .update({ settings: { ...existing, category_descriptions: descriptions } })
     .eq('id', org.id)
