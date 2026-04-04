@@ -61,6 +61,7 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
   const [moveAssignment, setMoveAssignment] = useState<AssignmentWithShift | null>(null)
   const [rescheduleAssignment, setRescheduleAssignment] = useState<AssignmentWithShift | null>(null)
   const [rescheduleSuccess, setRescheduleSuccess] = useState(false)
+  const [signUpSuccess, setSignUpSuccess] = useState<string | null>(null)
   const router = useRouter()
 
   const now = new Date().toISOString()
@@ -114,12 +115,14 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
     })
   }
 
-  function handleSignUp(shiftId: string) {
+  function handleSignUp(shiftId: string, shiftName: string) {
     setActionError(null)
     setSigningUpShiftId(shiftId)
     startTransition(async () => {
       try {
         await volunteerSignUpForShift(shiftId)
+        setSignUpSuccess(shiftName)
+        setTimeout(() => setSignUpSuccess(null), 5000)
         router.refresh()
       } catch (e: unknown) {
         setActionError(e instanceof Error ? e.message : 'Sign-up failed')
@@ -254,7 +257,7 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
                     key={s.id}
                     shift={s}
                     isSigningUp={signingUpShiftId === s.id && isPending}
-                    onSignUp={() => handleSignUp(s.id)}
+                    onSignUp={() => handleSignUp(s.id, s.name)}
                   />
                 ))}
               </div>
@@ -269,6 +272,25 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
                 <p style={{ fontSize: '13px', color: '#6b7280', margin: 0 }}>
                   No open shifts at <strong>{selectedLocation?.name}</strong>
                 </p>
+              </div>
+            )}
+
+            {/* Sign-up success inline callout */}
+            {signUpSuccess && (
+              <div style={{
+                background: '#ecfdf5', border: '1.5px solid #6ee7b7',
+                borderRadius: '12px', padding: '12px 14px',
+                marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px',
+              }}>
+                <span style={{ fontSize: '18px' }}>✅</span>
+                <div>
+                  <p style={{ fontSize: '13px', fontWeight: 700, color: '#065f46', margin: 0 }}>
+                    You&apos;re signed up!
+                  </p>
+                  <p style={{ fontSize: '12px', color: '#047857', margin: '2px 0 0' }}>
+                    {signUpSuccess} has been added to your shifts below.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -317,6 +339,19 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
             : past.map(a => <PastCard key={a.id} assignment={a} />)
         )}
       </div>
+
+      {/* Sign-up success toast */}
+      {signUpSuccess && (
+        <div style={{
+          position: 'fixed', bottom: '90px', left: '50%', transform: 'translateX(-50%)',
+          background: '#00897B', color: 'white', padding: '10px 18px', borderRadius: '10px',
+          fontSize: '13px', fontWeight: 600, zIndex: 200,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          whiteSpace: 'nowrap', maxWidth: 'calc(100vw - 40px)', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          ✓ Signed up for {signUpSuccess}
+        </div>
+      )}
 
       {/* Reschedule request success toast */}
       {rescheduleSuccess && (
