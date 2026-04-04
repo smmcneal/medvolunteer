@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { X } from 'lucide-react'
 import type { ShiftWithRoster } from './page'
 import { updateShift, bulkUpdateRecurringShifts } from './actions'
+import { useAdminT } from '@/lib/admin-lang'
 
 const NAVY = '#1B2A4A'
 const TEAL = '#00ACC1'
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export default function EditRecurringModal({ shift, updateData, onClose, onDone }: Props) {
+  const t = useAdminT()
   const [choice, setChoice] = useState<'this' | 'future'>('this')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
@@ -64,7 +66,7 @@ export default function EditRecurringModal({ shift, updateData, onClose, onDone 
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
           <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-            Edit recurring shift
+            {t('edit_recurring_title')}
           </h2>
           <button onClick={onClose} style={{
             background: 'none', border: 'none', cursor: 'pointer',
@@ -91,12 +93,10 @@ export default function EditRecurringModal({ shift, updateData, onClose, onDone 
               />
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {opt === 'this' ? 'This shift only' : 'This and all future shifts'}
+                  {opt === 'this' ? t('this_shift_only') : t('this_and_future')}
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  {opt === 'this'
-                    ? 'Only the selected occurrence will be updated.'
-                    : 'This and all occurrences after it will be updated.'}
+                  {opt === 'this' ? t('this_shift_only_desc') : t('this_and_future_desc')}
                 </div>
               </div>
             </label>
@@ -111,7 +111,7 @@ export default function EditRecurringModal({ shift, updateData, onClose, onDone 
             border: '1px solid var(--surface-border)', background: 'var(--surface-card)',
             color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit',
           }}>
-            Cancel
+            {t('cancel')}
           </button>
           <button
             onClick={confirm}
@@ -124,7 +124,7 @@ export default function EditRecurringModal({ shift, updateData, onClose, onDone 
               fontFamily: 'inherit',
             }}
           >
-            {isPending ? 'Saving…' : 'Confirm'}
+            {isPending ? t('saving') : t('confirm')}
           </button>
         </div>
       </div>

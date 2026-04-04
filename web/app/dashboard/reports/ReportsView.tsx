@@ -6,6 +6,7 @@ import { Download, TrendingUp, Clock, ShieldCheck, AlertTriangle, UserX, Filter,
 import type { HoursRow, OnboardingRow, PipelinePhaseCount, VolunteerOnboardingRow, BgCheckRow, CredentialExpiryRow, ActiveVolunteerActivity, FilterParams } from './page'
 import { bulkMarkInactive, approveHoursEntry, rejectHoursEntry } from './actions'
 import type { Category } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -77,6 +78,7 @@ function GlobalFilterBar({ allCategories, allStatuses, appliedFilters, categorie
   appliedFilters: FilterParams
   categories: Category[]
 }) {
+  const t = useAdminT()
   function getCatLabel(slug: string) {
     return categories.find(c => c.slug === slug)?.name ?? slug
   }
@@ -132,7 +134,7 @@ function GlobalFilterBar({ allCategories, allStatuses, appliedFilters, categorie
         }}
       >
         <Filter size={13} />
-        Filters
+        {t('filters')}
         {activeCount > 0 && (
           <span style={{
             background: '#1B2A4A', color: 'white', fontSize: '10px', fontWeight: 700,
@@ -149,39 +151,39 @@ function GlobalFilterBar({ allCategories, allStatuses, appliedFilters, categorie
           display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end',
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</label>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('status_filter')}</label>
             <select value={status} onChange={e => setStatus(e.target.value)} style={iStyle}>
-              <option value="">All</option>
+              <option value="">{t('all')}</option>
               {allStatuses.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Category</label>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('category_filter')}</label>
             <select value={category} onChange={e => setCategory(e.target.value)} style={iStyle}>
-              <option value="">All</option>
+              <option value="">{t('all')}</option>
               {allCategories.map(c => <option key={c} value={c}>{getCatLabel(c)}</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pipeline Phase</label>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('pipeline_phase_filter')}</label>
             <select value={pipelinePhase} onChange={e => setPipelinePhase(e.target.value)} style={iStyle}>
-              <option value="">All</option>
+              <option value="">{t('all')}</option>
               {PIPELINE_PHASES_LIST.map(p => <option key={p} value={p}>{PIPELINE_PHASE_LABELS[p] ?? p}</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Joined From</label>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('joined_from')}</label>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={iStyle} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Joined To</label>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('joined_to')}</label>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={iStyle} />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={applyFilters} style={{ padding: '6px 14px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, background: '#1B2A4A', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Apply</button>
+            <button onClick={applyFilters} style={{ padding: '6px 14px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, background: '#1B2A4A', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{t('apply')}</button>
             {activeCount > 0 && (
               <button onClick={clearFilters} style={{ padding: '6px 10px', borderRadius: '7px', fontSize: '13px', background: 'white', color: '#6b7280', border: '1px solid #e5e7eb', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <X size={12} /> Clear
+                <X size={12} /> {t('clear')}
               </button>
             )}
           </div>
@@ -200,6 +202,7 @@ interface PendingHoursEntry {
 }
 
 function MedVolPendingHoursPanel({ entries }: { entries: PendingHoursEntry[] }) {
+  const t = useAdminT()
   const [pending, startTransition] = useTransition()
   const router = useRouter()
   const [items, setItems] = useState(entries)
@@ -214,16 +217,16 @@ function MedVolPendingHoursPanel({ entries }: { entries: PendingHoursEntry[] }) 
     startTransition(async () => { await rejectHoursEntry(id); router.refresh() })
   }
 
-  if (items.length === 0) return <p style={{ fontSize: 13, color: '#9ca3af' }}>No pending hours to review.</p>
+  if (items.length === 0) return <p style={{ fontSize: 13, color: '#9ca3af' }}>{t('no_pending_hours')}</p>
 
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
       <thead>
         <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-          <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>Volunteer</th>
-          <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>Clock In</th>
-          <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>Clock Out</th>
-          <th style={{ textAlign: 'right', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>Hours</th>
+          <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>{t('volunteer')}</th>
+          <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>{t('clock_in_col')}</th>
+          <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>{t('clock_out_col')}</th>
+          <th style={{ textAlign: 'right', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>{t('shift_hours')}</th>
           <th style={{ padding: '8px 12px' }} />
         </tr>
       </thead>
@@ -236,8 +239,8 @@ function MedVolPendingHoursPanel({ entries }: { entries: PendingHoursEntry[] }) 
             <td style={{ padding: '8px 12px', color: '#374151', textAlign: 'right' }}>{e.hours}h</td>
             <td style={{ padding: '8px 12px', textAlign: 'right' }}>
               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                <button onClick={() => handleApprove(e.id)} disabled={pending} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer' }}>Approve</button>
-                <button onClick={() => handleReject(e.id)} disabled={pending} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: '1px solid #e5e7eb', background: '#fff', color: '#dc2626', cursor: 'pointer' }}>Reject</button>
+                <button onClick={() => handleApprove(e.id)} disabled={pending} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer' }}>{t('approve')}</button>
+                <button onClick={() => handleReject(e.id)} disabled={pending} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: '1px solid #e5e7eb', background: '#fff', color: '#dc2626', cursor: 'pointer' }}>{t('reject')}</button>
               </div>
             </td>
           </tr>
@@ -287,6 +290,7 @@ export default function ReportsView({
   pendingHours?: PendingHoursEntry[]
   categories?: Category[]
 }) {
+  const t = useAdminT()
   function getCatLabel(slug: string) {
     return categories.find(c => c.slug === slug)?.name ?? slug
   }
@@ -374,7 +378,7 @@ export default function ReportsView({
       {requireHourApproval && (
         <div style={{ background: 'white', borderRadius: 10, border: '1px solid #e5e7eb', padding: '16px 20px', marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>Pending Hour Approvals</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>{t('pending_hour_approvals')}</span>
             {pendingHours.length > 0 && (
               <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#fef2f2', color: '#dc2626' }}>{pendingHours.length}</span>
             )}
@@ -388,7 +392,7 @@ export default function ReportsView({
         display: 'flex', gap: '4px', marginBottom: '24px',
         borderBottom: '1px solid #f0f0f0', paddingBottom: '0',
       }}>
-        {TABS.map(({ key, label, icon: Icon }) => (
+        {TABS.map(({ key, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
@@ -404,7 +408,7 @@ export default function ReportsView({
             }}
           >
             <Icon style={{ width: '13px', height: '13px' }} />
-            {label}
+            {t(`${key}_tab`)}
           </button>
         ))}
       </div>
@@ -438,7 +442,7 @@ export default function ReportsView({
               onChange={e => setHoursSearch(e.target.value)}
             />
             <select style={selectStyle} value={hoursCategory} onChange={e => setHoursCategory(e.target.value)}>
-              <option value="">All categories</option>
+              <option value="">{t('all_categories')}</option>
               {categories.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
             </select>
             <button
@@ -459,7 +463,7 @@ export default function ReportsView({
               }}
             >
               <Download style={{ width: '13px', height: '13px' }} />
-              Export CSV
+              {t('export_csv')}
             </button>
           </div>
 
@@ -468,17 +472,17 @@ export default function ReportsView({
             {filteredHours.length === 0 ? (
               <div style={{ padding: '48px', textAlign: 'center' }}>
                 <Clock style={{ width: '28px', height: '28px', color: '#e5e7eb', margin: '0 auto 8px' }} />
-                <p style={{ fontSize: '14px', color: '#9ca3af' }}>No hours data found</p>
+                <p style={{ fontSize: '14px', color: '#9ca3af' }}>{t('no_hours_found')}</p>
               </div>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#fafafa' }}>
-                    <th style={thStyle}>Volunteer</th>
-                    <th style={thStyle}>Category</th>
-                    <th style={thStyle}>Sessions</th>
-                    <th style={thStyle}>Total Hours</th>
-                    <th style={thStyle}>Distribution</th>
+                    <th style={thStyle}>{t('volunteer')}</th>
+                    <th style={thStyle}>{t('category_filter')}</th>
+                    <th style={thStyle}>{t('sessions_col')}</th>
+                    <th style={thStyle}>{t('total_hours_report')}</th>
+                    <th style={thStyle}>{t('distribution_col')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -630,7 +634,7 @@ export default function ReportsView({
                   onChange={e => setOnboardingSearch(e.target.value)}
                 />
                 <select style={selectStyle} value={onboardingPhase} onChange={e => setOnboardingPhase(e.target.value)}>
-                  <option value="">All phases</option>
+                  <option value="">{t('all_phases')}</option>
                   {Object.entries(PIPELINE_PHASE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
                 <button
@@ -654,7 +658,7 @@ export default function ReportsView({
                   }}
                 >
                   <Download style={{ width: '13px', height: '13px' }} />
-                  Export CSV
+                  {t('export_csv')}
                 </button>
               </div>
             </div>
@@ -662,19 +666,19 @@ export default function ReportsView({
             {filteredOnboardingVols.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '48px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
                 <TrendingUp style={{ width: '28px', height: '28px', color: '#e5e7eb', margin: '0 auto 8px' }} />
-                <p style={{ fontSize: '14px', color: '#9ca3af' }}>No volunteers match the current filter</p>
+                <p style={{ fontSize: '14px', color: '#9ca3af' }}>{t('no_volunteers_filter')}</p>
               </div>
             ) : (
               <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#fafafa' }}>
-                      <th style={thStyle}>Volunteer</th>
-                      <th style={thStyle}>Category</th>
-                      <th style={thStyle}>Phase</th>
-                      <th style={thStyle}>Workflow</th>
-                      <th style={thStyle}>Stages</th>
-                      <th style={thStyle}>Progress</th>
+                      <th style={thStyle}>{t('volunteer')}</th>
+                      <th style={thStyle}>{t('category_filter')}</th>
+                      <th style={thStyle}>{t('phase_col')}</th>
+                      <th style={thStyle}>{t('workflow_col')}</th>
+                      <th style={thStyle}>{t('stages_col')}</th>
+                      <th style={thStyle}>{t('progress_col')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -709,7 +713,7 @@ export default function ReportsView({
                                 <span style={{ fontSize: '11px', color: '#9ca3af', minWidth: '32px' }}>{pct}%</span>
                               </div>
                             ) : (
-                              <span style={{ fontSize: '12px', color: '#d1d5db' }}>No workflow</span>
+                              <span style={{ fontSize: '12px', color: '#d1d5db' }}>{t('no_workflow_assigned')}</span>
                             )}
                           </td>
                         </tr>
@@ -730,7 +734,7 @@ export default function ReportsView({
           {bgRows.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '64px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
               <ShieldCheck style={{ width: '28px', height: '28px', color: '#e5e7eb', margin: '0 auto 8px' }} />
-              <p style={{ fontSize: '14px', color: '#9ca3af' }}>No background check data yet</p>
+              <p style={{ fontSize: '14px', color: '#9ca3af' }}>{t('no_bgcheck_data')}</p>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px' }}>
@@ -763,7 +767,7 @@ export default function ReportsView({
         <div>
           {/* Threshold selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>No activity in last:</span>
+            <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>{t('no_activity_in_last')}</span>
             {([30, 60, 90] as const).map(d => (
               <button
                 key={d}
@@ -774,7 +778,7 @@ export default function ReportsView({
                   background: inactiveThreshold === d ? NAVY : '#f3f4f6',
                   color: inactiveThreshold === d ? 'white' : '#6b7280',
                 }}
-              >{d} days</button>
+              >{d} {t('days_suffix')}</button>
             ))}
             <button
               onClick={() => setInactiveThreshold('custom')}
@@ -784,7 +788,7 @@ export default function ReportsView({
                 background: inactiveThreshold === 'custom' ? NAVY : '#f3f4f6',
                 color: inactiveThreshold === 'custom' ? 'white' : '#6b7280',
               }}
-            >Custom</button>
+            >{t('custom_days')}</button>
             {inactiveThreshold === 'custom' && (
               <input
                 type="number" min="1" placeholder="Days" value={inactiveCustomDays}
@@ -804,12 +808,12 @@ export default function ReportsView({
           {inactiveDays === 0 ? (
             <div style={{ textAlign: 'center', padding: '64px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
               <UserX style={{ width: '28px', height: '28px', color: '#e5e7eb', margin: '0 auto 8px' }} />
-              <p style={{ fontSize: '14px', color: '#9ca3af' }}>Set a day threshold above</p>
+              <p style={{ fontSize: '14px', color: '#9ca3af' }}>{t('set_day_threshold')}</p>
             </div>
           ) : inactiveVols.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '64px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
               <UserX style={{ width: '28px', height: '28px', color: '#d1fae5', margin: '0 auto 8px' }} />
-              <p style={{ fontSize: '14px', color: '#6b7280' }}>No volunteers inactive for {inactiveDays}+ days</p>
+              <p style={{ fontSize: '14px', color: '#6b7280' }}>{t('no_inactive_volunteers')} {inactiveDays}+ {t('days_suffix')}</p>
             </div>
           ) : (
             <>
@@ -831,9 +835,9 @@ export default function ReportsView({
                           style={{ cursor: 'pointer' }}
                         />
                       </th>
-                      <th style={thStyle}>Name</th>
-                      <th style={thStyle}>Category</th>
-                      <th style={thStyle}>Last Active</th>
+                      <th style={thStyle}>{t('name_col')}</th>
+                      <th style={thStyle}>{t('category_filter')}</th>
+                      <th style={thStyle}>{t('last_active_col')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -862,7 +866,7 @@ export default function ReportsView({
                         <td style={{ padding: '10px 20px', fontSize: '13px', color: '#9ca3af' }}>
                           {v.lastActivityAt
                             ? new Date(v.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                            : 'Never'}
+                            : t('never_label')}
                         </td>
                       </tr>
                     ))}
@@ -898,7 +902,7 @@ export default function ReportsView({
                     opacity: inactivePending ? 0.6 : 1,
                   }}
                 >
-                  {inactivePending ? 'Marking…' : `Mark ${inactiveSelected.size || ''} Inactive`}
+                  {inactivePending ? t('marking_inactive') : `${t('mark_inactive')} ${inactiveSelected.size || ''}`}
                 </button>
                 <button
                   onClick={() => downloadCSV(
@@ -919,7 +923,7 @@ export default function ReportsView({
                   }}
                 >
                   <Download style={{ width: '13px', height: '13px' }} />
-                  Export CSV
+                  {t('export_csv')}
                 </button>
               </div>
             </>
@@ -932,7 +936,7 @@ export default function ReportsView({
         <div>
           {/* Window filter + export */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>Expiring within:</span>
+            <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>{t('expiring_within')}</span>
             {([30, 60, 90] as const).map(w => (
               <button
                 key={w}
@@ -944,7 +948,7 @@ export default function ReportsView({
                   color: credWindow === w ? 'white' : '#6b7280',
                 }}
               >
-                {w} days
+                {w} {t('days_suffix')}
               </button>
             ))}
             <button
@@ -965,25 +969,25 @@ export default function ReportsView({
               }}
             >
               <Download style={{ width: '13px', height: '13px' }} />
-              Export CSV
+              {t('export_csv')}
             </button>
           </div>
 
           {filteredCreds.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '64px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
               <AlertTriangle style={{ width: '28px', height: '28px', color: '#d1fae5', margin: '0 auto 8px' }} />
-              <p style={{ fontSize: '14px', color: '#6b7280' }}>No credentials expiring in the next {credWindow} days</p>
+              <p style={{ fontSize: '14px', color: '#6b7280' }}>{t('no_creds_expiring')} {credWindow} {t('days_suffix')}</p>
             </div>
           ) : (
             <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#fafafa' }}>
-                    <th style={thStyle}>Volunteer</th>
-                    <th style={thStyle}>Credential Type</th>
-                    <th style={thStyle}>Expires</th>
-                    <th style={thStyle}>Days Left</th>
-                    <th style={thStyle}>Urgency</th>
+                    <th style={thStyle}>{t('volunteer')}</th>
+                    <th style={thStyle}>{t('credential_type_col')}</th>
+                    <th style={thStyle}>{t('expires_col')}</th>
+                    <th style={thStyle}>{t('days_left_col')}</th>
+                    <th style={thStyle}>{t('urgency_col')}</th>
                   </tr>
                 </thead>
                 <tbody>

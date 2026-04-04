@@ -29,6 +29,7 @@ import {
 } from './actions'
 import TagsManager from './TagsManager'
 import FlagsManager from './FlagsManager'
+import { useAdminT } from '@/lib/admin-lang'
 
 type Tab = 'profile' | 'locations' | 'integrations' | 'categories' | 'holidays' | 'automation' | 'tags' | 'flags'
 
@@ -66,6 +67,7 @@ interface Props {
 }
 
 export default function SettingsView({ org, locations: initialLocations, initialTags, initialFlags, initialHolidays, initialAutomationRules, initialAutoMessageRules, messageTemplates, initialCategoryRequirements, initialCoordinators, activeVolunteers, initialDocRules, categories }: Props) {
+  const t = useAdminT()
   const [tab, setTab] = useState<Tab>('profile')
 
   return (
@@ -79,29 +81,29 @@ export default function SettingsView({ org, locations: initialLocations, initial
         flexShrink: 0,
       }}>
         {([
-          { key: 'profile',      label: '🏢 Org Profile' },
-          { key: 'locations',    label: '📍 Locations' },
-          { key: 'integrations', label: '🔗 Integrations' },
-          { key: 'categories',   label: '🗂 Categories' },
-          { key: 'holidays',    label: '📅 Holidays' },
-          { key: 'automation',  label: '⚡ Automation' },
-          { key: 'tags',        label: '🏷 Tags' },
-          { key: 'flags',        label: '🚩 Flags' },
-        ] as { key: Tab; label: string }[]).map(t => (
+          { key: 'profile',      labelKey: 'org_profile' },
+          { key: 'locations',    labelKey: 'locations_tab' },
+          { key: 'integrations', labelKey: 'integrations_tab' },
+          { key: 'categories',   labelKey: 'categories_tab' },
+          { key: 'holidays',     labelKey: 'holidays_tab' },
+          { key: 'automation',   labelKey: 'automation_tab' },
+          { key: 'tags',         labelKey: 'tags_tab' },
+          { key: 'flags',        labelKey: 'flags_tab' },
+        ] as { key: Tab; labelKey: string }[]).map(tabItem => (
           <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
+            key={tabItem.key}
+            onClick={() => setTab(tabItem.key)}
             style={{
               padding: '12px 20px',
               fontSize: '13px',
               fontWeight: 600,
               border: 'none',
-              borderBottom: tab === t.key ? '2px solid #1B2A4A' : '2px solid transparent',
+              borderBottom: tab === tabItem.key ? '2px solid #1B2A4A' : '2px solid transparent',
               cursor: 'pointer',
               background: 'transparent',
-              color: tab === t.key ? '#1B2A4A' : '#9ca3af',
+              color: tab === tabItem.key ? '#1B2A4A' : '#9ca3af',
             }}
-          >{t.label}</button>
+          >{t(tabItem.labelKey)}</button>
         ))}
       </div>
 

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { applyTag, removeTag } from './actions'
 import type { OrgTag } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 export default function TagsPanel({
   volunteerId,
@@ -13,11 +14,12 @@ export default function TagsPanel({
   appliedTags: { id: string; name: string; color: string }[]
   orgTags: OrgTag[]
 }) {
+  const t = useAdminT()
   const [applied, setApplied] = useState(appliedTags)
   const [open, setOpen]       = useState(false)
   const [pending, startTransition] = useTransition()
 
-  const available = orgTags.filter(t => !applied.some(a => a.id === t.id))
+  const available = orgTags.filter(tag => !applied.some(a => a.id === tag.id))
 
   function handleApply(tag: OrgTag) {
     setOpen(false)
@@ -25,24 +27,24 @@ export default function TagsPanel({
     setApplied(a => [...a, { id: tag.id, name: tag.name, color: tag.color }])
     startTransition(async () => {
       const res = await applyTag(volunteerId, tag.id)
-      if (res.error) setApplied(a => a.filter(t => t.id !== tag.id))
+      if (res.error) setApplied(a => a.filter(item => item.id !== tag.id))
     })
   }
 
   function handleRemove(tagId: string) {
     // Optimistic update first, roll back on error
-    const prev = applied.find(t => t.id === tagId)
-    setApplied(a => a.filter(t => t.id !== tagId))
+    const prev = applied.find(item => item.id === tagId)
+    setApplied(a => a.filter(item => item.id !== tagId))
     startTransition(async () => {
       const res = await removeTag(volunteerId, tagId)
-      if (res.error && prev) setApplied(a => [...a, prev])
+      if (res.error && prev) setApplied(a => [...a, prev!])
     })
   }
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Tags</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{t('tags_label')}</span>
         {available.length > 0 && (
           <div style={{ position: 'relative' }}>
             <button
@@ -53,7 +55,7 @@ export default function TagsPanel({
                 cursor: 'pointer', fontWeight: 600, padding: '2px 0',
               }}
             >
-              + Add tag
+              {t('add_tag')}
             </button>
             {open && (
               <>
@@ -93,16 +95,16 @@ export default function TagsPanel({
 
       {orgTags.length === 0 && (
         <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>
-          No tags defined yet.{' '}
+          {t('no_tags_defined')}{' '}
           <a href="/dashboard/settings" style={{ color: '#14b8a6', textDecoration: 'none', fontWeight: 600 }}>
-            Create tags in Settings →
+            {t('create_tags_in_settings')}
           </a>
         </p>
       )}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {applied.length === 0 && orgTags.length > 0 && (
-          <span style={{ fontSize: 13, color: '#9ca3af' }}>No tags applied.</span>
+          <span style={{ fontSize: 13, color: '#9ca3af' }}>{t('no_tags_applied')}</span>
         )}
         {applied.map(tag => (
           <span key={tag.id} style={{

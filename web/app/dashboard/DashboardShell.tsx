@@ -4,11 +4,13 @@ import { useState } from 'react'
 import { Menu } from 'lucide-react'
 import Image from 'next/image'
 import Sidebar from '@/components/Sidebar'
+import { AdminLangProvider } from '@/lib/admin-lang'
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
 
   return (
+    <AdminLangProvider>
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--surface-bg)' }}>
 
       {/* ── Mobile overlay backdrop ── */}
@@ -65,5 +67,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       </div>
 
     </div>
+    </AdminLangProvider>
   )
 }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { UserPlus } from 'lucide-react'
 import AddVolunteerModal from './AddVolunteerModal'
 import type { Category } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 interface Props {
   count: number
@@ -13,6 +14,7 @@ interface Props {
 
 export default function VolunteersHeader({ count, locations, categories }: Props) {
   const [showModal, setShowModal] = useState(false)
+  const t = useAdminT()
 
   return (
     <>
@@ -32,7 +34,7 @@ export default function VolunteersHeader({ count, locations, categories }: Props
             letterSpacing: '-0.025em',
             lineHeight: 1,
           }}>
-            Volunteers
+            {t('volunteers_title')}
           </h1>
           <span style={{
             fontSize: '12px',
@@ -63,7 +65,7 @@ export default function VolunteersHeader({ count, locations, categories }: Props
           }}
         >
           <UserPlus style={{ width: '14px', height: '14px' }} />
-          Add Volunteer
+          {t('add_volunteer')}
         </button>
       </div>
 

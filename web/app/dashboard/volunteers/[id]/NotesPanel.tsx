@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { addNote } from './actions'
 import type { VolunteerNote } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -23,6 +24,7 @@ export default function NotesPanel({
   volunteerId: string
   initialNotes: VolunteerNote[]
 }) {
+  const t = useAdminT()
   const [notes, setNotes] = useState<VolunteerNote[]>(initialNotes)
   const [content, setContent] = useState('')
   const [error, setError]   = useState<string | null>(null)
@@ -53,7 +55,7 @@ export default function NotesPanel({
         <textarea
           value={content}
           onChange={e => setContent(e.target.value)}
-          placeholder="Add a note…"
+          placeholder={t('add_note_placeholder')}
           rows={3}
           style={{
             width: '100%', padding: '10px 12px', border: '1px solid #e5e7eb',
@@ -73,13 +75,13 @@ export default function NotesPanel({
             cursor: pending || !content.trim() ? 'not-allowed' : 'pointer',
           }}
         >
-          {pending ? 'Saving…' : 'Add note'}
+          {pending ? t('saving_note') : t('add_note_btn')}
         </button>
       </form>
 
       {/* Notes feed */}
       {notes.length === 0 ? (
-        <p style={{ fontSize: 13, color: '#9ca3af', textAlign: 'center', padding: '24px 0' }}>No notes yet.</p>
+        <p style={{ fontSize: 13, color: '#9ca3af', textAlign: 'center', padding: '24px 0' }}>{t('no_notes')}</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {notes.map(note => (

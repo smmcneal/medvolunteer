@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Search, ChevronUp, ChevronDown, ArrowRight, ChevronRight } from 'lucide-react'
 import type { VolunteerRow } from './page'
 import type { VolunteerStatus, PipelinePhase, Category } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 const STATUS_LABELS: Record<VolunteerStatus, string> = {
   applicant: 'Applicant',
@@ -62,6 +63,7 @@ export default function VolunteersTable({
   initialFilters: { category?: string; status?: string; location?: string }
   categories: Category[]
 }) {
+  const t = useAdminT()
   function getCatStyle(slug: string) {
     const idx = categories.findIndex(c => c.slug === slug)
     if (idx === -1) return { bg: '#f3f4f6', text: '#6b7280', ring: '#e5e7eb' }
@@ -148,7 +150,7 @@ export default function VolunteersTable({
           }} />
           <input
             type="text"
-            placeholder="Search by name or email…"
+            placeholder={t('search_placeholder')}
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{
@@ -171,7 +173,7 @@ export default function VolunteersTable({
             borderColor: category ? 'var(--teal)' : 'var(--surface-border)',
             color: category ? 'var(--teal)' : 'var(--text-secondary)',
           }}>
-            <option value="">All categories</option>
+            <option value="">{t('all_categories')}</option>
             {categories.map(c => (
               <option key={c.slug} value={c.slug}>{c.name}</option>
             ))}
@@ -186,7 +188,7 @@ export default function VolunteersTable({
             borderColor: status ? 'var(--teal)' : 'var(--surface-border)',
             color: status ? 'var(--teal)' : 'var(--text-secondary)',
           }}>
-            <option value="">All statuses</option>
+            <option value="">{t('all_statuses')}</option>
             {(Object.keys(STATUS_LABELS) as VolunteerStatus[]).map(k => (
               <option key={k} value={k}>{STATUS_LABELS[k]}</option>
             ))}
@@ -202,7 +204,7 @@ export default function VolunteersTable({
               borderColor: location ? 'var(--teal)' : 'var(--surface-border)',
               color: location ? 'var(--teal)' : 'var(--text-secondary)',
             }}>
-              <option value="">All locations</option>
+              <option value="">{t('all_locations')}</option>
               {locations.map(l => (
                 <option key={l.id} value={l.name}>{l.name}</option>
               ))}
@@ -221,12 +223,12 @@ export default function VolunteersTable({
               cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
             }}
           >
-            Clear
+            {t('clear')}
           </button>
         )}
 
         <span style={{ fontSize: '12px', color: 'var(--text-faint)', marginLeft: 'auto', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-          {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+          {filtered.length} {filtered.length !== 1 ? t('results') : t('result')}
         </span>
       </div>
 
@@ -236,8 +238,8 @@ export default function VolunteersTable({
           <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
             <Search style={{ width: '18px', height: '18px', color: '#d1d5db' }} />
           </div>
-          <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>No volunteers found</p>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Try adjusting your search or filters.</p>
+          <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>{t('no_volunteers')}</p>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{t('no_volunteers_sub')}</p>
         </div>
       )}
 
@@ -248,14 +250,14 @@ export default function VolunteersTable({
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '940px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--surface-border-sub)' }}>
-                <ThFirst onClick={() => toggleSort('name')} label="Volunteer" sortIcon={<SortIcon col="name" />} active={sort.key === 'name'} />
-                <Th onClick={() => toggleSort('category')} label="Category" sortIcon={<SortIcon col="category" />} active={sort.key === 'category'} />
-                <Th onClick={() => toggleSort('status')} label="Status" sortIcon={<SortIcon col="status" />} active={sort.key === 'status'} />
-                <Th label="Pipeline" />
-                <Th label="Tags" />
-                <Th label="Flags" />
-                <Th label="Location(s)" />
-                <Th onClick={() => toggleSort('hours_this_month')} label="Hrs / mo" sortIcon={<SortIcon col="hours_this_month" />} active={sort.key === 'hours_this_month'} />
+                <ThFirst onClick={() => toggleSort('name')} label={t('col_name')} sortIcon={<SortIcon col="name" />} active={sort.key === 'name'} />
+                <Th onClick={() => toggleSort('category')} label={t('col_category')} sortIcon={<SortIcon col="category" />} active={sort.key === 'category'} />
+                <Th onClick={() => toggleSort('status')} label={t('col_status')} sortIcon={<SortIcon col="status" />} active={sort.key === 'status'} />
+                <Th label={t('col_pipeline')} />
+                <Th label={t('col_tags')} />
+                <Th label={t('col_flags')} />
+                <Th label={t('col_locations')} />
+                <Th onClick={() => toggleSort('hours_this_month')} label={t('col_hours')} sortIcon={<SortIcon col="hours_this_month" />} active={sort.key === 'hours_this_month'} />
                 <th style={{ padding: '10px 16px', width: '36px' }} />
               </tr>
             </thead>
@@ -440,7 +442,7 @@ export default function VolunteersTable({
                         <span style={{ fontWeight: 600, color: v.hours_this_month >= 20 ? '#065f46' : v.hours_this_month >= 8 ? '#1d4ed8' : 'var(--text-secondary)' }}>
                           {v.hours_this_month.toFixed(1)}h
                         </span>
-                        {' '}this mo.
+                        {' '}{t('this_mo')}
                       </span>
                     )}
                   </div>

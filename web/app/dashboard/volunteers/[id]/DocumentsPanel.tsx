@@ -9,6 +9,7 @@ import {
   getUploadSignedUrl,
   sendJotformRequest,
 } from './actions'
+import { useAdminT } from '@/lib/admin-lang'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ export default function DocumentsPanel({
   signedDocuments: Document[]
   jotformApiKey?: string | null
 }) {
+  const t = useAdminT()
   const [uploads, setUploads]         = useState<VolunteerUpload[]>(initialUploads)
   const [dragging, setDragging]       = useState(false)
   const [uploading, setUploading]     = useState(false)
@@ -167,10 +169,10 @@ export default function DocumentsPanel({
           padding: '14px 16px', borderRadius: '10px',
           border: '1px solid #f3f4f6', background: 'white',
         }}>
-          <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '10px' }}>Send via Jotform</p>
+          <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '10px' }}>{t('send_via_jotform')}</p>
           <form onSubmit={handleSendJotform} style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 180px' }}>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>Form ID</label>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>{t('form_id')}</label>
               <input
                 required
                 value={jotformId}
@@ -193,9 +195,9 @@ export default function DocumentsPanel({
               }}
             >
               <Send style={{ width: '12px', height: '12px' }} />
-              {jotformPending ? 'Sending…' : 'Send Form'}
+              {jotformPending ? t('sending') : t('send_form')}
             </button>
-            {jotformOk && <span style={{ fontSize: '12px', color: '#15803d', alignSelf: 'center' }}>Form sent!</span>}
+            {jotformOk && <span style={{ fontSize: '12px', color: '#15803d', alignSelf: 'center' }}>{t('form_sent')}</span>}
             {jotformError && <p style={{ fontSize: '12px', color: '#dc2626', margin: 0, width: '100%' }}>{jotformError}</p>}
           </form>
         </div>
@@ -240,10 +242,10 @@ export default function DocumentsPanel({
         ) : (
           <>
             <p style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>
-              Drop files here, or <span style={{ color: '#14b8a6' }}>browse</span>
+              {t('drop_files_here')} <span style={{ color: '#14b8a6' }}>{t('browse')}</span>
             </p>
             <p style={{ fontSize: '12px', color: '#9ca3af' }}>
-              PDF, Word, Excel, PNG, JPG — up to 50 MB each
+              {t('drop_files_sub')}
             </p>
           </>
         )}
@@ -253,7 +255,7 @@ export default function DocumentsPanel({
       {uploads.length > 0 && (
         <div>
           <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
-            Uploaded Files ({uploads.length})
+            {t('uploaded_files')} ({uploads.length})
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {uploads.map(u => (
@@ -326,7 +328,7 @@ export default function DocumentsPanel({
       {signedDocuments.length > 0 && (
         <div>
           <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
-            Signed Documents ({signedDocuments.length})
+            {t('signed_documents')} ({signedDocuments.length})
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {signedDocuments.map(d => (
@@ -380,7 +382,7 @@ export default function DocumentsPanel({
       {/* Empty state */}
       {uploads.length === 0 && signedDocuments.length === 0 && (
         <p style={{ fontSize: '14px', color: '#9ca3af', textAlign: 'center', padding: '8px 0' }}>
-          No documents on file — upload one above
+          {t('no_documents')}
         </p>
       )}
 

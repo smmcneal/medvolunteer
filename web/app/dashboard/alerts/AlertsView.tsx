@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { InternalAlert } from '@/types/database'
 import { markAlertRead, markAllAlertsRead } from './actions'
+import { useAdminT } from '@/lib/admin-lang'
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -17,6 +18,7 @@ function timeAgo(dateStr: string) {
 }
 
 export default function AlertsView({ alerts: initial }: { alerts: InternalAlert[] }) {
+  const t = useAdminT()
   const router = useRouter()
   const [alerts, setAlerts] = useState<InternalAlert[]>(initial)
   const [isPending, startTransition] = useTransition()
@@ -46,7 +48,7 @@ export default function AlertsView({ alerts: initial }: { alerts: InternalAlert[
               cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
-            Mark all read
+            {t('mark_all_read')}
           </button>
         </div>
       )}
@@ -54,8 +56,8 @@ export default function AlertsView({ alerts: initial }: { alerts: InternalAlert[
       {alerts.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af' }}>
           <p style={{ fontSize: '32px', marginBottom: '12px' }}>🔔</p>
-          <p style={{ fontSize: '14px', fontWeight: 600 }}>No alerts yet</p>
-          <p style={{ fontSize: '13px', marginTop: '4px' }}>Alerts will appear here when document automation rules are triggered.</p>
+          <p style={{ fontSize: '14px', fontWeight: 600 }}>{t('no_alerts')}</p>
+          <p style={{ fontSize: '13px', marginTop: '4px' }}>{t('no_alerts_sub')}</p>
         </div>
       ) : (
         <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden', background: 'white', maxWidth: '680px' }}>
@@ -98,7 +100,7 @@ export default function AlertsView({ alerts: initial }: { alerts: InternalAlert[
                     cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
                   }}
                 >
-                  Mark read
+                  {t('mark_resolved')}
                 </button>
               )}
             </div>

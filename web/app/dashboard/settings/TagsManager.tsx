@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { createTag, deleteTag } from './settingsActions'
 import type { OrgTag } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 const PRESET_COLORS = [
   '#6366f1', '#0ea5e9', '#10b981', '#f59e0b',
@@ -10,6 +11,7 @@ const PRESET_COLORS = [
 ]
 
 export default function TagsManager({ initialTags }: { initialTags: OrgTag[] }) {
+  const t = useAdminT()
   const [tags, setTags]     = useState<OrgTag[]>(initialTags)
   const [name, setName]     = useState('')
   const [color, setColor]   = useState(PRESET_COLORS[0])
@@ -36,15 +38,15 @@ export default function TagsManager({ initialTags }: { initialTags: OrgTag[] }) 
 
   return (
     <div>
-      <h3 style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 12 }}>Tags</h3>
+      <h3 style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 12 }}>{t('tags_section')}</h3>
       <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
-        Categorical labels applied to volunteers for grouping and filtering.
+        {t('tags_desc')}
       </p>
 
       {/* Existing tags */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
         {tags.length === 0 && (
-          <span style={{ fontSize: 13, color: '#9ca3af' }}>No tags yet.</span>
+          <span style={{ fontSize: 13, color: '#9ca3af' }}>{t('no_tags_yet')}</span>
         )}
         {tags.map(tag => (
           <span key={tag.id} style={{
@@ -65,7 +67,7 @@ export default function TagsManager({ initialTags }: { initialTags: OrgTag[] }) 
       {/* Create form */}
       <form onSubmit={handleCreate} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 180px' }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Tag name</label>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>{t('tag_name')}</label>
           <input
             value={name}
             onChange={e => setName(e.target.value)}
@@ -75,7 +77,7 @@ export default function TagsManager({ initialTags }: { initialTags: OrgTag[] }) 
           />
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Color</label>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>{t('color')}</label>
           <div style={{ display: 'flex', gap: 6 }}>
             {PRESET_COLORS.map(c => (
               <button
@@ -99,7 +101,7 @@ export default function TagsManager({ initialTags }: { initialTags: OrgTag[] }) 
             cursor: 'pointer', whiteSpace: 'nowrap',
           }}
         >
-          Add tag
+          {t('add_tag_btn')}
         </button>
       </form>
       {error && <p style={{ color: '#dc2626', fontSize: 13, marginTop: 8 }}>{error}</p>}

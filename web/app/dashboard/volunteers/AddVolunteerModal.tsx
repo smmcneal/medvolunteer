@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { X, UserPlus, Loader2 } from 'lucide-react'
 import { createVolunteer } from './actions'
 import type { VolunteerCategory, VolunteerStatus, Category } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 const STATUSES: { value: VolunteerStatus; label: string }[] = [
   { value: 'applicant', label: 'Applicant' },
@@ -42,6 +43,7 @@ const labelStyle: React.CSSProperties = {
 
 export default function AddVolunteerModal({ locations, categories, onClose }: Props) {
   const router = useRouter()
+  const t = useAdminT()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -148,10 +150,10 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
             </div>
             <div>
               <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#111827', margin: 0 }}>
-                Add Volunteer
+                {t('add_volunteer_title')}
               </h2>
               <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>
-                Creates an account and volunteer profile
+                {t('add_volunteer_sub')}
               </p>
             </div>
           </div>
@@ -182,10 +184,10 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
               <span style={{ fontSize: '18px' }}>✓</span>
               <div>
                 <p style={{ fontSize: '13px', fontWeight: 700, color: '#15803d', margin: 0 }}>
-                  Volunteer added!
+                  {t('volunteer_added')}
                 </p>
                 <p style={{ fontSize: '12px', color: '#166534', margin: 0 }}>
-                  {sendInvite ? 'An invite email has been sent.' : 'Account created successfully.'}
+                  {sendInvite ? t('invite_sent') : t('account_created')}
                 </p>
               </div>
             </div>
@@ -208,7 +210,7 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
             {/* Name row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>First name *</label>
+                <label style={labelStyle}>{t('first_name_required')}</label>
                 <input
                   ref={firstFieldRef}
                   type="text"
@@ -220,7 +222,7 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
                 />
               </div>
               <div>
-                <label style={labelStyle}>Last name *</label>
+                <label style={labelStyle}>{t('last_name_required')}</label>
                 <input
                   type="text"
                   value={lastName}
@@ -234,7 +236,7 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
 
             {/* Email */}
             <div>
-              <label style={labelStyle}>Email address *</label>
+              <label style={labelStyle}>{t('email_address_required')}</label>
               <input
                 type="email"
                 value={email}
@@ -247,7 +249,7 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
 
             {/* Phone */}
             <div>
-              <label style={labelStyle}>Phone <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span></label>
+              <label style={labelStyle}>{t('phone_optional')} <span style={{ fontWeight: 400, color: '#9ca3af' }}>({t('optional')})</span></label>
               <input
                 type="tel"
                 value={phone}
@@ -260,7 +262,7 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
             {/* Category + Status row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>Category *</label>
+                <label style={labelStyle}>{t('category_required')}</label>
                 <select
                   value={category}
                   onChange={e => setCategory(e.target.value as VolunteerCategory)}
@@ -272,7 +274,7 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
                 </select>
               </div>
               <div>
-                <label style={labelStyle}>Status *</label>
+                <label style={labelStyle}>{t('status_required')}</label>
                 <select
                   value={status}
                   onChange={e => setStatus(e.target.value as VolunteerStatus)}
@@ -289,7 +291,7 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
             {locations.length > 0 && (
               <div>
                 <label style={labelStyle}>
-                  Assign to location(s) <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span>
+                  {t('assign_locations')} <span style={{ fontWeight: 400, color: '#9ca3af' }}>({t('optional')})</span>
                 </label>
                 <div style={{
                   border: '1px solid #e5e7eb', borderRadius: '8px',
@@ -336,10 +338,10 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
               />
               <div>
                 <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827', margin: '0 0 2px' }}>
-                  Send invite email
+                  {t('send_invite_email')}
                 </p>
                 <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>
-                  Volunteer receives a link to set their own password. Uncheck to create the account silently (you'll need to share credentials manually).
+                  {t('send_invite_desc')}
                 </p>
               </div>
             </label>
@@ -367,7 +369,7 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
               cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             type="submit"
@@ -388,7 +390,7 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
           >
             {isPending && <Loader2 style={{ width: '13px', height: '13px', animation: 'spin 1s linear infinite' }} />}
             <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-            {isPending ? 'Creating…' : success ? '✓ Done' : 'Add Volunteer'}
+            {isPending ? t('creating') : success ? t('done') : t('add_volunteer')}
           </button>
         </div>
       </div>
