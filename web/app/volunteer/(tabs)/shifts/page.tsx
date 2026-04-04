@@ -11,6 +11,11 @@ export interface LocationRow {
   geofence_radius_meters: number
 }
 
+export interface OrgLocation {
+  id: string
+  name: string
+}
+
 export interface ShiftRow {
   id: string
   name: string
@@ -59,6 +64,7 @@ export default async function ShiftsPage() {
 
   const admin = createAdminClient()
 
+
   const { data: volunteer } = await admin
     .from('volunteers')
     .select('id, org_id, status, pipeline_phase')
@@ -66,6 +72,14 @@ export default async function ShiftsPage() {
     .single()
 
   if (!volunteer) redirect('/volunteer/login')
+
+  // Fetch active locations for this org (used for the location picker)
+  const { data: orgLocations } = await admin
+    .from('locations')
+    .select('id, name')
+    .eq('org_id', volunteer.org_id)
+    .eq('is_active', true)
+    .order('name', { ascending: true })
 
   // Fetch all non-cancelled assignments with shift + location
   const { data: rawAssignments } = await admin
@@ -169,6 +183,7 @@ export default async function ShiftsPage() {
       volunteerId={volunteer.id}
       orgId={volunteer.org_id}
       availableShifts={availableShifts}
+      orgLocations={(orgLocations ?? []) as OrgLocation[]}
     />
   )
 }

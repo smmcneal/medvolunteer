@@ -63,6 +63,9 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
     days: 'days',
 
     // Shifts page
+    select_location: 'Select location',
+    all_locations: 'All locations',
+    location_prompt: 'Choose a location to see available shifts',
     shifts_title: 'My Shifts',
     no_shifts: 'No upcoming shifts',
     no_past_shifts: 'No past shifts yet',
@@ -189,6 +192,9 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
     days: 'días',
 
     // Shifts page
+    select_location: 'Seleccionar ubicación',
+    all_locations: 'Todas las ubicaciones',
+    location_prompt: 'Elige una ubicación para ver los turnos disponibles',
     shifts_title: 'Mis turnos',
     no_shifts: 'Sin turnos próximos',
     no_past_shifts: 'Sin turnos pasados aún',

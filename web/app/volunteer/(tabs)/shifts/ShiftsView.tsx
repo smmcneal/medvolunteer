@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useTransition, useRef } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import type { AssignmentWithShift, AvailableShift, TimeEntryRow } from './page'
+import type { AssignmentWithShift, AvailableShift, OrgLocation, TimeEntryRow } from './page'
 import { volunteerClockIn, volunteerClockOut, volunteerSignUpForShift, volunteerDropShift, volunteerRequestReschedule } from './actions'
 import RescheduleModal from './RescheduleModal'
 import { useT } from '@/lib/volunteer-lang'
@@ -12,27 +12,10 @@ interface Props {
   volunteerId: string
   orgId: string
   availableShifts: AvailableShift[]
+  orgLocations: OrgLocation[]
 }
 
 type Tab = 'upcoming' | 'past'
-
-interface GeoState {
-  lat: number
-  lng: number
-  accuracy: number
-}
-
-// Haversine distance in meters
-function distance(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371000
-  const toRad = (x: number) => (x * Math.PI) / 180
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -56,11 +39,18 @@ function isShiftActive(start: string, end: string) {
   return now >= s - 15 * 60000 && now <= e // 15 min before start to end
 }
 
-export default function ShiftsView({ assignments, volunteerId, orgId, availableShifts }: Props) {
+const LOCATION_KEY = 'mv_selected_location'
+
+export default function ShiftsView({ assignments, volunteerId, orgId, availableShifts, orgLocations }: Props) {
   const t = useT()
   const [tab, setTab] = useState<Tab>('upcoming')
-  const [geo, setGeo] = useState<GeoState | null>(null)
-  const [geoError, setGeoError] = useState<string | null>(null)
+
+  // Persist selected location in localStorage
+  const [selectedLocationId, setSelectedLocationId] = useState<string>(() => {
+    if (typeof window === 'undefined') return ''
+    return localStorage.getItem(LOCATION_KEY) ?? ''
+  })
+
   const [isPending, startTransition] = useTransition()
   const [actionError, setActionError] = useState<string | null>(null)
   const [clockingShiftId, setClockingShiftId] = useState<string | null>(null)
@@ -70,8 +60,6 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
   const [moveAssignment, setMoveAssignment] = useState<AssignmentWithShift | null>(null)
   const [rescheduleAssignment, setRescheduleAssignment] = useState<AssignmentWithShift | null>(null)
   const [rescheduleSuccess, setRescheduleSuccess] = useState(false)
-  const autoFiredRef = useRef<Set<string>>(new Set())
-  const watchIdRef = useRef<number | null>(null)
   const router = useRouter()
 
   const now = new Date().toISOString()
@@ -80,61 +68,21 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
   const past = assignments.filter(a => new Date(a.shift.end_time) < new Date())
     .sort((a, b) => new Date(b.shift.start_time).getTime() - new Date(a.shift.start_time).getTime())
 
-  // ─── Geolocation ────────────────────────────────────────────────────────────
+  // Filter available shifts by selected location
+  const filteredAvailable = selectedLocationId
+    ? availableShifts.filter(s => s.location_id === selectedLocationId)
+    : availableShifts
 
-  function startGeolocation() {
-    if (!('geolocation' in navigator)) {
-      setGeoError('Geolocation not supported on this device')
-      return
-    }
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        setGeoError(null)
-        setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy })
-      },
-      (err) => {
-        if (err.code === err.PERMISSION_DENIED) setGeoError('Location access denied')
-        else setGeoError('Unable to get location')
-      },
-      { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
-    )
-  }
-
-  useEffect(() => {
-    startGeolocation()
-    return () => {
-      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
-    }
-  }, [])
-
-  // ─── Auto clock-in on geofence entry ────────────────────────────────────────
-
-  useEffect(() => {
-    if (!geo) return
-
-    for (const a of upcoming) {
-      const loc = a.shift.locations
-      if (!loc?.lat || !loc?.lng) continue
-      if (a.openEntry) continue // already clocked in
-      if (autoFiredRef.current.has(a.shift.id)) continue
-
-      const dist = distance(geo.lat, geo.lng, loc.lat, loc.lng)
-      const inFence = dist <= loc.geofence_radius_meters
-      const active = isShiftActive(a.shift.start_time, a.shift.end_time)
-
-      if (inFence && active) {
-        autoFiredRef.current.add(a.shift.id)
-        startTransition(async () => {
-          try {
-            await volunteerClockIn(a.shift.id, a.shift.location_id, 'geofence')
-            router.refresh()
-          } catch {
-            autoFiredRef.current.delete(a.shift.id) // allow retry
-          }
-        })
+  function handleLocationChange(locationId: string) {
+    setSelectedLocationId(locationId)
+    if (typeof window !== 'undefined') {
+      if (locationId) {
+        localStorage.setItem(LOCATION_KEY, locationId)
+      } else {
+        localStorage.removeItem(LOCATION_KEY)
       }
     }
-  }, [geo])
+  }
 
   // ─── Manual clock in/out ────────────────────────────────────────────────────
 
@@ -211,6 +159,8 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
     })
   }
 
+  const selectedLocation = orgLocations.find(l => l.id === selectedLocationId)
+
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -219,34 +169,40 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
       <div style={{ background: '#1B2A4A', padding: '52px 20px 20px', paddingTop: 'calc(52px + env(safe-area-inset-top))' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'white', margin: '0 0 12px' }}>{t('shifts_title')}</h1>
 
-        {/* Geolocation status strip */}
+        {/* Location picker */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
           background: 'rgba(255,255,255,0.1)',
-          borderRadius: '8px', padding: '7px 12px',
-          fontSize: '12px', color: 'rgba(255,255,255,0.8)',
+          borderRadius: '10px',
+          padding: '4px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
         }}>
-          {geoError ? (
-            <>
-              <span>📍</span>
-              <span style={{ color: '#fca5a5' }}>{geoError}</span>
-              <button
-                onClick={startGeolocation}
-                style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '5px', padding: '2px 8px', color: 'white', fontSize: '11px', cursor: 'pointer' }}
-              >Retry</button>
-            </>
-          ) : geo ? (
-            <>
-              <span>📍</span>
-              <span style={{ color: '#6ee7b7' }}>Location active</span>
-              <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.5)' }}>±{Math.round(geo.accuracy)}m</span>
-            </>
-          ) : (
-            <>
-              <span>📍</span>
-              <span>Getting location…</span>
-            </>
-          )}
+          <span style={{ fontSize: '14px' }}>📍</span>
+          <select
+            value={selectedLocationId}
+            onChange={e => handleLocationChange(e.target.value)}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              color: selectedLocationId ? 'white' : 'rgba(255,255,255,0.6)',
+              fontSize: '13px',
+              fontWeight: 600,
+              outline: 'none',
+              cursor: 'pointer',
+              padding: '8px 0',
+              fontFamily: 'inherit',
+              appearance: 'none',
+              WebkitAppearance: 'none',
+            }}
+          >
+            <option value="" style={{ color: '#374151' }}>{t('all_locations')}</option>
+            {orgLocations.map(loc => (
+              <option key={loc.id} value={loc.id} style={{ color: '#374151' }}>{loc.name}</option>
+            ))}
+          </select>
+          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', pointerEvents: 'none' }}>▾</span>
         </div>
       </div>
 
@@ -278,24 +234,40 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
         {tab === 'upcoming' && (
           <>
             {/* Available shifts section */}
-            {availableShifts.length > 0 && (
+            {filteredAvailable.length > 0 && (
               <div style={{ marginBottom: '20px' }}>
                 <p style={{
                   fontSize: '11px', fontWeight: 700, color: '#00897B',
                   letterSpacing: '0.08em', textTransform: 'uppercase',
                   margin: '0 0 10px',
                 }}>
-                  Available to Sign Up · {availableShifts.length}
+                  Available to Sign Up · {filteredAvailable.length}
+                  {selectedLocation && (
+                    <span style={{ color: '#9ca3af', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
+                      {' '}at {selectedLocation.name}
+                    </span>
+                  )}
                 </p>
-                {availableShifts.map(s => (
+                {filteredAvailable.map(s => (
                   <AvailableShiftCard
                     key={s.id}
                     shift={s}
-                    geo={geo}
                     isSigningUp={signingUpShiftId === s.id && isPending}
                     onSignUp={() => handleSignUp(s.id)}
                   />
                 ))}
+              </div>
+            )}
+
+            {/* No available shifts for selected location */}
+            {filteredAvailable.length === 0 && selectedLocationId && availableShifts.length > 0 && (
+              <div style={{
+                background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '12px',
+                padding: '16px', marginBottom: '16px', textAlign: 'center',
+              }}>
+                <p style={{ fontSize: '13px', color: '#6b7280', margin: 0 }}>
+                  No open shifts at <strong>{selectedLocation?.name}</strong>
+                </p>
               </div>
             )}
 
@@ -310,7 +282,7 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
               </p>
             )}
 
-            {upcoming.length === 0 && availableShifts.length === 0
+            {upcoming.length === 0 && filteredAvailable.length === 0
               ? <EmptyState icon="📅" msg={t('no_shifts')} sub={t('no_shifts_sub')} />
               : upcoming.map(a => {
                   const canDrop = new Date(a.shift.start_time).getTime() - Date.now() > 24 * 60 * 60 * 1000
@@ -318,7 +290,6 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
                     <UpcomingCard
                       key={a.id}
                       assignment={a}
-                      geo={geo}
                       isClockedIn={!!a.openEntry}
                       isClockingIn={clockingShiftId === a.shift.id && isPending}
                       isClockingOut={!a.openEntry ? false : isPending}
@@ -408,7 +379,6 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
 
 function UpcomingCard({
   assignment: a,
-  geo,
   isClockedIn,
   isClockingIn,
   isClockingOut,
@@ -424,7 +394,6 @@ function UpcomingCard({
   onRescheduleRequest,
 }: {
   assignment: AssignmentWithShift
-  geo: GeoState | null
   isClockedIn: boolean
   isClockingIn: boolean
   isClockingOut: boolean
@@ -443,12 +412,6 @@ function UpcomingCard({
   const { shift } = a
   const active = isShiftActive(shift.start_time, shift.end_time)
   const loc = shift.locations
-
-  // Compute distance to shift location
-  const dist = (geo && loc?.lat && loc?.lng)
-    ? distance(geo.lat, geo.lng, loc.lat, loc.lng)
-    : null
-  const inFence = dist !== null && dist <= (loc?.geofence_radius_meters ?? 100)
 
   const clockInTime = a.openEntry ? new Date(a.openEntry.clock_in) : null
   const elapsed = clockInTime
@@ -486,25 +449,12 @@ function UpcomingCard({
             <p style={{ fontSize: '15px', fontWeight: 700, color: '#111827', margin: '0 0 4px' }}>{shift.name}</p>
             <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 2px' }}>
               📍 {loc?.name ?? 'Unknown location'}
-              {dist !== null && (
-                <span style={{ marginLeft: '6px', color: inFence ? '#00897B' : '#9ca3af', fontWeight: 600 }}>
-                  ({dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`}
-                  {inFence ? ' · In range ✓' : ''})
-                </span>
-              )}
             </p>
             <p style={{ fontSize: '13px', color: '#6b7280', margin: 0 }}>
               🕐 {formatDate(shift.start_time)} · {formatTime(shift.start_time)} – {formatTime(shift.end_time)} · {shiftDuration(shift.start_time, shift.end_time)}
             </p>
           </div>
         </div>
-
-        {/* Geofence auto-clock-in hint */}
-        {active && !isClockedIn && inFence && (
-          <p style={{ fontSize: '12px', color: '#00897B', fontWeight: 600, margin: '0 0 10px' }}>
-            ✓ You're within range — auto clock-in will trigger
-          </p>
-        )}
 
         {shift.notes && (
           <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 10px', fontStyle: 'italic' }}>{shift.notes}</p>
@@ -587,19 +537,14 @@ function UpcomingCard({
 
 function AvailableShiftCard({
   shift: s,
-  geo,
   isSigningUp,
   onSignUp,
 }: {
   shift: AvailableShift
-  geo: GeoState | null
   isSigningUp: boolean
   onSignUp: () => void
 }) {
   const loc = s.locations
-  const dist = (geo && loc?.lat && loc?.lng)
-    ? distance(geo.lat, geo.lng, loc.lat, loc.lng)
-    : null
 
   return (
     <div style={{
@@ -620,11 +565,6 @@ function AvailableShiftCard({
         <p style={{ fontSize: '15px', fontWeight: 700, color: '#111827', margin: '0 0 4px' }}>{s.name}</p>
         <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 2px' }}>
           📍 {loc?.name ?? 'Unknown location'}
-          {dist !== null && (
-            <span style={{ marginLeft: '6px', color: '#9ca3af', fontWeight: 500 }}>
-              ({dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`})
-            </span>
-          )}
         </p>
         <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 12px' }}>
           🕐 {formatDate(s.start_time)} · {formatTime(s.start_time)} – {formatTime(s.end_time)} · {shiftDuration(s.start_time, s.end_time)}
