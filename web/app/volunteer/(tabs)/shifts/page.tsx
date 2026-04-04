@@ -128,7 +128,7 @@ export default async function ShiftsPage() {
 
   // Fetch available shifts if volunteer is eligible to self-signup
   let availableShifts: AvailableShift[] = []
-  const canSelfSignup = volunteer.status === 'volunteer' && volunteer.pipeline_phase === 'active'
+  const canSelfSignup = volunteer.status === 'volunteer'
 
   if (canSelfSignup) {
     const now = new Date().toISOString()
