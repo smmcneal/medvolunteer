@@ -94,7 +94,7 @@ export async function volunteerSignUpForShift(shiftId: string): Promise<void> {
     .single()
 
   if (!volunteer) throw new Error('Volunteer not found')
-  if (volunteer.status !== 'volunteer' || volunteer.pipeline_phase !== 'active') {
+  if (volunteer.status !== 'volunteer') {
     throw new Error('Only active volunteers can sign up for shifts')
   }
 
@@ -146,7 +146,7 @@ export async function volunteerMoveShift(
   const admin = createAdminClient()
   const { data: volunteer } = await admin.from('volunteers').select('id, org_id, status, pipeline_phase').eq('user_id', user.id).single()
   if (!volunteer) throw new Error('Volunteer not found')
-  if (volunteer.status !== 'volunteer' || volunteer.pipeline_phase !== 'active') throw new Error('Only active volunteers can change shifts')
+  if (volunteer.status !== 'volunteer') throw new Error('Only active volunteers can change shifts')
 
   // Verify old assignment belongs to this volunteer
   const { data: oldAssignment } = await admin.from('shift_assignments').select('id, volunteer_id, status, shifts(start_time)').eq('id', oldAssignmentId).single()

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { AssignmentWithShift, AvailableShift, OrgLocation, TimeEntryRow } from './page'
 import { volunteerClockIn, volunteerClockOut, volunteerSignUpForShift, volunteerDropShift, volunteerRequestReschedule } from './actions'
@@ -45,11 +45,12 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
   const t = useT()
   const [tab, setTab] = useState<Tab>('upcoming')
 
-  // Persist selected location in localStorage
-  const [selectedLocationId, setSelectedLocationId] = useState<string>(() => {
-    if (typeof window === 'undefined') return ''
-    return localStorage.getItem(LOCATION_KEY) ?? ''
-  })
+  // Persist selected location in localStorage — read after hydration to avoid mismatch
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('')
+  useEffect(() => {
+    const stored = localStorage.getItem(LOCATION_KEY) ?? ''
+    setSelectedLocationId(stored)
+  }, [])
 
   const [isPending, startTransition] = useTransition()
   const [actionError, setActionError] = useState<string | null>(null)
