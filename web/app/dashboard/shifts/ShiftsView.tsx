@@ -139,6 +139,7 @@ export default function ShiftsView({
   const [mentorSearch, setMentorSearch]     = useState('')
 
   // Recurring shift creation state
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null)
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurFrequency, setRecurFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly')
   const [recurEndDate, setRecurEndDate] = useState('')
@@ -331,6 +332,7 @@ export default function ShiftsView({
   }
 
   function handleRemoveAssignment(assignmentId: string) {
+    setRemoveConfirmId(null)
     run(() => removeAssignment(assignmentId))
   }
 
@@ -1024,13 +1026,31 @@ export default function ShiftsView({
                               <LogOut style={{ width: '11px', height: '11px' }} /> Out
                             </button>
                           )}
-                          <button
-                            onClick={() => handleRemoveAssignment(a.id)}
-                            title="Remove"
-                            style={{ padding: '5px 6px', borderRadius: '6px', border: '1px solid var(--surface-border-sub)', background: 'transparent', cursor: 'pointer', color: 'var(--text-faint)', transition: 'color 0.1s, border-color 0.1s' }}
-                          >
-                            <X style={{ width: '11px', height: '11px' }} />
-                          </button>
+                          {removeConfirmId === a.id ? (
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                              <button
+                                onClick={() => handleRemoveAssignment(a.id)}
+                                disabled={isPending}
+                                style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fef2f2', cursor: 'pointer', color: '#dc2626', fontSize: '11px', fontWeight: 600 }}
+                              >
+                                Remove
+                              </button>
+                              <button
+                                onClick={() => setRemoveConfirmId(null)}
+                                style={{ padding: '4px 6px', borderRadius: '6px', border: '1px solid var(--surface-border-sub)', background: 'transparent', cursor: 'pointer', color: 'var(--text-faint)' }}
+                              >
+                                <X style={{ width: '11px', height: '11px' }} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setRemoveConfirmId(a.id)}
+                              title="Unassign volunteer"
+                              style={{ padding: '5px 6px', borderRadius: '6px', border: '1px solid var(--surface-border-sub)', background: 'transparent', cursor: 'pointer', color: 'var(--text-faint)', transition: 'color 0.1s, border-color 0.1s' }}
+                            >
+                              <X style={{ width: '11px', height: '11px' }} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     )

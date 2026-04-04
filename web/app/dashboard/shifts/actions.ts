@@ -263,8 +263,8 @@ export async function assignTraineeWithMentor(
 }
 
 export async function removeAssignment(id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('shift_assignments').delete().eq('id', id)
+  const admin = createAdminClient()
+  const { error } = await admin.from('shift_assignments').update({ status: 'cancelled' }).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/shifts')
   revalidatePath('/volunteer/shifts')

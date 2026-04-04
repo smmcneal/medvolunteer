@@ -308,7 +308,7 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
             {upcoming.length === 0 && filteredAvailable.length === 0
               ? <EmptyState icon="📅" msg={t('no_shifts')} sub={t('no_shifts_sub')} />
               : upcoming.map(a => {
-                  const canDrop = new Date(a.shift.start_time).getTime() - Date.now() > 24 * 60 * 60 * 1000
+                  const isFuture = new Date(a.shift.start_time).getTime() > Date.now()
                   return (
                     <UpcomingCard
                       key={a.id}
@@ -318,7 +318,7 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
                       isClockingOut={!a.openEntry ? false : isPending}
                       onClockIn={() => handleClockIn(a)}
                       onClockOut={() => a.openEntry && handleClockOut(a.openEntry)}
-                      canDrop={canDrop}
+                      canDrop={isFuture}
                       showDropConfirm={dropConfirmId === a.id}
                       isDroppingShift={droppingAssignmentId === a.id && isPending}
                       onDropRequest={() => setDropConfirmId(a.id)}

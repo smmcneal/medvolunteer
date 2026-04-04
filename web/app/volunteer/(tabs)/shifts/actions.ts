@@ -228,8 +228,7 @@ export async function volunteerDropShift(assignmentId: string): Promise<void> {
   if (assignment.status === 'cancelled') throw new Error('Assignment is already cancelled')
 
   const shiftStart = new Date((assignment.shifts as unknown as { start_time: string }).start_time)
-  const cutoff = new Date(shiftStart.getTime() - 24 * 60 * 60 * 1000)
-  if (new Date() >= cutoff) throw new Error('Cannot drop a shift within 24 hours of start time')
+  if (new Date() >= shiftStart) throw new Error('Cannot drop a shift that has already started')
 
   const { error } = await admin
     .from('shift_assignments')
