@@ -343,13 +343,19 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
       {/* Sign-up success toast */}
       {signUpSuccess && (
         <div style={{
-          position: 'fixed', bottom: '90px', left: '50%', transform: 'translateX(-50%)',
-          background: '#00897B', color: 'white', padding: '10px 18px', borderRadius: '10px',
-          fontSize: '13px', fontWeight: 600, zIndex: 200,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-          whiteSpace: 'nowrap', maxWidth: 'calc(100vw - 40px)', overflow: 'hidden', textOverflow: 'ellipsis',
+          position: 'fixed', top: '50%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: '#1B2A4A', color: 'white',
+          padding: '20px 24px', borderRadius: '16px',
+          fontSize: '15px', fontWeight: 700, zIndex: 300,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+          textAlign: 'center', maxWidth: 'calc(100vw - 48px)',
+          animation: 'toastFlash 0.3s ease-out',
         }}>
-          ✓ Signed up for {signUpSuccess}
+          <style suppressHydrationWarning>{`@keyframes toastFlash{from{opacity:0;transform:translate(-50%,-50%) scale(0.9)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}`}</style>
+          <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎉</div>
+          <p style={{ margin: '0 0 4px' }}>You&apos;re signed up!</p>
+          <p style={{ margin: 0, fontSize: '13px', fontWeight: 400, color: 'rgba(255,255,255,0.75)' }}>{signUpSuccess}</p>
         </div>
       )}
 
