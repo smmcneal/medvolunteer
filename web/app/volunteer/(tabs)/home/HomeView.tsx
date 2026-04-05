@@ -66,15 +66,18 @@ export default function HomeView({
   const [dropConfirmId, setDropConfirmId] = useState<string | null>(null)
   const [droppingId, setDroppingId] = useState<string | null>(null)
   const [dropError, setDropError] = useState<string | null>(null)
+  const [dropSuccess, setDropSuccess] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
-  function handleDrop(assignmentId: string) {
+  function handleDrop(assignmentId: string, shiftName: string) {
     setDropError(null)
     setDroppingId(assignmentId)
     setDropConfirmId(null)
     startTransition(async () => {
       try {
         await homeDropShift(assignmentId)
+        setDropSuccess(shiftName)
+        setTimeout(() => setDropSuccess(null), 5000)
         router.refresh()
       } catch (e: unknown) {
         setDropError(e instanceof Error ? e.message : 'Could not drop shift')
@@ -272,7 +275,7 @@ export default function HomeView({
                     {isConfirming ? (
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button
-                          onClick={() => handleDrop(assignmentId)}
+                          onClick={() => handleDrop(assignmentId, shift.name)}
                           disabled={isDropping}
                           style={{
                             flex: 1, padding: '8px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
@@ -314,6 +317,25 @@ export default function HomeView({
         </div>
 
       </div>
+
+      {/* Drop success toast */}
+      {dropSuccess && (
+        <div style={{
+          position: 'fixed', top: '50%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: '#1B2A4A', color: 'white',
+          padding: '20px 24px', borderRadius: '16px',
+          fontSize: '15px', fontWeight: 700, zIndex: 300,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+          textAlign: 'center', maxWidth: 'calc(100vw - 48px)',
+          animation: 'toastIn 0.3s ease-out',
+        }}>
+          <style suppressHydrationWarning>{`@keyframes toastIn{from{opacity:0;transform:translate(-50%,-50%) scale(0.9)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}`}</style>
+          <div style={{ fontSize: '32px', marginBottom: '8px' }}>✅</div>
+          <p style={{ margin: '0 0 4px' }}>Shift dropped</p>
+          <p style={{ margin: 0, fontSize: '13px', fontWeight: 400, color: 'rgba(255,255,255,0.7)' }}>{dropSuccess}</p>
+        </div>
+      )}
     </div>
   )
 }
