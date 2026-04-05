@@ -1,6 +1,5 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
@@ -209,14 +208,31 @@ export async function assignVolunteer(
     throw new Error('Mentor required for training-phase volunteers')
   }
 
-  const { error } = await admin.from('shift_assignments').insert({
-    shift_id,
-    volunteer_id,
-    role: role || null,
-    status: 'assigned',
-    mentor_id: mentor_id ?? null,
-  })
-  if (error) throw new Error(error.message)
+  // Upsert: unique(shift_id, volunteer_id) means a cancelled row blocks re-insert
+  const { data: existing } = await admin
+    .from('shift_assignments')
+    .select('id')
+    .eq('shift_id', shift_id)
+    .eq('volunteer_id', volunteer_id)
+    .maybeSingle()
+
+  if (existing) {
+    const { error } = await admin
+      .from('shift_assignments')
+      .update({ status: 'assigned', role: role || null, mentor_id: mentor_id ?? null })
+      .eq('id', existing.id)
+    if (error) throw new Error(error.message)
+  } else {
+    const { error } = await admin.from('shift_assignments').insert({
+      shift_id,
+      volunteer_id,
+      role: role || null,
+      status: 'assigned',
+      mentor_id: mentor_id ?? null,
+    })
+    if (error) throw new Error(error.message)
+  }
+
   revalidatePath('/dashboard/shifts')
   revalidatePath('/volunteer/shifts')
 }
@@ -229,16 +245,15 @@ export async function assignTraineeWithMentor(
 ) {
   const admin = createAdminClient()
 
-  // Ensure mentor is already on the shift; add them if not
-  const { data: existing } = await admin
+  // Ensure mentor is on the shift — upsert to handle the unique(shift_id, volunteer_id) constraint
+  const { data: existingMentor } = await admin
     .from('shift_assignments')
-    .select('id')
+    .select('id, status')
     .eq('shift_id', shift_id)
     .eq('volunteer_id', mentor_id)
-    .neq('status', 'cancelled')
     .maybeSingle()
 
-  if (!existing) {
+  if (!existingMentor) {
     const { error: mentorError } = await admin.from('shift_assignments').insert({
       shift_id,
       volunteer_id: mentor_id,
@@ -246,17 +261,38 @@ export async function assignTraineeWithMentor(
       status: 'assigned',
     })
     if (mentorError) throw new Error(mentorError.message)
+  } else if (existingMentor.status === 'cancelled') {
+    const { error: mentorError } = await admin
+      .from('shift_assignments')
+      .update({ status: 'assigned', role: null })
+      .eq('id', existingMentor.id)
+    if (mentorError) throw new Error(mentorError.message)
   }
 
-  // Assign trainee linked to mentor
-  const { error } = await admin.from('shift_assignments').insert({
-    shift_id,
-    volunteer_id: trainee_id,
-    role: role || null,
-    status: 'assigned',
-    mentor_id,
-  })
-  if (error) throw new Error(error.message)
+  // Assign trainee linked to mentor — upsert for same reason
+  const { data: existingTrainee } = await admin
+    .from('shift_assignments')
+    .select('id')
+    .eq('shift_id', shift_id)
+    .eq('volunteer_id', trainee_id)
+    .maybeSingle()
+
+  if (existingTrainee) {
+    const { error } = await admin
+      .from('shift_assignments')
+      .update({ status: 'assigned', role: role || null, mentor_id })
+      .eq('id', existingTrainee.id)
+    if (error) throw new Error(error.message)
+  } else {
+    const { error } = await admin.from('shift_assignments').insert({
+      shift_id,
+      volunteer_id: trainee_id,
+      role: role || null,
+      status: 'assigned',
+      mentor_id,
+    })
+    if (error) throw new Error(error.message)
+  }
 
   revalidatePath('/dashboard/shifts')
   revalidatePath('/volunteer/shifts')
@@ -273,10 +309,10 @@ export async function removeAssignment(id: string) {
 // ─── Clock in / out ───────────────────────────────────────────────────────────
 
 export async function manualClockIn(volunteer_id: string, shift_id: string, location_id: string | null) {
-  const supabase = await createClient()
+  const admin = createAdminClient()
 
   // Check if already clocked in
-  const { data: existing } = await supabase
+  const { data: existing } = await admin
     .from('time_entries')
     .select('id')
     .eq('volunteer_id', volunteer_id)
@@ -286,7 +322,7 @@ export async function manualClockIn(volunteer_id: string, shift_id: string, loca
 
   if (existing) throw new Error('Volunteer is already clocked in for this shift')
 
-  const { error } = await supabase.from('time_entries').insert({
+  const { error } = await admin.from('time_entries').insert({
     volunteer_id,
     shift_id,
     location_id,
@@ -298,8 +334,8 @@ export async function manualClockIn(volunteer_id: string, shift_id: string, loca
 }
 
 export async function manualClockOut(time_entry_id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase
+  const admin = createAdminClient()
+  const { error } = await admin
     .from('time_entries')
     .update({ clock_out: new Date().toISOString() })
     .eq('id', time_entry_id)
