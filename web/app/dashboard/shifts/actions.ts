@@ -175,15 +175,15 @@ export async function updateShift(id: string, data: {
   required_count?: number
   notes?: string
 }) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('shifts').update(data).eq('id', id)
+  const admin = createAdminClient()
+  const { error } = await admin.from('shifts').update(data).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/shifts')
 }
 
 export async function deleteShift(id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('shifts').delete().eq('id', id)
+  const admin = createAdminClient()
+  const { error } = await admin.from('shifts').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/shifts')
 }
@@ -196,7 +196,6 @@ export async function assignVolunteer(
   role = '',
   mentor_id?: string,
 ) {
-  const supabase = await createClient()
   const admin = createAdminClient()
 
   // Enforce mentor requirement for training-phase volunteers
@@ -210,7 +209,7 @@ export async function assignVolunteer(
     throw new Error('Mentor required for training-phase volunteers')
   }
 
-  const { error } = await supabase.from('shift_assignments').insert({
+  const { error } = await admin.from('shift_assignments').insert({
     shift_id,
     volunteer_id,
     role: role || null,
@@ -228,18 +227,19 @@ export async function assignTraineeWithMentor(
   mentor_id: string,
   role = '',
 ) {
-  const supabase = await createClient()
+  const admin = createAdminClient()
 
   // Ensure mentor is already on the shift; add them if not
-  const { data: existing } = await supabase
+  const { data: existing } = await admin
     .from('shift_assignments')
     .select('id')
     .eq('shift_id', shift_id)
     .eq('volunteer_id', mentor_id)
+    .neq('status', 'cancelled')
     .maybeSingle()
 
   if (!existing) {
-    const { error: mentorError } = await supabase.from('shift_assignments').insert({
+    const { error: mentorError } = await admin.from('shift_assignments').insert({
       shift_id,
       volunteer_id: mentor_id,
       role: null,
@@ -249,7 +249,7 @@ export async function assignTraineeWithMentor(
   }
 
   // Assign trainee linked to mentor
-  const { error } = await supabase.from('shift_assignments').insert({
+  const { error } = await admin.from('shift_assignments').insert({
     shift_id,
     volunteer_id: trainee_id,
     role: role || null,
