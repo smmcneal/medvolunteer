@@ -2,16 +2,22 @@
 
 import { useState, useEffect, useTransition, useContext } from 'react'
 import type { Volunteer, Shift, Credential } from '@/types/database'
-import { homeClockIn, homeClockOut } from './actions'
+import { useRouter } from 'next/navigation'
+import { homeClockIn, homeClockOut, homeDropShift } from './actions'
 import { useT, LangContext } from '@/lib/volunteer-lang'
 
 interface ShiftWithLocation extends Shift {
   locations: { name: string } | null
 }
 
+interface UpcomingAssignment {
+  id: string
+  shift: ShiftWithLocation
+}
+
 interface Props {
   volunteer: Volunteer
-  upcomingShifts: ShiftWithLocation[]
+  upcomingAssignments: UpcomingAssignment[]
   onboardingPct: number
   onboardingCompleted: number
   onboardingTotal: number
@@ -47,7 +53,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 
 export default function HomeView({
   volunteer,
-  upcomingShifts,
+  upcomingAssignments,
   onboardingPct,
   onboardingCompleted,
   onboardingTotal,
@@ -56,6 +62,27 @@ export default function HomeView({
 }: Props) {
   const t = useT()
   const lang = useContext(LangContext)
+  const router = useRouter()
+  const [dropConfirmId, setDropConfirmId] = useState<string | null>(null)
+  const [droppingId, setDroppingId] = useState<string | null>(null)
+  const [dropError, setDropError] = useState<string | null>(null)
+  const [, startTransition] = useTransition()
+
+  function handleDrop(assignmentId: string) {
+    setDropError(null)
+    setDroppingId(assignmentId)
+    setDropConfirmId(null)
+    startTransition(async () => {
+      try {
+        await homeDropShift(assignmentId)
+        router.refresh()
+      } catch (e: unknown) {
+        setDropError(e instanceof Error ? e.message : 'Could not drop shift')
+      } finally {
+        setDroppingId(null)
+      }
+    })
+  }
   const statusColor = STATUS_COLORS[volunteer.status] ?? STATUS_COLORS.inactive
   const showOnboarding = ['applicant', 'prospect'].includes(volunteer.status) && onboardingTotal > 0
 
@@ -188,7 +215,12 @@ export default function HomeView({
         {/* Upcoming shifts */}
         <div>
           <SectionLabel>{t('upcoming_shifts')}</SectionLabel>
-          {upcomingShifts.length === 0 ? (
+          {dropError && (
+            <div style={{ marginBottom: '8px', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '13px', color: '#dc2626' }}>
+              {dropError}
+            </div>
+          )}
+          {upcomingAssignments.length === 0 ? (
             <Card>
               <div style={{ textAlign: 'center', padding: '16px 0' }}>
                 <div style={{ fontSize: '36px', marginBottom: '8px' }}>📅</div>
@@ -202,11 +234,13 @@ export default function HomeView({
             </Card>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {upcomingShifts.map((shift, i) => {
+              {upcomingAssignments.map(({ id: assignmentId, shift }, i) => {
                 const isNext = i === 0
                 const start = new Date(shift.start_time)
                 const end = new Date(shift.end_time)
                 const durationHrs = ((end.getTime() - start.getTime()) / 3600000).toFixed(1)
+                const isDropping = droppingId === assignmentId
+                const isConfirming = dropConfirmId === assignmentId
                 return (
                   <div key={shift.id} style={{
                     background: isNext ? '#1B2A4A' : 'white',
@@ -214,9 +248,8 @@ export default function HomeView({
                     borderRadius: '12px',
                     padding: '16px',
                     position: 'relative',
-                    overflow: 'hidden',
                   }}>
-                    {isNext && (
+                    {isNext && !isConfirming && (
                       <div style={{
                         position: 'absolute', top: '12px', right: '12px',
                         background: '#00897B', color: 'white',
@@ -225,15 +258,54 @@ export default function HomeView({
                         letterSpacing: '0.06em',
                       }}>NEXT UP</div>
                     )}
-                    <p style={{ fontSize: '15px', fontWeight: 700, color: isNext ? 'white' : '#111827', margin: '0 0 4px' }}>
+                    <p style={{ fontSize: '15px', fontWeight: 700, color: isNext ? 'white' : '#111827', margin: '0 0 4px', paddingRight: isConfirming ? 0 : '64px' }}>
                       {shift.name}
                     </p>
                     <p style={{ fontSize: '13px', color: isNext ? 'rgba(255,255,255,0.7)' : '#6b7280', margin: '0 0 2px' }}>
                       📍 {shift.locations?.name ?? 'Unknown location'}
                     </p>
-                    <p style={{ fontSize: '13px', color: isNext ? 'rgba(255,255,255,0.7)' : '#6b7280', margin: 0 }}>
+                    <p style={{ fontSize: '13px', color: isNext ? 'rgba(255,255,255,0.7)' : '#6b7280', margin: '0 0 10px' }}>
                       🕐 {formatShiftTime(shift.start_time, lang)} · {durationHrs}h
                     </p>
+
+                    {/* Drop actions */}
+                    {isConfirming ? (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => handleDrop(assignmentId)}
+                          disabled={isDropping}
+                          style={{
+                            flex: 1, padding: '8px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
+                            border: '1.5px solid #dc2626', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          {isDropping ? 'Dropping…' : 'Yes, drop shift'}
+                        </button>
+                        <button
+                          onClick={() => setDropConfirmId(null)}
+                          style={{
+                            flex: 1, padding: '8px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
+                            border: '1.5px solid #e5e7eb', background: 'transparent',
+                            color: isNext ? 'rgba(255,255,255,0.8)' : '#6b7280', cursor: 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          Keep it
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDropConfirmId(assignmentId)}
+                        style={{
+                          padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 500,
+                          border: `1px solid ${isNext ? 'rgba(255,255,255,0.2)' : '#e5e7eb'}`,
+                          background: 'transparent',
+                          color: isNext ? 'rgba(255,255,255,0.6)' : '#9ca3af',
+                          cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        Drop shift
+                      </button>
+                    )}
                   </div>
                 )
               })}

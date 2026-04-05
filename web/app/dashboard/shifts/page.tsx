@@ -108,10 +108,12 @@ async function fetchShiftsData() {
     recurrence_rule: (s as any).recurrence_rule ?? null,
     recurrence_group_id: (s as any).recurrence_group_id ?? null,
     recurrence_end_date: (s as any).recurrence_end_date ?? null,
-    assignments: ((s.shift_assignments ?? []) as unknown as AssignmentWithVolunteer[]).map(a => ({
-      ...a,
-      time_entry: teByKey[`${s.id}_${a.volunteer_id}`] ?? null,
-    })),
+    assignments: ((s.shift_assignments ?? []) as unknown as AssignmentWithVolunteer[])
+      .filter(a => a.status !== 'cancelled')
+      .map(a => ({
+        ...a,
+        time_entry: teByKey[`${s.id}_${a.volunteer_id}`] ?? null,
+      })),
   }))
 
   return {

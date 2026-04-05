@@ -8,9 +8,14 @@ interface ShiftWithLocation extends Shift {
   locations: { name: string } | null
 }
 
+interface UpcomingAssignment {
+  id: string
+  shift: ShiftWithLocation
+}
+
 interface HomeData {
   volunteer: Volunteer
-  upcomingShifts: ShiftWithLocation[]
+  upcomingAssignments: UpcomingAssignment[]
   onboardingPct: number
   onboardingCompleted: number
   onboardingTotal: number
@@ -37,27 +42,17 @@ async function fetchHomeData(): Promise<HomeData> {
   const thirtyDays = new Date()
   thirtyDays.setDate(thirtyDays.getDate() + 30)
 
-  // Get shift IDs this volunteer is assigned to
-  const { data: assignments } = await admin
-    .from('shift_assignments')
-    .select('shift_id')
-    .eq('volunteer_id', volunteer.id)
-    .neq('status', 'cancelled')
-
-  const shiftIds = assignments?.map((a: { shift_id: string }) => a.shift_id) ?? []
-
   // Run remaining queries in parallel
-  const [shiftsResult, workflowResult, progressResult, credsResult, activeEntryResult] = await Promise.all([
-    // Upcoming shifts (next 3)
-    shiftIds.length > 0
-      ? admin
-          .from('shifts')
-          .select('*, locations(name)')
-          .in('id', shiftIds)
-          .gte('start_time', now)
-          .order('start_time', { ascending: true })
-          .limit(3)
-      : Promise.resolve({ data: [] }),
+  const [assignmentsResult, workflowResult, progressResult, credsResult, activeEntryResult] = await Promise.all([
+    // Upcoming assignments with shift+location (next 3)
+    admin
+      .from('shift_assignments')
+      .select('id, shifts(*, locations(name))')
+      .eq('volunteer_id', volunteer.id)
+      .neq('status', 'cancelled')
+      .gte('shifts.start_time', now)
+      .order('shifts(start_time)', { ascending: true })
+      .limit(3),
 
     // Active onboarding workflow for this volunteer's category
     admin
@@ -97,9 +92,16 @@ async function fetchHomeData(): Promise<HomeData> {
     ?.onboarding_stages?.length ?? 0
   const completedStages = progressResult.data?.length ?? 0
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const upcomingAssignments: UpcomingAssignment[] = ((assignmentsResult.data ?? []) as any[])
+    .filter(a => a.shifts && new Date(a.shifts.start_time) >= new Date())
+    .sort((a, b) => new Date(a.shifts.start_time).getTime() - new Date(b.shifts.start_time).getTime())
+    .slice(0, 3)
+    .map(a => ({ id: a.id, shift: a.shifts as ShiftWithLocation }))
+
   return {
     volunteer: volunteer as Volunteer,
-    upcomingShifts: (shiftsResult.data ?? []) as ShiftWithLocation[],
+    upcomingAssignments,
     onboardingPct: totalStages > 0 ? Math.round((completedStages / totalStages) * 100) : 100,
     onboardingCompleted: completedStages,
     onboardingTotal: totalStages,
