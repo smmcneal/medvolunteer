@@ -14,7 +14,7 @@ A nightly GitHub Actions workflow reads all `Ready` tasks from the Notion Dev Ta
 
 ## Per-Run Flow
 
-1. Query Notion for up to 3 `Ready` tasks, sorted oldest-first
+1. Query Notion for up to 3 `Ready` tasks, triaged by `Priority`: Critical → High → Medium → Low → (unset last). Ties within the same priority are broken by `created_time` ascending.
 2. For each task (sequentially, not in parallel):
    a. Mark Notion → `In Progress`
    b. Create branch `fix/DEV-XXXXX-<slug>` from latest `main`
@@ -34,9 +34,9 @@ Nothing downstream changes: merge, deploy, and Notion → Done transitions are a
 node scripts/notion-sync.cjs list-ready [--max 3]
 ```
 
-- Queries the Dev Tasks & QA DB with `filter: Status = Ready`
-- Sorts by `created_time` ascending (oldest bugs first)
-- Limits to `--max` results (default 3)
+- Queries the Dev Tasks & QA DB with `filter: Status = Ready` (fetches all matching pages — Notion API cannot sort by select-field value order)
+- Sorts client-side by `Priority`: Critical → High → Medium → Low → unset last. Ties broken by `created_time` ascending.
+- Limits to `--max` results after sorting (default 3)
 - Prints a JSON array to stdout:
 
 ```json
