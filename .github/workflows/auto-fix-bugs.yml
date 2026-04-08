@@ -116,7 +116,7 @@ jobs:
               > "$PROMPT_FILE"
 
             # Run Claude Code — errors are soft (|| true so loop continues)
-            claude -p "$(cat "$PROMPT_FILE")" --dangerouslySkipPermissions || true
+            claude -p "$(cat "$PROMPT_FILE")" --dangerously-skip-permissions || true
             rm -f "$PROMPT_FILE"
 
             # Check for changes
