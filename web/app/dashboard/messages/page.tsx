@@ -33,7 +33,7 @@ async function fetchData() {
     supabase
       .from('volunteers')
       .select('id, first_name, last_name, email, phone, category, status')
-      .in('status', ['volunteer', 'prospect'])
+      .neq('status', 'inactive')
       .order('first_name', { ascending: true }),
     supabase
       .from('message_templates')
