@@ -176,15 +176,16 @@ export async function addCategoryRequirement(data: {
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
-  const { error } = await admin.from('category_requirements').insert({
+  const { data: newReq, error } = await admin.from('category_requirements').insert({
     org_id: org.id,
     category_name: data.category_name,
     title: data.title.trim(),
     description: data.description?.trim() || null,
     is_blocking: data.is_blocking ?? false,
-  })
+  }).select().single()
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/settings')
+  return newReq
 }
 
 export async function deleteCategoryRequirement(reqId: string) {
