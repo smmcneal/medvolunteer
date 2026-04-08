@@ -261,7 +261,7 @@ async function main() {
         const descParts = page.properties['Component/File']?.rich_text ?? [];
         const description = descParts.map(t => t.plain_text).join('').trim();
         return { pageId: page.id, taskId, title, description };
-      });
+      }).filter(t => t.taskId !== '');
 
       console.log(JSON.stringify(tasks, null, 2));
       break;
