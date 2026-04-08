@@ -24,6 +24,7 @@ import {
   saveDocumentAutomationRule,
   deleteDocumentAutomationRule,
   addCategory,
+  updateCategoryName,
   archiveCategory,
   restoreCategory,
 } from './actions'
@@ -1077,6 +1078,18 @@ function CategoriesTab({ descriptions: initial, requirements: initialRequirement
     router.refresh()
   }
 
+  // Inline name editing
+  const [editingCatId, setEditingCatId] = useState<string | null>(null)
+  const [editingCatName, setEditingCatName] = useState('')
+
+  async function handleSaveCatName(id: string) {
+    const trimmed = editingCatName.trim()
+    if (!trimmed) return
+    setCategories(prev => prev.map(c => c.id === id ? { ...c, name: trimmed } : c))
+    setEditingCatId(null)
+    await updateCategoryName(id, trimmed)
+  }
+
   // Coordinators
   const [coordinators, setCoordinators] = useState<CategoryCoordinator[]>(initialCoordinators)
   const [coordPending, startCoordTransition] = useTransition()
@@ -1205,15 +1218,29 @@ function CategoriesTab({ descriptions: initial, requirements: initialRequirement
             background: 'white',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <span style={{
-                padding: '2px 10px',
-                borderRadius: '99px',
-                fontSize: '12px',
-                fontWeight: 700,
-                background: '#f3f4f6',
-                color: '#374151',
-              }}>{cat.name}</span>
-              <code style={{ fontSize: '11px', color: '#9ca3af' }}>{cat.slug}</code>
+              {editingCatId === cat.id ? (
+                <>
+                  <input
+                    autoFocus
+                    value={editingCatName}
+                    onChange={e => setEditingCatName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') void handleSaveCatName(cat.id); if (e.key === 'Escape') setEditingCatId(null) }}
+                    style={{ padding: '3px 10px', borderRadius: '6px', border: '1.5px solid #6366f1', fontSize: '12px', fontWeight: 700, outline: 'none', width: '160px' }}
+                  />
+                  <button onClick={() => void handleSaveCatName(cat.id)} style={{ fontSize: '12px', fontWeight: 600, color: '#fff', background: '#1B2A4A', border: 'none', borderRadius: '5px', padding: '3px 10px', cursor: 'pointer' }}>Save</button>
+                  <button onClick={() => setEditingCatId(null)} style={{ fontSize: '12px', color: '#6b7280', background: 'none', border: '1px solid #e5e7eb', borderRadius: '5px', padding: '3px 8px', cursor: 'pointer' }}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ padding: '2px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: 700, background: '#f3f4f6', color: '#374151' }}>{cat.name}</span>
+                  <button
+                    onClick={() => { setEditingCatId(cat.id); setEditingCatName(cat.name) }}
+                    style={{ fontSize: '11px', color: '#6b7280', background: 'none', border: '1px solid #e5e7eb', borderRadius: '5px', padding: '2px 8px', cursor: 'pointer' }}>
+                    Rename
+                  </button>
+                  <code style={{ fontSize: '11px', color: '#9ca3af' }}>{cat.slug}</code>
+                </>
+              )}
               <button
                 onClick={() => { if (confirm(`Archive "${cat.name}"? Existing volunteers keep this category but it won't appear in the assignment list.`)) startCatTransition(() => { void archiveCategory(cat.id).then(() => setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, is_archived: true } : c))) }) }}
                 style={{ marginLeft: 'auto', fontSize: '12px', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}>

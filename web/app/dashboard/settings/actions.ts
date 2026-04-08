@@ -266,6 +266,18 @@ export async function addCategory(
   return {}
 }
 
+export async function updateCategoryName(
+  id: string,
+  name: string,
+): Promise<{ error?: string }> {
+  if (!name.trim()) return { error: 'Category name is required.' }
+  const admin = createAdminClient()
+  const { error } = await admin.from('categories').update({ name: name.trim() }).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/settings')
+  return {}
+}
+
 export async function updateCategoryDescription(
   id: string,
   description: string,
