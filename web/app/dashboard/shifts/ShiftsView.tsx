@@ -1148,11 +1148,15 @@ export default function ShiftsView({
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('end_date')} *</label>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {isRecurring ? t('end_date_occurrence') : t('end_date')} *
+                  </label>
                   <input style={inputStyle} type="date" value={createForm.end_date} onChange={e => setCreateForm(f => ({ ...f, end_date: e.target.value }))} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('end_time')} *</label>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {isRecurring ? t('end_time_occurrence') : t('end_time')} *
+                  </label>
                   <input style={inputStyle} type="time" value={createForm.end_time} onChange={e => { if (e.target.value) setCreateForm(f => ({ ...f, end_time: e.target.value })) }} />
                 </div>
               </div>
@@ -1206,7 +1210,8 @@ export default function ShiftsView({
                       </select>
                     </div>
                     <div>
-                      <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('end_date_optional')}</label>
+                      <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('end_date_optional')}</label>
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '5px' }}>{t('series_end_date_hint')}</p>
                       <input type="date" style={inputStyle} value={recurEndDate} onChange={e => setRecurEndDate(e.target.value)} />
                     </div>
                   </div>
@@ -1306,6 +1311,13 @@ export default function ShiftsView({
             </div>
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '22px', paddingTop: '18px', borderTop: '1px solid var(--surface-border-sub)' }}>
+              {(!createForm.name || !createForm.start_date || !createForm.start_time || !createForm.end_date || !createForm.end_time) && (
+                <p style={{ fontSize: '11px', color: '#ef4444', marginBottom: '2px' }}>
+                  {!createForm.name ? 'Shift name is required.' :
+                   !createForm.start_date || !createForm.start_time ? 'Start date and time are required.' :
+                   'End date and time are required.'}
+                </p>
+              )}
               <button className="shift-new-btn" style={btnPrimary} onClick={handleCreate} disabled={!createForm.name || !createForm.start_date || !createForm.start_time || !createForm.end_date || !createForm.end_time || isPending}>
                 {isRecurring ? t('recurring_shift') : t('create_shift')}
               </button>
