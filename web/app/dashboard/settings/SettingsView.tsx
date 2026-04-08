@@ -1146,8 +1146,8 @@ function CategoriesTab({ descriptions: initial, requirements: initialRequirement
     setReqError(null)
     startReqTransition(async () => {
       try {
-        await addCategoryRequirement({ category_name: categoryName, title: reqTitle.trim(), description: reqDesc.trim() || undefined, is_blocking: reqBlocking })
-        // Optimistically add to local state while page refreshes
+        const newReq = await addCategoryRequirement({ category_name: categoryName, title: reqTitle.trim(), description: reqDesc.trim() || undefined, is_blocking: reqBlocking })
+        setRequirements(prev => [...prev, newReq])
         setReqTitle('')
         setReqDesc('')
         setReqBlocking(false)
