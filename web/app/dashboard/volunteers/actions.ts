@@ -81,8 +81,8 @@ export async function createVolunteer(
       const resendKey = process.env.RESEND_API_KEY
       if (resendKey) {
         const inviteLink = linkData.properties.action_link
-        const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'noreply@medvolunteer.org'
-        await fetch('https://api.resend.com/emails', {
+        const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev'
+        const emailRes = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -97,6 +97,10 @@ export async function createVolunteer(
             `,
           }),
         })
+        if (!emailRes.ok) {
+          const body = await emailRes.json().catch(() => ({}))
+          return { error: `Volunteer created but invite email failed: ${body.message ?? emailRes.statusText}` }
+        }
       }
     }
   } else {
