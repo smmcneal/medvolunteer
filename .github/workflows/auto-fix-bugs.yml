@@ -62,9 +62,15 @@ jobs:
           fi
 
           for i in $(seq 0 $((TASK_COUNT - 1))); do
-            TASK_ID=$(node -pe    "JSON.parse(require('fs').readFileSync('/tmp/tasks.json','utf8'))[$i].taskId")
-            TITLE=$(node -pe      "JSON.parse(require('fs').readFileSync('/tmp/tasks.json','utf8'))[$i].title")
-            DESCRIPTION=$(node -pe "JSON.parse(require('fs').readFileSync('/tmp/tasks.json','utf8'))[$i].description")
+            TASK_ID=$(node -pe    "JSON.parse(require('fs').readFileSync('/tmp/tasks.json','utf8'))[$i].taskId || ''")
+            TITLE=$(node -pe      "JSON.parse(require('fs').readFileSync('/tmp/tasks.json','utf8'))[$i].title || ''")
+            DESCRIPTION=$(node -pe "JSON.parse(require('fs').readFileSync('/tmp/tasks.json','utf8'))[$i].description || ''")
+
+            # Skip tasks with no valid task ID or title (should not happen after list-ready filters, but guard anyway)
+            if [ -z "$TASK_ID" ] || [ -z "$TITLE" ]; then
+              echo "Skipping task $i — missing taskId or title"
+              continue
+            fi
 
             echo ""
             echo "=== [$((i+1))/$TASK_COUNT] $TASK_ID: $TITLE ==="
@@ -129,9 +135,11 @@ jobs:
             git push origin "$BRANCH"
 
             # Open PR — on failure, clean up and revert
+            PR_TITLE="fix: $TASK_ID $TITLE"
+            PR_BODY="Automated fix for \`$TASK_ID\`: $TITLE"
             if ! gh pr create \
-                --title "fix: $TASK_ID $TITLE" \
-                --body "Automated fix for \`$TASK_ID\`: $TITLE" \
+                --title "$PR_TITLE" \
+                --body "$PR_BODY" \
                 --base main \
                 --head "$BRANCH"; then
               echo "$TASK_ID: PR creation failed — reverting to Ready"
