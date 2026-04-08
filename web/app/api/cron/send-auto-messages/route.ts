@@ -86,7 +86,7 @@ export async function GET(request: Request) {
           .from('volunteers')
           .select('email, first_name')
           .eq('org_id', org.id)
-          .eq('status', 'active')
+          .eq('status', 'volunteer')
 
         for (const vol of volunteers ?? []) {
           if (!vol.email) continue

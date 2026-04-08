@@ -20,7 +20,7 @@ async function fetchData() {
     supabase.from('message_templates').select('id, name, subject, channel').order('name', { ascending: true }),
     supabase.from('category_requirements').select('*').order('category_name').order('created_at'),
     supabase.from('org_category_coordinators').select('*'),
-    supabase.from('volunteers').select('id, first_name, last_name').eq('status', 'active').order('first_name', { ascending: true }),
+    supabase.from('volunteers').select('id, first_name, last_name').eq('status', 'volunteer').order('first_name', { ascending: true }),
     supabase.from('document_automation_rules').select('*').order('created_at', { ascending: true }),
     supabase.from('categories').select('*').order('sort_order'),
   ])
