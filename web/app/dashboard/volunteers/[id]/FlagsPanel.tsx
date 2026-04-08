@@ -67,7 +67,7 @@ export default function FlagsPanel({
     setActive(a => a.filter(f => f.id !== id))
     setResolved(r => [{ ...entry, resolved_at: new Date().toISOString() }, ...r])
     startTransition(async () => {
-      const res = await resolveFlag(id)
+      const res = await resolveFlag(id, volunteerId)
       if (res.error) {
         // Roll back
         setActive(a => [...a, entry])
@@ -82,7 +82,7 @@ export default function FlagsPanel({
     setResolved(r => r.filter(f => f.id !== id))
     setActive(a => [...a, { ...entry, resolved_at: null }])
     startTransition(async () => {
-      const res = await unresolveFlag(id)
+      const res = await unresolveFlag(id, volunteerId)
       if (res.error) {
         // Roll back
         setResolved(r => [...r, entry])

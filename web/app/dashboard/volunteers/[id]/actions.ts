@@ -143,10 +143,11 @@ export async function raiseFlag(
     notes: notes?.trim() || null,
   })
   if (error) return { error: error.message }
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
   return {}
 }
 
-export async function resolveFlag(flagAssignmentId: string): Promise<{ error?: string }> {
+export async function resolveFlag(flagAssignmentId: string, volunteerId: string): Promise<{ error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -157,16 +158,18 @@ export async function resolveFlag(flagAssignmentId: string): Promise<{ error?: s
     .eq('id', flagAssignmentId)
 
   if (error) return { error: error.message }
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
   return {}
 }
 
-export async function unresolveFlag(flagAssignmentId: string): Promise<{ error?: string }> {
+export async function unresolveFlag(flagAssignmentId: string, volunteerId: string): Promise<{ error?: string }> {
   const admin = createAdminClient()
   const { error } = await admin
     .from('volunteer_flags')
     .update({ resolved_at: null, resolved_by: null })
     .eq('id', flagAssignmentId)
   if (error) return { error: error.message }
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
   return {}
 }
 
