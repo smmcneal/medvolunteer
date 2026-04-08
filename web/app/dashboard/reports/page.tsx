@@ -2,6 +2,15 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_noStore as noStore } from 'next/cache'
 import { Suspense } from 'react'
 import ReportsView from './ReportsView'
+import type { Category } from '@/types/database'
+
+export interface ActiveVolunteerActivity {
+  id: string
+  firstName: string
+  lastName: string
+  category: string
+  lastActivityAt: string | null
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -54,11 +63,36 @@ export interface CredentialExpiryRow {
   days_until_expiry: number
 }
 
+export interface FilterParams {
+  status?: string
+  category?: string
+  dateFrom?: string
+  dateTo?: string
+  pipelinePhase?: string
+}
+
 // ─── Data fetchers ────────────────────────────────────────────────────────────
 
-async function fetchReportsData() {
+async function fetchReportsData(filters: FilterParams = {}) {
   noStore()
   const supabase = createAdminClient()
+
+  // Unfiltered for filter UI options
+  const { data: allVolData } = await supabase
+    .from('volunteers')
+    .select('category, status')
+  const allCategories = [...new Set((allVolData ?? []).map((v: { category: string }) => v.category))].sort() as string[]
+  const allStatuses   = [...new Set((allVolData ?? []).map((v: { status: string }) => v.status))].sort() as string[]
+
+  let volQuery = supabase
+    .from('volunteers')
+    .select('id, first_name, last_name, category, status, onboarding_workflow_id, pipeline_phase, created_at')
+    .order('first_name')
+  if (filters.status)        volQuery = volQuery.eq('status', filters.status)
+  if (filters.category)      volQuery = volQuery.eq('category', filters.category)
+  if (filters.pipelinePhase) volQuery = volQuery.eq('pipeline_phase', filters.pipelinePhase)
+  if (filters.dateFrom)      volQuery = volQuery.gte('created_at', filters.dateFrom)
+  if (filters.dateTo)        volQuery = volQuery.lte('created_at', filters.dateTo + 'T23:59:59')
 
   const [
     timeEntriesRes,
@@ -68,6 +102,7 @@ async function fetchReportsData() {
     progressRes,
     bgChecksRes,
     credentialsRes,
+    activeTimeRes,
   ] = await Promise.all([
     // All time entries with volunteer info
     supabase
@@ -75,11 +110,8 @@ async function fetchReportsData() {
       .select('volunteer_id, duration_minutes')
       .not('duration_minutes', 'is', null),
 
-    // All volunteers for name lookup
-    supabase
-      .from('volunteers')
-      .select('id, first_name, last_name, category, onboarding_workflow_id, pipeline_phase')
-      .order('first_name'),
+    // Volunteers (filtered)
+    volQuery,
 
     // Onboarding workflows
     supabase
@@ -111,6 +143,13 @@ async function fetchReportsData() {
       .gte('expiration_date', new Date().toISOString().split('T')[0])
       .lte('expiration_date', new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0])
       .order('expiration_date', { ascending: true }),
+
+    // Last clock-in per active volunteer (for inactive report)
+    supabase
+      .from('time_entries')
+      .select('volunteer_id, clock_in')
+      .not('clock_out', 'is', null)
+      .order('clock_in', { ascending: false }),
   ])
 
   const volunteers = volunteersRes.data ?? []
@@ -244,13 +283,65 @@ async function fetchReportsData() {
     })
   )
 
-  return { hoursRows, onboardingRows, pipelineStats, volunteerOnboardingRows, bgRows, credRows }
+  // ── Active volunteer activity (for inactive report) ──────────────
+  const lastClockInMap: Record<string, string> = {}
+  for (const e of (activeTimeRes.data ?? []) as { volunteer_id: string; clock_in: string }[]) {
+    if (!lastClockInMap[e.volunteer_id]) {
+      lastClockInMap[e.volunteer_id] = e.clock_in
+    }
+  }
+  const activeVolunteerActivity: ActiveVolunteerActivity[] = volunteers
+    .filter(v => v.status === 'volunteer')
+    .map(v => ({
+      id: v.id,
+      firstName: v.first_name,
+      lastName: v.last_name,
+      category: v.category,
+      lastActivityAt: lastClockInMap[v.id] ?? null,
+    }))
+
+  return { hoursRows, onboardingRows, pipelineStats, volunteerOnboardingRows, bgRows, credRows, activeVolunteerActivity, allCategories, allStatuses, volunteers }
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function ReportsPage() {
-  const { hoursRows, onboardingRows, pipelineStats, volunteerOnboardingRows, bgRows, credRows } = await fetchReportsData()
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; category?: string; dateFrom?: string; dateTo?: string; pipelinePhase?: string }>
+}) {
+  const { status, category, dateFrom, dateTo, pipelinePhase } = await searchParams
+  const filters: FilterParams = { status, category, dateFrom, dateTo, pipelinePhase }
+
+  const { hoursRows, onboardingRows, pipelineStats, volunteerOnboardingRows, bgRows, credRows, activeVolunteerActivity, allCategories, allStatuses, volunteers } = await fetchReportsData(filters)
+
+  // Pending hours
+  const supabase = createAdminClient()
+  const { data: categoriesData } = await supabase.from('categories').select('*').eq('is_archived', false).order('sort_order')
+  const categories = (categoriesData ?? []) as Category[]
+  const { data: orgData } = await supabase.from('organizations').select('settings').limit(1).single()
+  const requireHourApproval = !!(orgData?.settings as Record<string, unknown>)?.require_hour_approval
+
+  let pendingHours: { id: string; volunteer_name: string; clock_in: string; clock_out: string; hours: number }[] = []
+  if (requireHourApproval) {
+    const volIds = volunteers.map((v: { id: string }) => v.id)
+    const { data: pendingData } = await supabase
+      .from('time_entries')
+      .select('id, clock_in, clock_out, volunteer_id')
+      .eq('approval_status', 'pending')
+      .not('clock_out', 'is', null)
+      .in('volunteer_id', volIds.length > 0 ? volIds : ['00000000-0000-0000-0000-000000000000'])
+      .order('clock_in', { ascending: false })
+    const volMap: Record<string, string> = {}
+    for (const v of volunteers) volMap[v.id] = `${v.first_name} ${v.last_name}`
+    pendingHours = ((pendingData ?? []) as { id: string; clock_in: string; clock_out: string; volunteer_id: string }[]).map(e => ({
+      id: e.id,
+      volunteer_name: volMap[e.volunteer_id] ?? 'Unknown',
+      clock_in: e.clock_in,
+      clock_out: e.clock_out,
+      hours: Math.round((new Date(e.clock_out).getTime() - new Date(e.clock_in).getTime()) / 3600000 * 10) / 10,
+    }))
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -270,6 +361,13 @@ export default async function ReportsPage() {
           volunteerOnboardingRows={volunteerOnboardingRows}
           bgRows={bgRows}
           credRows={credRows}
+          activeVolunteerActivity={activeVolunteerActivity}
+          allCategories={allCategories}
+          allStatuses={allStatuses}
+          appliedFilters={filters}
+          requireHourApproval={requireHourApproval}
+          pendingHours={pendingHours}
+          categories={categories}
         />
       </Suspense>
     </div>

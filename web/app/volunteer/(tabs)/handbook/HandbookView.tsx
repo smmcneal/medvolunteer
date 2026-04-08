@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { signHandbook } from './actions'
+import { useT } from '@/lib/volunteer-lang'
 
 interface Props {
   volunteerId: string
@@ -29,6 +30,7 @@ export default function HandbookView({
   // Scroll into view for signature section on smaller screens
   const sigRef = useRef<HTMLDivElement>(null)
 
+  const t = useT()
   const isSigned = !!signedAt
 
   function handleSign() {
@@ -80,10 +82,10 @@ export default function HandbookView({
           </div>
           <div>
             <h1 style={{ fontSize: '20px', fontWeight: 800, color: 'white', margin: 0, letterSpacing: '-0.3px' }}>
-              Volunteer Handbook
+              {t('handbook_title')}
             </h1>
             <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.55)', margin: '2px 0 0' }}>
-              Please read carefully before signing
+              {t('handbook_read_carefully')}
             </p>
           </div>
         </div>

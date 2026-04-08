@@ -3,14 +3,18 @@
 import { useState } from 'react'
 import { UserPlus } from 'lucide-react'
 import AddVolunteerModal from './AddVolunteerModal'
+import type { Category } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 interface Props {
   count: number
   locations: { id: string; name: string }[]
+  categories: Category[]
 }
 
-export default function VolunteersHeader({ count, locations }: Props) {
+export default function VolunteersHeader({ count, locations, categories }: Props) {
   const [showModal, setShowModal] = useState(false)
+  const t = useAdminT()
 
   return (
     <>
@@ -30,7 +34,7 @@ export default function VolunteersHeader({ count, locations }: Props) {
             letterSpacing: '-0.025em',
             lineHeight: 1,
           }}>
-            Volunteers
+            {t('volunteers_title')}
           </h1>
           <span style={{
             fontSize: '12px',
@@ -61,13 +65,14 @@ export default function VolunteersHeader({ count, locations }: Props) {
           }}
         >
           <UserPlus style={{ width: '14px', height: '14px' }} />
-          Add Volunteer
+          {t('add_volunteer')}
         </button>
       </div>
 
       {showModal && (
         <AddVolunteerModal
           locations={locations}
+          categories={categories}
           onClose={() => setShowModal(false)}
         />
       )}

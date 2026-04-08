@@ -5,24 +5,32 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { useContext } from 'react'
 import {
   LayoutDashboard, Users, Calendar, FolderOpen,
-  BarChart2, MessageSquare, Settings, LogOut
+  BarChart2, MessageSquare, Settings, LogOut, Bell, BookOpen,
 } from 'lucide-react'
-
-const nav = [
-  { href: '/dashboard',             label: 'Dashboard',  icon: LayoutDashboard },
-  { href: '/dashboard/volunteers',  label: 'Volunteers', icon: Users },
-  { href: '/dashboard/shifts',      label: 'Shifts',     icon: Calendar },
-  { href: '/dashboard/documents',   label: 'Documents',  icon: FolderOpen },
-  { href: '/dashboard/reports',     label: 'Reports',    icon: BarChart2 },
-  { href: '/dashboard/messages',    label: 'Messages',   icon: MessageSquare },
-  { href: '/dashboard/settings',    label: 'Settings',   icon: Settings },
-]
+import { useAdminT, AdminLangContext, AdminSetLangContext } from '@/lib/admin-lang'
+import type { AdminLang } from '@/lib/admin-lang'
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
+  const t = useAdminT()
+  const lang = useContext(AdminLangContext)
+  const setLang = useContext(AdminSetLangContext)
+
+  const nav = [
+    { href: '/dashboard',             label: t('nav_dashboard'),  icon: LayoutDashboard },
+    { href: '/dashboard/volunteers',  label: t('nav_volunteers'), icon: Users },
+    { href: '/dashboard/shifts',      label: t('nav_shifts'),     icon: Calendar },
+    { href: '/dashboard/documents',   label: t('nav_documents'),  icon: FolderOpen },
+    { href: '/dashboard/reports',     label: t('nav_reports'),    icon: BarChart2 },
+    { href: '/dashboard/messages',    label: t('nav_messages'),   icon: MessageSquare },
+    { href: '/dashboard/alerts',      label: t('nav_alerts'),     icon: Bell },
+    { href: '/dashboard/settings',    label: t('nav_settings'),   icon: Settings },
+    { href: '/dashboard/learning',    label: t('nav_learning'),   icon: BookOpen },
+  ]
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -109,7 +117,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
             textTransform: 'uppercase',
             marginTop: '3px',
           }}>
-            Admin Portal
+            {t('admin_portal')}
           </span>
         </div>
       </div>
@@ -154,8 +162,50 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         })}
       </nav>
 
+      {/* ── Language toggle ── */}
+      <div style={{
+        padding: '10px 16px',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        position: 'relative',
+      }}>
+        <p style={{
+          fontSize: '9px',
+          fontWeight: 600,
+          color: 'rgba(255,255,255,0.25)',
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          marginBottom: '7px',
+        }}>
+          {t('language')}
+        </p>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          {(['en', 'es'] as AdminLang[]).map(l => (
+            <button
+              key={l}
+              onClick={() => setLang(l)}
+              style={{
+                flex: 1,
+                padding: '5px 0',
+                borderRadius: '6px',
+                border: 'none',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.15s',
+                background: lang === l ? '#00ACC1' : 'rgba(255,255,255,0.08)',
+                color: lang === l ? 'white' : 'rgba(255,255,255,0.4)',
+                boxShadow: lang === l ? '0 1px 4px rgba(0,172,193,0.35)' : 'none',
+              }}
+            >
+              {l === 'en' ? 'English' : 'Español'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* ── Sign out ── */}
-      <div style={{ padding: '10px', borderTop: '1px solid rgba(255,255,255,0.06)', position: 'relative' }}>
+      <div style={{ padding: '6px 10px 10px', position: 'relative' }}>
         <button
           onClick={handleSignOut}
           className="sidebar-signout"
@@ -177,7 +227,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           }}
         >
           <LogOut style={{ width: '15px', height: '15px', opacity: 0.45 }} />
-          Sign out
+          {t('sign_out')}
         </button>
       </div>
     </aside>

@@ -51,6 +51,32 @@ export async function homeClockIn(): Promise<{ entryId: string }> {
   return { entryId: data.id }
 }
 
+export async function homeDropShift(assignmentId: string): Promise<void> {
+  const { supabase, volunteerId } = await getVolunteerId()
+
+  const { data: assignment } = await supabase
+    .from('shift_assignments')
+    .select('id, volunteer_id, status, shifts(start_time)')
+    .eq('id', assignmentId)
+    .single()
+
+  if (!assignment || assignment.volunteer_id !== volunteerId) throw new Error('Assignment not found')
+  if (assignment.status === 'cancelled') throw new Error('Already cancelled')
+
+  const shiftStart = new Date((assignment.shifts as unknown as { start_time: string }).start_time)
+  if (new Date() >= shiftStart) throw new Error('Cannot drop a shift that has already started')
+
+  const { error } = await supabase
+    .from('shift_assignments')
+    .update({ status: 'cancelled' })
+    .eq('id', assignmentId)
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/volunteer/home')
+  revalidatePath('/volunteer/shifts')
+  revalidatePath('/dashboard/shifts')
+}
+
 export async function homeClockOut(entryId: string): Promise<void> {
   const { supabase } = await getVolunteerId()
 

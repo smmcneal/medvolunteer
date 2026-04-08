@@ -35,7 +35,7 @@ async function fetchLearningData() {
     supabase.from('lessons').select('*').order('order_index', { ascending: true }),
     supabase.from('quiz_questions').select('*'),
     supabase.from('lesson_completions').select('*'),
-    supabase.from('volunteers').select('id, first_name, last_name, category, status').eq('status', 'active'),
+    supabase.from('volunteers').select('id, first_name, last_name, category, status').eq('status', 'volunteer'),
   ])
 
   const moduleList = modules ?? []

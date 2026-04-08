@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { PipelinePhase, VolunteerStatus, VolunteerCategory } from '@/types/database'
+import type { PipelinePhase, VolunteerStatus } from '@/types/database'
 
 // Phase → status mapping (single source of truth)
 const PHASE_STATUS_MAP: Record<PipelinePhase, VolunteerStatus> = {
@@ -24,7 +24,8 @@ export async function updateVolunteerInfo(
     last_name: string
     email: string
     phone: string
-    category: VolunteerCategory
+    category: string
+    volunteer_categories?: string[]
   },
 ): Promise<{ error?: string }> {
   if (!data.first_name.trim()) return { error: 'First name is required.' }
@@ -32,15 +33,17 @@ export async function updateVolunteerInfo(
   if (!data.email.trim())      return { error: 'Email is required.' }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) return { error: 'Enter a valid email address.' }
 
+  const cats = data.volunteer_categories?.length ? data.volunteer_categories : [data.category]
   const admin = createAdminClient()
   const { error } = await admin
     .from('volunteers')
     .update({
-      first_name: data.first_name.trim(),
-      last_name:  data.last_name.trim(),
-      email:      data.email.trim().toLowerCase(),
-      phone:      data.phone.trim() || null,
-      category:   data.category,
+      first_name:           data.first_name.trim(),
+      last_name:            data.last_name.trim(),
+      email:                data.email.trim().toLowerCase(),
+      phone:                data.phone.trim() || null,
+      category:             cats[0],
+      volunteer_categories: cats,
     })
     .eq('id', volunteerId)
 
@@ -140,10 +143,11 @@ export async function raiseFlag(
     notes: notes?.trim() || null,
   })
   if (error) return { error: error.message }
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
   return {}
 }
 
-export async function resolveFlag(flagAssignmentId: string): Promise<{ error?: string }> {
+export async function resolveFlag(flagAssignmentId: string, volunteerId: string): Promise<{ error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -154,6 +158,18 @@ export async function resolveFlag(flagAssignmentId: string): Promise<{ error?: s
     .eq('id', flagAssignmentId)
 
   if (error) return { error: error.message }
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
+  return {}
+}
+
+export async function unresolveFlag(flagAssignmentId: string, volunteerId: string): Promise<{ error?: string }> {
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('volunteer_flags')
+    .update({ resolved_at: null, resolved_by: null })
+    .eq('id', flagAssignmentId)
+  if (error) return { error: error.message }
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
   return {}
 }
 
@@ -248,6 +264,35 @@ export async function uploadVolunteerDocument(
     return { error: dbError.message }
   }
 
+  // ─── Fire document automation alerts ──────────────────────────────────────
+  try {
+    const { data: rules } = await admin
+      .from('document_automation_rules')
+      .select('trigger_document_type, alert_message, assigned_to')
+
+    if (rules?.length) {
+      const lowerName = file.name.toLowerCase()
+      const matches = rules.filter(r =>
+        r.trigger_document_type &&
+        lowerName.includes(r.trigger_document_type.toLowerCase())
+      )
+      if (matches.length) {
+        await admin.from('internal_alerts').insert(
+          matches.map(r => ({
+            triggered_by:  user?.id ?? null,
+            assigned_to:   r.assigned_to ?? null,
+            volunteer_id:  volunteerId,
+            message:       r.alert_message,
+            action_type:   'document_added',
+          }))
+        )
+      }
+    }
+  } catch (err) {
+    // Alert creation is non-fatal — never block the upload response
+    console.error('[document-automation] alert insert failed:', err)
+  }
+
   revalidatePath(`/dashboard/volunteers/${volunteerId}`)
   return {}
 }
@@ -335,6 +380,64 @@ export async function clockIn(
   revalidatePath(`/dashboard/volunteers/${volunteerId}`)
   revalidatePath('/dashboard')
   return { entryId: data.id }
+}
+
+// ─── Jotform ──────────────────────────────────────────────────────────────────
+
+export async function sendJotformRequest(
+  volunteerId: string,
+  formId: string,
+): Promise<{ error?: string }> {
+  if (!formId.trim()) return { error: 'Form ID is required' }
+  const admin = createAdminClient()
+
+  const { data: vol } = await admin
+    .from('volunteers')
+    .select('email')
+    .eq('id', volunteerId)
+    .single()
+  if (!vol) return { error: 'Volunteer not found' }
+
+  const { data: org } = await admin
+    .from('organizations')
+    .select('settings')
+    .limit(1)
+    .single()
+  const apiKey = (org?.settings as Record<string, unknown>)?.jotform_api_key as string | undefined
+  if (!apiKey) return { error: 'Jotform API key not configured. Add it in Settings → Integrations.' }
+
+  const res = await fetch(`https://api.jotform.com/form/${formId.trim()}/submissions?apiKey=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ 'submission[email]': vol.email }),
+  })
+  if (!res.ok) return { error: `Jotform API error: ${await res.text()}` }
+
+  await admin.from('documents').insert({
+    volunteer_id: volunteerId,
+    name: `Jotform Request (Form ${formId.trim()})`,
+    provider: 'jotform',
+    status: 'pending',
+  })
+
+  // Evaluate document automation rules
+  const { data: docRules } = await admin.from('document_automation_rules').select('*')
+  if (docRules?.length) {
+    const matched = docRules.filter(r => r.trigger_document_type.toLowerCase() === 'jotform request')
+    if (matched.length) {
+      await Promise.all(matched.map((rule: { assigned_to: string | null; alert_message: string }) =>
+        admin.from('internal_alerts').insert({
+          volunteer_id: volunteerId,
+          assigned_to: rule.assigned_to,
+          message: rule.alert_message,
+          action_type: 'document_added',
+        })
+      ))
+    }
+  }
+
+  revalidatePath(`/dashboard/volunteers/${volunteerId}`)
+  return {}
 }
 
 export async function clockOut(

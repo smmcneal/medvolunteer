@@ -54,26 +54,54 @@ export async function createVolunteer(
   let newUserId: string
 
   if (input.send_invite) {
-    // Sends a magic-link email so the volunteer sets their own password
-    const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-      input.email,
-      {
+    // Generate the invite link (creates the auth user without sending email via Supabase)
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: 'invite',
+      email: input.email,
+      options: {
         data: { first_name: input.first_name, last_name: input.last_name },
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/auth/callback?next=/volunteer/set-password`,
-      }
-    )
-    if (inviteError) {
-      // If user already exists in Auth, look them up
-      if (inviteError.message.includes('already been registered')) {
+        redirectTo: `${siteUrl}/auth/callback?next=/volunteer/set-password`,
+      },
+    })
+
+    if (linkError) {
+      if (linkError.message.toLowerCase().includes('already registered')) {
         const { data: existingUsers } = await admin.auth.admin.listUsers()
         const existing = existingUsers?.users.find(u => u.email === input.email)
         if (!existing) return { error: 'Email already registered but user not found' }
         newUserId = existing.id
       } else {
-        return { error: inviteError.message }
+        return { error: linkError.message }
       }
     } else {
-      newUserId = inviteData.user.id
+      newUserId = linkData.user.id
+
+      // Send the invite email via Resend (bypasses Supabase's unreliable local SMTP)
+      const resendKey = process.env.RESEND_API_KEY
+      if (resendKey) {
+        const inviteLink = linkData.properties.action_link
+        const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev'
+        const emailRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: fromEmail,
+            to: input.email,
+            subject: `You've been invited to volunteer`,
+            html: `
+              <p>Hi ${input.first_name},</p>
+              <p>You've been invited to join the volunteer portal. Click the link below to set your password and get started:</p>
+              <p><a href="${inviteLink}">Accept invitation</a></p>
+              <p>This link expires in 24 hours.</p>
+            `,
+          }),
+        })
+        if (!emailRes.ok) {
+          const body = await emailRes.json().catch(() => ({}))
+          return { error: `Volunteer created but invite email failed: ${body.message ?? emailRes.statusText}` }
+        }
+      }
     }
   } else {
     // Create user with a random temporary password (admin will share it)
@@ -85,7 +113,7 @@ export async function createVolunteer(
       user_metadata: { first_name: input.first_name, last_name: input.last_name },
     })
     if (createError) {
-      if (createError.message.includes('already been registered')) {
+      if (createError.message.toLowerCase().includes('already registered')) {
         const { data: existingUsers } = await admin.auth.admin.listUsers()
         const existing = existingUsers?.users.find(u => u.email === input.email)
         if (!existing) return { error: 'Email already registered but user not found' }

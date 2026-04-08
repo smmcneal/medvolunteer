@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { clockIn, clockOut } from './actions'
+import { useAdminT } from '@/lib/admin-lang'
 
 export default function ClockInButton({
   volunteerId,
@@ -10,6 +11,7 @@ export default function ClockInButton({
   volunteerId: string
   initialEntry: { id: string; clock_in: string } | null
 }) {
+  const t = useAdminT()
   const [entry, setEntry] = useState(initialEntry)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -61,11 +63,11 @@ export default function ClockInButton({
           background: pending ? '#94a3b8' : isClockedIn ? '#dc2626' : '#22c55e',
           animation: isClockedIn && !pending ? 'pulse 2s infinite' : 'none',
         }} />
-        {pending ? (isClockedIn ? 'Clocking out…' : 'Clocking in…') : isClockedIn ? 'Clock Out' : 'Clock In'}
+        {pending ? (isClockedIn ? t('clocking_out') : t('clocking_in')) : isClockedIn ? t('clock_out') : t('clock_in')}
       </button>
       {isClockedIn && elapsed && (
         <span style={{ fontSize: '11px', color: '#9ca3af' }} suppressHydrationWarning>
-          Clocked in {elapsed}
+          {t('clocked_in')} {elapsed}
         </span>
       )}
       {error && (

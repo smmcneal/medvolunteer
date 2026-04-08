@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_noStore as noStore } from 'next/cache'
 import MessagesView from './MessagesView'
-import type { Message, Volunteer } from '@/types/database'
+import type { Message, Volunteer, MessageTemplate, Category } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +19,8 @@ async function fetchData() {
     { data: messages },
     { data: recipients },
     { data: volunteers },
+    { data: templates },
+    { data: categoriesData },
   ] = await Promise.all([
     supabase
       .from('messages')
@@ -31,8 +33,13 @@ async function fetchData() {
     supabase
       .from('volunteers')
       .select('id, first_name, last_name, email, phone, category, status')
-      .in('status', ['active', 'onboarding'])
+      .neq('status', 'inactive')
       .order('first_name', { ascending: true }),
+    supabase
+      .from('message_templates')
+      .select('*')
+      .order('created_at', { ascending: false }),
+    supabase.from('categories').select('*').eq('is_archived', false).order('sort_order'),
   ])
 
   const msgList = messages ?? []
@@ -49,11 +56,11 @@ async function fetchData() {
     }
   })
 
-  return { messages: msgWithStats, volunteers: volList }
+  return { messages: msgWithStats, volunteers: volList, templates: (templates ?? []) as MessageTemplate[], categories: (categoriesData ?? []) as Category[] }
 }
 
 export default async function MessagesPage() {
-  const { messages, volunteers } = await fetchData()
+  const { messages, volunteers, templates, categories } = await fetchData()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -90,7 +97,7 @@ export default async function MessagesPage() {
         </span>
       </div>
 
-      <MessagesView initialMessages={messages} volunteers={volunteers} />
+      <MessagesView initialMessages={messages} volunteers={volunteers} templates={templates} categories={categories} />
     </div>
   )
 }

@@ -1,9 +1,12 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { Download, TrendingUp, Clock, ShieldCheck, AlertTriangle } from 'lucide-react'
-import type { HoursRow, OnboardingRow, PipelinePhaseCount, VolunteerOnboardingRow, BgCheckRow, CredentialExpiryRow } from './page'
+import { useState, useMemo, useTransition } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+import { Download, TrendingUp, Clock, ShieldCheck, AlertTriangle, UserX, Filter, X } from 'lucide-react'
+import type { HoursRow, OnboardingRow, PipelinePhaseCount, VolunteerOnboardingRow, BgCheckRow, CredentialExpiryRow, ActiveVolunteerActivity, FilterParams } from './page'
+import { bulkMarkInactive, approveHoursEntry, rejectHoursEntry } from './actions'
+import type { Category } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -27,21 +30,6 @@ const PIPELINE_PHASE_COLORS: Record<string, { bg: string; text: string; bar: str
   offboarding: { bg: '#fef2f2', text: '#991b1b', bar: '#ef4444' },
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  medical_professional: 'Medical',
-  support_staff: 'Support',
-  admin: 'Admin',
-  trainee: 'Trainee',
-  other: 'Other',
-}
-
-const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
-  medical_professional: { bg: '#d1fae5', text: '#065f46' },
-  support_staff:        { bg: '#dbeafe', text: '#1e40af' },
-  admin:                { bg: '#ede9fe', text: '#5b21b6' },
-  trainee:              { bg: '#fef3c7', text: '#92400e' },
-  other:                { bg: '#f3f4f6', text: '#374151' },
-}
 
 const BG_RESULT_COLORS: Record<string, { bg: string; text: string }> = {
   clear:     { bg: '#f0fdf4', text: '#15803d' },
@@ -75,11 +63,203 @@ const TABS = [
   { key: 'onboarding', label: 'Onboarding',         icon: TrendingUp },
   { key: 'bgchecks',   label: 'Background Checks',  icon: ShieldCheck },
   { key: 'credentials',label: 'Credential Expiry',  icon: AlertTriangle },
+  { key: 'inactive',   label: 'Inactive',           icon: UserX },
 ] as const
 
 type Tab = typeof TABS[number]['key']
 
 // ─── Component ────────────────────────────────────────────────────────────────
+
+const PIPELINE_PHASES_LIST = ['intake', 'orientation', 'review', 'training', 'active', 'offboarding']
+
+function GlobalFilterBar({ allCategories, allStatuses, appliedFilters, categories }: {
+  allCategories: string[]
+  allStatuses: string[]
+  appliedFilters: FilterParams
+  categories: Category[]
+}) {
+  const t = useAdminT()
+  function getCatLabel(slug: string) {
+    return categories.find(c => c.slug === slug)?.name ?? slug
+  }
+
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  const [status, setStatus] = useState(appliedFilters.status ?? '')
+  const [category, setCategory] = useState(appliedFilters.category ?? '')
+  const [dateFrom, setDateFrom] = useState(appliedFilters.dateFrom ?? '')
+  const [dateTo, setDateTo] = useState(appliedFilters.dateTo ?? '')
+  const [pipelinePhase, setPipelinePhase] = useState(appliedFilters.pipelinePhase ?? '')
+  const [open, setOpen] = useState(
+    !!(appliedFilters.status || appliedFilters.category || appliedFilters.dateFrom || appliedFilters.dateTo || appliedFilters.pipelinePhase)
+  )
+
+  const activeCount = [appliedFilters.status, appliedFilters.category, appliedFilters.dateFrom, appliedFilters.dateTo, appliedFilters.pipelinePhase].filter(Boolean).length
+
+  function applyFilters() {
+    const params = new URLSearchParams(searchParams.toString())
+    if (status)        params.set('status', status);       else params.delete('status')
+    if (category)      params.set('category', category);   else params.delete('category')
+    if (dateFrom)      params.set('dateFrom', dateFrom);   else params.delete('dateFrom')
+    if (dateTo)        params.set('dateTo', dateTo);       else params.delete('dateTo')
+    if (pipelinePhase) params.set('pipelinePhase', pipelinePhase); else params.delete('pipelinePhase')
+    router.push(`${pathname}?${params.toString()}`)
+  }
+
+  function clearFilters() {
+    setStatus(''); setCategory(''); setDateFrom(''); setDateTo(''); setPipelinePhase('')
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('status'); params.delete('category'); params.delete('dateFrom'); params.delete('dateTo'); params.delete('pipelinePhase')
+    router.push(`${pathname}?${params.toString()}`)
+  }
+
+  const iStyle: React.CSSProperties = {
+    padding: '6px 10px', borderRadius: 7, border: '1px solid #e5e7eb',
+    fontSize: '13px', color: '#374151', fontFamily: 'inherit', background: 'white',
+  }
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '6px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: 500,
+          border: `1px solid ${activeCount > 0 ? '#1B2A4A' : '#e5e7eb'}`,
+          background: activeCount > 0 ? '#f0f4fa' : 'white',
+          color: activeCount > 0 ? '#1B2A4A' : '#374151',
+          cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >
+        <Filter size={13} />
+        {t('filters')}
+        {activeCount > 0 && (
+          <span style={{
+            background: '#1B2A4A', color: 'white', fontSize: '10px', fontWeight: 700,
+            borderRadius: '50%', width: 16, height: 16,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>{activeCount}</span>
+        )}
+      </button>
+
+      {open && (
+        <div style={{
+          marginTop: 8, padding: '14px 18px',
+          background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px',
+          display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end',
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('status_filter')}</label>
+            <select value={status} onChange={e => setStatus(e.target.value)} style={iStyle}>
+              <option value="">{t('all')}</option>
+              {allStatuses.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('category_filter')}</label>
+            <select value={category} onChange={e => setCategory(e.target.value)} style={iStyle}>
+              <option value="">{t('all')}</option>
+              {allCategories.map(c => <option key={c} value={c}>{getCatLabel(c)}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('pipeline_phase_filter')}</label>
+            <select value={pipelinePhase} onChange={e => setPipelinePhase(e.target.value)} style={iStyle}>
+              <option value="">{t('all')}</option>
+              {PIPELINE_PHASES_LIST.map(p => <option key={p} value={p}>{PIPELINE_PHASE_LABELS[p] ?? p}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('joined_from')}</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={iStyle} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('joined_to')}</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={iStyle} />
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={applyFilters} style={{ padding: '6px 14px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, background: '#1B2A4A', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{t('apply')}</button>
+            {activeCount > 0 && (
+              <button onClick={clearFilters} style={{ padding: '6px 10px', borderRadius: '7px', fontSize: '13px', background: 'white', color: '#6b7280', border: '1px solid #e5e7eb', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <X size={12} /> {t('clear')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface PendingHoursEntry {
+  id: string
+  volunteer_name: string
+  clock_in: string
+  clock_out: string
+  hours: number
+}
+
+function MedVolPendingHoursPanel({ entries }: { entries: PendingHoursEntry[] }) {
+  const t = useAdminT()
+  const [pending, startTransition] = useTransition()
+  const router = useRouter()
+  const [items, setItems] = useState(entries)
+
+  function handleApprove(id: string) {
+    setItems(i => i.filter(e => e.id !== id))
+    startTransition(async () => { await approveHoursEntry(id); router.refresh() })
+  }
+
+  function handleReject(id: string) {
+    setItems(i => i.filter(e => e.id !== id))
+    startTransition(async () => { await rejectHoursEntry(id); router.refresh() })
+  }
+
+  if (items.length === 0) return <p style={{ fontSize: 13, color: '#9ca3af' }}>{t('no_pending_hours')}</p>
+
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <thead>
+        <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+          <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>{t('volunteer')}</th>
+          <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>{t('clock_in_col')}</th>
+          <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>{t('clock_out_col')}</th>
+          <th style={{ textAlign: 'right', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>{t('shift_hours')}</th>
+          <th style={{ padding: '8px 12px' }} />
+        </tr>
+      </thead>
+      <tbody>
+        {items.map(e => (
+          <tr key={e.id} style={{ borderBottom: '1px solid #f9fafb' }}>
+            <td style={{ padding: '8px 12px', color: '#111827', fontWeight: 500 }}>{e.volunteer_name}</td>
+            <td style={{ padding: '8px 12px', color: '#374151' }} suppressHydrationWarning>{new Date(e.clock_in).toLocaleString()}</td>
+            <td style={{ padding: '8px 12px', color: '#374151' }} suppressHydrationWarning>{new Date(e.clock_out).toLocaleString()}</td>
+            <td style={{ padding: '8px 12px', color: '#374151', textAlign: 'right' }}>{e.hours}h</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <button onClick={() => handleApprove(e.id)} disabled={pending} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer' }}>{t('approve')}</button>
+                <button onClick={() => handleReject(e.id)} disabled={pending} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: '1px solid #e5e7eb', background: '#fff', color: '#dc2626', cursor: 'pointer' }}>{t('reject')}</button>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+const PALETTE: Record<number, { bg: string; text: string }> = {
+  0: { bg: '#d1fae5', text: '#065f46' },
+  1: { bg: '#dbeafe', text: '#1e40af' },
+  2: { bg: '#ede9fe', text: '#5b21b6' },
+  3: { bg: '#fef3c7', text: '#92400e' },
+  4: { bg: '#f0f9ff', text: '#0369a1' },
+  5: { bg: '#fff1f2', text: '#be123c' },
+  6: { bg: '#fefce8', text: '#a16207' },
+  7: { bg: '#f3f4f6', text: '#374151' },
+}
 
 export default function ReportsView({
   hoursRows,
@@ -88,6 +268,13 @@ export default function ReportsView({
   volunteerOnboardingRows,
   bgRows,
   credRows,
+  activeVolunteerActivity = [],
+  allCategories = [],
+  allStatuses = [],
+  appliedFilters = {},
+  requireHourApproval = false,
+  pendingHours = [],
+  categories = [],
 }: {
   hoursRows: HoursRow[]
   onboardingRows: OnboardingRow[]
@@ -95,7 +282,23 @@ export default function ReportsView({
   volunteerOnboardingRows: VolunteerOnboardingRow[]
   bgRows: BgCheckRow[]
   credRows: CredentialExpiryRow[]
+  activeVolunteerActivity?: ActiveVolunteerActivity[]
+  allCategories?: string[]
+  allStatuses?: string[]
+  appliedFilters?: FilterParams
+  requireHourApproval?: boolean
+  pendingHours?: PendingHoursEntry[]
+  categories?: Category[]
 }) {
+  const t = useAdminT()
+  function getCatLabel(slug: string) {
+    return categories.find(c => c.slug === slug)?.name ?? slug
+  }
+  function getCatStyle(slug: string) {
+    const idx = categories.findIndex(c => c.slug === slug)
+    if (idx === -1) return { bg: '#f3f4f6', text: '#6b7280' }
+    return PALETTE[idx % 8]
+  }
   const searchParams = useSearchParams()
   const initialTab = (searchParams.get('tab') as Tab | null) ?? 'hours'
   const [activeTab, setActiveTab] = useState<Tab>(
@@ -130,6 +333,24 @@ export default function ReportsView({
   const [credWindow, setCredWindow] = useState<30 | 60 | 90>(90)
   const filteredCreds = credRows.filter(r => r.days_until_expiry <= credWindow)
 
+  // Inactive volunteers
+  const [inactiveThreshold, setInactiveThreshold] = useState<30 | 60 | 90 | 'custom'>(60)
+  const [inactiveCustomDays, setInactiveCustomDays] = useState('')
+  const [inactiveSelected, setInactiveSelected] = useState<Set<string>>(new Set())
+  const [inactivePending, startInactiveTransition] = useTransition()
+  const [inactiveError, setInactiveError] = useState<string | null>(null)
+  const [inactiveSuccessCount, setInactiveSuccessCount] = useState<number | null>(null)
+
+  const inactiveDays = inactiveThreshold === 'custom' ? parseInt(inactiveCustomDays, 10) || 0 : inactiveThreshold
+  const inactiveCutoff = inactiveDays > 0 ? new Date(Date.now() - inactiveDays * 86400000).toISOString() : null
+
+  const inactiveVols = useMemo(() => {
+    if (!inactiveCutoff) return []
+    return activeVolunteerActivity.filter(v =>
+      !v.lastActivityAt || v.lastActivityAt < inactiveCutoff
+    )
+  }, [activeVolunteerActivity, inactiveCutoff])
+
   const thStyle: React.CSSProperties = {
     padding: '10px 20px', textAlign: 'left',
     fontSize: '11px', fontWeight: 600, color: '#9ca3af',
@@ -150,12 +371,28 @@ export default function ReportsView({
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
 
+      {/* Global Filters */}
+      <GlobalFilterBar allCategories={allCategories} allStatuses={allStatuses} appliedFilters={appliedFilters} categories={categories} />
+
+      {/* Pending Hours */}
+      {requireHourApproval && (
+        <div style={{ background: 'white', borderRadius: 10, border: '1px solid #e5e7eb', padding: '16px 20px', marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>{t('pending_hour_approvals')}</span>
+            {pendingHours.length > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#fef2f2', color: '#dc2626' }}>{pendingHours.length}</span>
+            )}
+          </div>
+          <MedVolPendingHoursPanel entries={pendingHours} />
+        </div>
+      )}
+
       {/* Tabs */}
       <div style={{
         display: 'flex', gap: '4px', marginBottom: '24px',
         borderBottom: '1px solid #f0f0f0', paddingBottom: '0',
       }}>
-        {TABS.map(({ key, label, icon: Icon }) => (
+        {TABS.map(({ key, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
@@ -171,7 +408,7 @@ export default function ReportsView({
             }}
           >
             <Icon style={{ width: '13px', height: '13px' }} />
-            {label}
+            {t(`${key}_tab`)}
           </button>
         ))}
       </div>
@@ -205,14 +442,14 @@ export default function ReportsView({
               onChange={e => setHoursSearch(e.target.value)}
             />
             <select style={selectStyle} value={hoursCategory} onChange={e => setHoursCategory(e.target.value)}>
-              <option value="">All categories</option>
-              {Object.entries(CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              <option value="">{t('all_categories')}</option>
+              {categories.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
             </select>
             <button
               onClick={() => downloadCSV(
                 filteredHours.map(r => ({
                   Name: r.name,
-                  Category: CATEGORY_LABELS[r.category] ?? r.category,
+                  Category: getCatLabel(r.category),
                   'Total Hours': (r.total_minutes / 60).toFixed(2),
                   Sessions: r.session_count,
                 })),
@@ -226,7 +463,7 @@ export default function ReportsView({
               }}
             >
               <Download style={{ width: '13px', height: '13px' }} />
-              Export CSV
+              {t('export_csv')}
             </button>
           </div>
 
@@ -235,22 +472,22 @@ export default function ReportsView({
             {filteredHours.length === 0 ? (
               <div style={{ padding: '48px', textAlign: 'center' }}>
                 <Clock style={{ width: '28px', height: '28px', color: '#e5e7eb', margin: '0 auto 8px' }} />
-                <p style={{ fontSize: '14px', color: '#9ca3af' }}>No hours data found</p>
+                <p style={{ fontSize: '14px', color: '#9ca3af' }}>{t('no_hours_found')}</p>
               </div>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#fafafa' }}>
-                    <th style={thStyle}>Volunteer</th>
-                    <th style={thStyle}>Category</th>
-                    <th style={thStyle}>Sessions</th>
-                    <th style={thStyle}>Total Hours</th>
-                    <th style={thStyle}>Distribution</th>
+                    <th style={thStyle}>{t('volunteer')}</th>
+                    <th style={thStyle}>{t('category_filter')}</th>
+                    <th style={thStyle}>{t('sessions_col')}</th>
+                    <th style={thStyle}>{t('total_hours_report')}</th>
+                    <th style={thStyle}>{t('distribution_col')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredHours.map((r, i) => {
-                    const catStyle = CATEGORY_COLORS[r.category] ?? CATEGORY_COLORS.other
+                    const catStyle = getCatStyle(r.category)
                     const maxMins  = hoursRows[0]?.total_minutes ?? 1
                     const pct      = Math.round((r.total_minutes / maxMins) * 100)
                     return (
@@ -258,7 +495,7 @@ export default function ReportsView({
                         <td style={{ padding: '12px 20px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>{r.name}</td>
                         <td style={{ padding: '12px 20px' }}>
                           <span style={{ fontSize: '12px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px', background: catStyle.bg, color: catStyle.text }}>
-                            {CATEGORY_LABELS[r.category] ?? r.category}
+                            {getCatLabel(r.category)}
                           </span>
                         </td>
                         <td style={{ padding: '12px 20px', fontSize: '13px', color: '#374151' }}>{r.session_count}</td>
@@ -346,7 +583,7 @@ export default function ReportsView({
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {onboardingRows.map(row => {
-                  const catStyle = row.category ? (CATEGORY_COLORS[row.category] ?? CATEGORY_COLORS.other) : { bg: '#f3f4f6', text: '#374151' }
+                  const catStyle = row.category ? getCatStyle(row.category) : { bg: '#f3f4f6', text: '#374151' }
                   return (
                     <div key={row.workflow_id} style={{
                       background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', padding: '18px 22px',
@@ -355,7 +592,7 @@ export default function ReportsView({
                         <div>
                           <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>{row.workflow_name}</h3>
                           <span style={{ fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '5px', background: catStyle.bg, color: catStyle.text }}>
-                            {row.category ? CATEGORY_LABELS[row.category] ?? row.category : 'All categories'}
+                            {row.category ? getCatLabel(row.category) : 'All categories'}
                           </span>
                         </div>
                         <div style={{ textAlign: 'right' }}>
@@ -397,14 +634,14 @@ export default function ReportsView({
                   onChange={e => setOnboardingSearch(e.target.value)}
                 />
                 <select style={selectStyle} value={onboardingPhase} onChange={e => setOnboardingPhase(e.target.value)}>
-                  <option value="">All phases</option>
+                  <option value="">{t('all_phases')}</option>
                   {Object.entries(PIPELINE_PHASE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
                 <button
                   onClick={() => downloadCSV(
                     filteredOnboardingVols.map(r => ({
                       Name: r.name,
-                      Category: CATEGORY_LABELS[r.category] ?? r.category,
+                      Category: getCatLabel(r.category),
                       'Pipeline Phase': PIPELINE_PHASE_LABELS[r.pipeline_phase] ?? r.pipeline_phase,
                       Workflow: r.workflow_name ?? '—',
                       'Stages Completed': r.stages_completed,
@@ -421,7 +658,7 @@ export default function ReportsView({
                   }}
                 >
                   <Download style={{ width: '13px', height: '13px' }} />
-                  Export CSV
+                  {t('export_csv')}
                 </button>
               </div>
             </div>
@@ -429,24 +666,24 @@ export default function ReportsView({
             {filteredOnboardingVols.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '48px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
                 <TrendingUp style={{ width: '28px', height: '28px', color: '#e5e7eb', margin: '0 auto 8px' }} />
-                <p style={{ fontSize: '14px', color: '#9ca3af' }}>No volunteers match the current filter</p>
+                <p style={{ fontSize: '14px', color: '#9ca3af' }}>{t('no_volunteers_filter')}</p>
               </div>
             ) : (
               <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#fafafa' }}>
-                      <th style={thStyle}>Volunteer</th>
-                      <th style={thStyle}>Category</th>
-                      <th style={thStyle}>Phase</th>
-                      <th style={thStyle}>Workflow</th>
-                      <th style={thStyle}>Stages</th>
-                      <th style={thStyle}>Progress</th>
+                      <th style={thStyle}>{t('volunteer')}</th>
+                      <th style={thStyle}>{t('category_filter')}</th>
+                      <th style={thStyle}>{t('phase_col')}</th>
+                      <th style={thStyle}>{t('workflow_col')}</th>
+                      <th style={thStyle}>{t('stages_col')}</th>
+                      <th style={thStyle}>{t('progress_col')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredOnboardingVols.map((r, i) => {
-                      const catStyle   = CATEGORY_COLORS[r.category] ?? CATEGORY_COLORS.other
+                      const catStyle   = getCatStyle(r.category)
                       const phaseStyle = PIPELINE_PHASE_COLORS[r.pipeline_phase] ?? PIPELINE_PHASE_COLORS.intake
                       const pct        = r.completion_pct
                       const barColor   = pct === 100 ? '#22c55e' : pct >= 60 ? NAVY : '#f59e0b'
@@ -455,7 +692,7 @@ export default function ReportsView({
                           <td style={{ padding: '12px 20px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>{r.name}</td>
                           <td style={{ padding: '12px 20px' }}>
                             <span style={{ fontSize: '12px', fontWeight: 500, padding: '3px 8px', borderRadius: '6px', background: catStyle.bg, color: catStyle.text }}>
-                              {CATEGORY_LABELS[r.category] ?? r.category}
+                              {getCatLabel(r.category)}
                             </span>
                           </td>
                           <td style={{ padding: '12px 20px' }}>
@@ -476,7 +713,7 @@ export default function ReportsView({
                                 <span style={{ fontSize: '11px', color: '#9ca3af', minWidth: '32px' }}>{pct}%</span>
                               </div>
                             ) : (
-                              <span style={{ fontSize: '12px', color: '#d1d5db' }}>No workflow</span>
+                              <span style={{ fontSize: '12px', color: '#d1d5db' }}>{t('no_workflow_assigned')}</span>
                             )}
                           </td>
                         </tr>
@@ -497,7 +734,7 @@ export default function ReportsView({
           {bgRows.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '64px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
               <ShieldCheck style={{ width: '28px', height: '28px', color: '#e5e7eb', margin: '0 auto 8px' }} />
-              <p style={{ fontSize: '14px', color: '#9ca3af' }}>No background check data yet</p>
+              <p style={{ fontSize: '14px', color: '#9ca3af' }}>{t('no_bgcheck_data')}</p>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px' }}>
@@ -525,12 +762,181 @@ export default function ReportsView({
         </div>
       )}
 
+      {/* ── Inactive Volunteers ─────────────────────────────────── */}
+      {activeTab === 'inactive' && (
+        <div>
+          {/* Threshold selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>{t('no_activity_in_last')}</span>
+            {([30, 60, 90] as const).map(d => (
+              <button
+                key={d}
+                onClick={() => setInactiveThreshold(d)}
+                style={{
+                  padding: '6px 14px', borderRadius: '7px', border: 'none', cursor: 'pointer',
+                  fontSize: '13px', fontWeight: 500,
+                  background: inactiveThreshold === d ? NAVY : '#f3f4f6',
+                  color: inactiveThreshold === d ? 'white' : '#6b7280',
+                }}
+              >{d} {t('days_suffix')}</button>
+            ))}
+            <button
+              onClick={() => setInactiveThreshold('custom')}
+              style={{
+                padding: '6px 14px', borderRadius: '7px', border: 'none', cursor: 'pointer',
+                fontSize: '13px', fontWeight: 500,
+                background: inactiveThreshold === 'custom' ? NAVY : '#f3f4f6',
+                color: inactiveThreshold === 'custom' ? 'white' : '#6b7280',
+              }}
+            >{t('custom_days')}</button>
+            {inactiveThreshold === 'custom' && (
+              <input
+                type="number" min="1" placeholder="Days" value={inactiveCustomDays}
+                onChange={e => setInactiveCustomDays(e.target.value)}
+                style={{ ...inputStyle, width: 80 }}
+              />
+            )}
+          </div>
+
+          {inactiveError && <p style={{ fontSize: '13px', color: '#dc2626', marginBottom: '12px' }}>{inactiveError}</p>}
+          {inactiveSuccessCount !== null && (
+            <p style={{ fontSize: '13px', color: '#059669', marginBottom: '12px' }}>
+              {inactiveSuccessCount} volunteer{inactiveSuccessCount !== 1 ? 's' : ''} marked inactive.
+            </p>
+          )}
+
+          {inactiveDays === 0 ? (
+            <div style={{ textAlign: 'center', padding: '64px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
+              <UserX style={{ width: '28px', height: '28px', color: '#e5e7eb', margin: '0 auto 8px' }} />
+              <p style={{ fontSize: '14px', color: '#9ca3af' }}>{t('set_day_threshold')}</p>
+            </div>
+          ) : inactiveVols.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '64px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
+              <UserX style={{ width: '28px', height: '28px', color: '#d1fae5', margin: '0 auto 8px' }} />
+              <p style={{ fontSize: '14px', color: '#6b7280' }}>{t('no_inactive_volunteers')} {inactiveDays}+ {t('days_suffix')}</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', overflow: 'hidden', marginBottom: '14px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#fafafa' }}>
+                      <th style={{ ...thStyle, width: '36px' }}>
+                        <input
+                          type="checkbox"
+                          checked={inactiveSelected.size === inactiveVols.length}
+                          onChange={() => {
+                            if (inactiveSelected.size === inactiveVols.length) {
+                              setInactiveSelected(new Set())
+                            } else {
+                              setInactiveSelected(new Set(inactiveVols.map(v => v.id)))
+                            }
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </th>
+                      <th style={thStyle}>{t('name_col')}</th>
+                      <th style={thStyle}>{t('category_filter')}</th>
+                      <th style={thStyle}>{t('last_active_col')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inactiveVols.map((v, i) => (
+                      <tr key={v.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #f9f9f9', background: inactiveSelected.has(v.id) ? '#f0fdf4' : 'white' }}>
+                        <td style={{ padding: '10px 20px' }}>
+                          <input
+                            type="checkbox"
+                            checked={inactiveSelected.has(v.id)}
+                            onChange={() => {
+                              setInactiveSelected(prev => {
+                                const next = new Set(prev)
+                                next.has(v.id) ? next.delete(v.id) : next.add(v.id)
+                                return next
+                              })
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        </td>
+                        <td style={{ padding: '10px 20px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>
+                          {v.firstName} {v.lastName}
+                        </td>
+                        <td style={{ padding: '10px 20px', fontSize: '13px', color: '#374151' }}>
+                          {v.category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                        </td>
+                        <td style={{ padding: '10px 20px', fontSize: '13px', color: '#9ca3af' }}>
+                          {v.lastActivityAt
+                            ? new Date(v.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : t('never_label')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                  {inactiveSelected.size} of {inactiveVols.length} selected
+                </span>
+                <button
+                  disabled={inactivePending || inactiveSelected.size === 0}
+                  onClick={() => {
+                    const ids = [...inactiveSelected]
+                    setInactiveError(null)
+                    setInactiveSuccessCount(null)
+                    startInactiveTransition(async () => {
+                      const result = await bulkMarkInactive(ids)
+                      if (result.error) {
+                        setInactiveError(result.error)
+                      } else {
+                        setInactiveSuccessCount(ids.length)
+                        setInactiveSelected(new Set())
+                      }
+                    })
+                  }}
+                  style={{
+                    padding: '7px 16px', borderRadius: '8px', border: 'none',
+                    fontSize: '13px', fontWeight: 600, cursor: inactiveSelected.size === 0 ? 'default' : 'pointer',
+                    background: inactiveSelected.size === 0 ? '#f3f4f6' : '#dc2626',
+                    color: inactiveSelected.size === 0 ? '#9ca3af' : 'white',
+                    opacity: inactivePending ? 0.6 : 1,
+                  }}
+                >
+                  {inactivePending ? t('marking_inactive') : `${t('mark_inactive')} ${inactiveSelected.size || ''}`}
+                </button>
+                <button
+                  onClick={() => downloadCSV(
+                    inactiveVols.map(v => ({
+                      Name: `${v.firstName} ${v.lastName}`,
+                      Category: v.category,
+                      'Last Active': v.lastActivityAt
+                        ? new Date(v.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : 'Never',
+                    })),
+                    `inactive-volunteers-${inactiveDays}d.csv`
+                  )}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '7px 14px', borderRadius: '8px',
+                    background: NAVY, color: 'white', border: 'none',
+                    cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                  }}
+                >
+                  <Download style={{ width: '13px', height: '13px' }} />
+                  {t('export_csv')}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ── Credential Expiry ───────────────────────────────────── */}
       {activeTab === 'credentials' && (
         <div>
           {/* Window filter + export */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>Expiring within:</span>
+            <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>{t('expiring_within')}</span>
             {([30, 60, 90] as const).map(w => (
               <button
                 key={w}
@@ -542,7 +948,7 @@ export default function ReportsView({
                   color: credWindow === w ? 'white' : '#6b7280',
                 }}
               >
-                {w} days
+                {w} {t('days_suffix')}
               </button>
             ))}
             <button
@@ -563,25 +969,25 @@ export default function ReportsView({
               }}
             >
               <Download style={{ width: '13px', height: '13px' }} />
-              Export CSV
+              {t('export_csv')}
             </button>
           </div>
 
           {filteredCreds.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '64px', background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0' }}>
               <AlertTriangle style={{ width: '28px', height: '28px', color: '#d1fae5', margin: '0 auto 8px' }} />
-              <p style={{ fontSize: '14px', color: '#6b7280' }}>No credentials expiring in the next {credWindow} days</p>
+              <p style={{ fontSize: '14px', color: '#6b7280' }}>{t('no_creds_expiring')} {credWindow} {t('days_suffix')}</p>
             </div>
           ) : (
             <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #f0f0f0', overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#fafafa' }}>
-                    <th style={thStyle}>Volunteer</th>
-                    <th style={thStyle}>Credential Type</th>
-                    <th style={thStyle}>Expires</th>
-                    <th style={thStyle}>Days Left</th>
-                    <th style={thStyle}>Urgency</th>
+                    <th style={thStyle}>{t('volunteer')}</th>
+                    <th style={thStyle}>{t('credential_type_col')}</th>
+                    <th style={thStyle}>{t('expires_col')}</th>
+                    <th style={thStyle}>{t('days_left_col')}</th>
+                    <th style={thStyle}>{t('urgency_col')}</th>
                   </tr>
                 </thead>
                 <tbody>

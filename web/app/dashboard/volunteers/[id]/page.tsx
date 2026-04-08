@@ -8,7 +8,7 @@ import type {
   Volunteer, Credential, Document, BackgroundCheck,
   OnboardingStage, OnboardingProgress, TimeEntry,
   LessonCompletion, Location,
-  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload,
+  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload, Category,
 } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -30,7 +30,7 @@ async function fetchVolunteer(id: string) {
   const supabase = createAdminClient()
 
   const [volunteerRes, credsRes, docsRes, bgCheckRes, timeRes, learningRes,
-         notesRes, volTagsRes, volFlagsRes, orgTagsRes, orgFlagsRes, uploadsRes, orgLocationsRes] = await Promise.all([
+         notesRes, volTagsRes, volFlagsRes, orgTagsRes, orgFlagsRes, uploadsRes, orgLocationsRes, orgSettingsRes, categoriesRes] = await Promise.all([
     supabase
       .from('volunteers')
       .select('*, volunteer_locations(location:locations(*))')
@@ -48,6 +48,8 @@ async function fetchVolunteer(id: string) {
     supabase.from('org_flags').select('*').order('name'),
     supabase.from('volunteer_uploads').select('*').eq('volunteer_id', id).order('uploaded_at', { ascending: false }),
     supabase.from('locations').select('id, name').eq('is_active', true).order('name'),
+    supabase.from('organizations').select('settings').limit(1).single(),
+    supabase.from('categories').select('*').eq('is_archived', false).order('sort_order'),
   ])
 
   if (!volunteerRes.data) return null
@@ -83,6 +85,8 @@ async function fetchVolunteer(id: string) {
   const activeFlags   = allFlags.filter(f => !f.resolved_at)
   const resolvedFlags = allFlags.filter(f => !!f.resolved_at)
 
+  const jotformApiKey = ((orgSettingsRes.data?.settings as Record<string, unknown>)?.jotform_api_key as string) ?? null
+
   return {
     volunteer,
     credentials:       (credsRes.data ?? []) as Credential[],
@@ -99,18 +103,12 @@ async function fetchVolunteer(id: string) {
     orgTags:      (orgTagsRes.data ?? []) as OrgTag[],
     orgFlags:     (orgFlagsRes.data ?? []) as OrgFlag[],
     orgLocations: (orgLocationsRes.data ?? []) as Pick<Location, 'id' | 'name'>[],
+    categories:   (categoriesRes.data ?? []) as Category[],
+    jotformApiKey,
   }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const CATEGORY_LABELS: Record<string, string> = {
-  medical_professional: 'Medical Professional',
-  support_staff: 'Support Staff',
-  admin: 'Admin',
-  trainee: 'Trainee',
-  other: 'Other',
-}
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
   applicant: { bg: '#f3f4f6', text: '#374151', dot: '#9ca3af' },
@@ -137,6 +135,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
     volunteer, credentials, documents, uploads, backgroundCheck,
     timeEntries, onboardingStages, lessonCompletions,
     notes, appliedTags, activeFlags, resolvedFlags, orgTags, orgFlags, orgLocations,
+    categories, jotformApiKey,
   } = data
 
   const statStyle = STATUS_COLORS[volunteer.status] ?? STATUS_COLORS.inactive
@@ -187,7 +186,7 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
             )}
           </div>
           <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '10px' }}>
-            {CATEGORY_LABELS[volunteer.category]}
+            {categories.find(c => c.slug === volunteer.category)?.name ?? volunteer.category}
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: '#374151' }}>
@@ -244,6 +243,8 @@ export default async function VolunteerDetailPage({ params }: { params: Promise<
         orgTags={orgTags}
         orgFlags={orgFlags}
         orgLocations={orgLocations}
+        categories={categories}
+        jotformApiKey={jotformApiKey}
       />
     </div>
   )

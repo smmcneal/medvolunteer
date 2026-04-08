@@ -94,7 +94,7 @@ export async function volunteerSignUpForShift(shiftId: string): Promise<void> {
     .single()
 
   if (!volunteer) throw new Error('Volunteer not found')
-  if (volunteer.status !== 'volunteer' || volunteer.pipeline_phase !== 'active') {
+  if (volunteer.status !== 'volunteer') {
     throw new Error('Only active volunteers can sign up for shifts')
   }
 
@@ -135,6 +135,73 @@ export async function volunteerSignUpForShift(shiftId: string): Promise<void> {
   revalidatePath('/dashboard/shifts')
 }
 
+export async function volunteerMoveShift(
+  oldAssignmentId: string,
+  newShiftId: string,
+): Promise<{ newAssignmentId: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const admin = createAdminClient()
+  const { data: volunteer } = await admin.from('volunteers').select('id, org_id, status, pipeline_phase').eq('user_id', user.id).single()
+  if (!volunteer) throw new Error('Volunteer not found')
+  if (volunteer.status !== 'volunteer') throw new Error('Only active volunteers can change shifts')
+
+  // Verify old assignment belongs to this volunteer
+  const { data: oldAssignment } = await admin.from('shift_assignments').select('id, volunteer_id, status, shifts(start_time)').eq('id', oldAssignmentId).single()
+  if (!oldAssignment || oldAssignment.volunteer_id !== volunteer.id) throw new Error('Assignment not found')
+  if (oldAssignment.status === 'cancelled') throw new Error('Assignment is already cancelled')
+  const shiftStart = new Date((oldAssignment.shifts as unknown as { start_time: string }).start_time)
+  if (new Date() >= shiftStart) throw new Error('Cannot move a shift that has already started')
+
+  // Verify new shift exists, belongs to org, is in the future, and has space
+  const { data: newShift } = await admin.from('shifts').select('id, start_time, required_count, org_id').eq('id', newShiftId).eq('org_id', volunteer.org_id).single()
+  if (!newShift) throw new Error('Shift not found')
+  if (new Date(newShift.start_time) <= new Date()) throw new Error('Cannot move to a shift that has already started')
+  const { count } = await admin.from('shift_assignments').select('id', { count: 'exact', head: true }).eq('shift_id', newShiftId).neq('status', 'cancelled')
+  if ((count ?? 0) >= newShift.required_count) throw new Error('That shift is now full')
+
+  // Cancel old
+  const { error: cancelErr } = await admin.from('shift_assignments').update({ status: 'cancelled' }).eq('id', oldAssignmentId)
+  if (cancelErr) throw new Error(cancelErr.message)
+
+  // Create new
+  const { data: newAssignment, error: createErr } = await admin.from('shift_assignments').insert({ shift_id: newShiftId, volunteer_id: volunteer.id, status: 'assigned' }).select('id').single()
+  if (createErr || !newAssignment) {
+    // Rollback
+    await admin.from('shift_assignments').update({ status: 'assigned' }).eq('id', oldAssignmentId)
+    throw new Error(createErr?.message ?? 'Failed to create new assignment')
+  }
+
+  revalidatePath('/volunteer/shifts')
+  revalidatePath('/dashboard/shifts')
+  return { newAssignmentId: newAssignment.id }
+}
+
+export async function volunteerRequestReschedule(
+  assignmentId: string,
+  note: string,
+): Promise<void> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const admin = createAdminClient()
+  const { data: volunteer } = await admin.from('volunteers').select('id').eq('user_id', user.id).single()
+  if (!volunteer) throw new Error('Volunteer not found')
+
+  // Verify ownership
+  const { data: assignment } = await admin.from('shift_assignments').select('id, volunteer_id, shifts(name, start_time)').eq('id', assignmentId).single()
+  if (!assignment || assignment.volunteer_id !== volunteer.id) throw new Error('Assignment not found')
+
+  const shiftInfo = assignment.shifts as unknown as { name: string; start_time: string } | null
+  const content = `Reschedule request for shift "${shiftInfo?.name ?? 'Unknown'}" (${shiftInfo?.start_time ? new Date(shiftInfo.start_time).toLocaleDateString() : 'unknown date'})${note ? ': ' + note : ''}`
+
+  await admin.from('volunteer_notes').insert({ volunteer_id: volunteer.id, content, created_by: user.id })
+  revalidatePath('/volunteer/shifts')
+}
+
 export async function volunteerDropShift(assignmentId: string): Promise<void> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -161,8 +228,7 @@ export async function volunteerDropShift(assignmentId: string): Promise<void> {
   if (assignment.status === 'cancelled') throw new Error('Assignment is already cancelled')
 
   const shiftStart = new Date((assignment.shifts as unknown as { start_time: string }).start_time)
-  const cutoff = new Date(shiftStart.getTime() - 24 * 60 * 60 * 1000)
-  if (new Date() >= cutoff) throw new Error('Cannot drop a shift within 24 hours of start time')
+  if (new Date() >= shiftStart) throw new Error('Cannot drop a shift that has already started')
 
   const { error } = await admin
     .from('shift_assignments')

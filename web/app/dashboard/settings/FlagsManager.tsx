@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { createFlag, deleteFlag } from './settingsActions'
 import type { OrgFlag, FlagSeverity } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 const PRESET_COLORS = [
   '#f59e0b', '#ef4444', '#0ea5e9', '#6366f1',
@@ -16,6 +17,7 @@ const SEVERITY_STYLES: Record<FlagSeverity, { bg: string; text: string; label: s
 }
 
 export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[] }) {
+  const t = useAdminT()
   const [flags, setFlags]       = useState<OrgFlag[]>(initialFlags)
   const [name, setName]         = useState('')
   const [description, setDesc]  = useState('')
@@ -47,15 +49,15 @@ export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[]
 
   return (
     <div>
-      <h3 style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 12 }}>Flags</h3>
+      <h3 style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 12 }}>{t('flags_section')}</h3>
       <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
-        Alert-style markers for issues that need attention (e.g. "Reference not called", "License expiring").
+        {t('flags_desc')}
       </p>
 
       {/* Existing flags */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
         {flags.length === 0 && (
-          <span style={{ fontSize: 13, color: '#9ca3af' }}>No flags defined yet.</span>
+          <span style={{ fontSize: 13, color: '#9ca3af' }}>{t('no_flags_yet')}</span>
         )}
         {flags.map(flag => {
           const sev = SEVERITY_STYLES[flag.severity]
@@ -72,7 +74,7 @@ export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[]
                   {flag.description && <span style={{ fontSize: 12, color: '#9ca3af', marginLeft: 8 }}>{flag.description}</span>}
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: sev.bg, color: sev.text }}>
-                  {sev.label}
+                  {t(`severity_${flag.severity}`)}
                 </span>
               </div>
               <button
@@ -88,7 +90,7 @@ export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[]
       <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 200px' }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Flag name</label>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>{t('flag_name')}</label>
             <input
               value={name}
               onChange={e => setName(e.target.value)}
@@ -98,7 +100,7 @@ export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[]
             />
           </div>
           <div style={{ flex: '1 1 200px' }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Description (optional)</label>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>{t('flag_description')}</label>
             <input
               value={description}
               onChange={e => setDesc(e.target.value)}
@@ -111,7 +113,7 @@ export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[]
 
         <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Severity</label>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>{t('severity')}</label>
             <div style={{ display: 'flex', gap: 6 }}>
               {(['info', 'warning', 'critical'] as FlagSeverity[]).map(s => {
                 const sev = SEVERITY_STYLES[s]
@@ -127,14 +129,14 @@ export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[]
                       fontSize: 12, fontWeight: 600, cursor: 'pointer',
                     }}
                   >
-                    {sev.label}
+                    {t(`severity_${s}`)}
                   </button>
                 )
               })}
             </div>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Color</label>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>{t('color')}</label>
             <div style={{ display: 'flex', gap: 6 }}>
               {PRESET_COLORS.map(c => (
                 <button
@@ -158,7 +160,7 @@ export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[]
               cursor: 'pointer', whiteSpace: 'nowrap',
             }}
           >
-            Add flag
+            {t('add_flag_btn')}
           </button>
         </div>
       </form>

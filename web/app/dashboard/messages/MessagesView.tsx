@@ -2,9 +2,10 @@
 
 import { useState, useTransition, useMemo } from 'react'
 import type { MessageWithRecipients } from './page'
-import type { Volunteer, MessageChannel, VolunteerCategory } from '@/types/database'
-import { sendMessage } from './actions'
-import { ChevronLeft, Send, CheckCheck, Eye, Users, Inbox } from 'lucide-react'
+import type { Volunteer, MessageChannel, MessageTemplate, Category } from '@/types/database'
+import { sendMessage, saveTemplate, deleteTemplate } from './actions'
+import { ChevronLeft, Send, CheckCheck, Eye, Users, Inbox, FileText, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { useAdminT } from '@/lib/admin-lang'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -14,13 +15,6 @@ const CHANNEL_CONFIG: Record<MessageChannel, { label: string; icon: string; colo
   push:  { label: 'Push',  icon: '🔔', color: '#8b5cf6', bg: '#faf5ff', desc: 'App notify'    },
 }
 
-const CATEGORY_LABELS: Record<VolunteerCategory, string> = {
-  medical_professional: 'Medical Professionals',
-  support_staff:        'Support Staff',
-  admin:                'Administrators',
-  trainee:              'Trainees',
-  other:                'Other',
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -46,9 +40,12 @@ function formatDate(dateStr: string) {
 interface Props {
   initialMessages: MessageWithRecipients[]
   volunteers: Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'email' | 'phone' | 'category' | 'status'>[]
+  templates: MessageTemplate[]
+  categories: Category[]
 }
 
-export default function MessagesView({ initialMessages, volunteers }: Props) {
+export default function MessagesView({ initialMessages, volunteers, templates, categories }: Props) {
+  const t = useAdminT()
   // Mobile panel state — 'list' shows sidebar, 'main' shows compose/detail
   const [mobilePanel, setMobilePanel] = useState<'list' | 'main'>('main')
 
@@ -61,12 +58,19 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
   const [body, setBody] = useState('')
   const [channel, setChannel] = useState<MessageChannel>('email')
   const [recipientType, setRecipientType] = useState<'all' | 'group' | 'individual'>('all')
-  const [selectedCategory, setSelectedCategory] = useState<VolunteerCategory | ''>('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [selectedVolunteerIds, setSelectedVolunteerIds] = useState<Set<string>>(new Set())
   const [volunteerSearch, setVolunteerSearch] = useState('')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
+  // Template state
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [isPendingTemplate, startTemplateTransition] = useTransition()
+  const [templateError, setTemplateError] = useState<string | null>(null)
 
   const recipientIds = useMemo(() => {
     if (recipientType === 'all') return volunteers.map(v => v.id)
@@ -104,6 +108,15 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
   }
 
   function openCompose() {
+    setView('compose')
+    setSelectedMsg(null)
+    setMobilePanel('main')
+  }
+
+  function useTemplateInCompose(tmpl: MessageTemplate) {
+    setSubject(tmpl.subject)
+    setBody(tmpl.body)
+    setChannel(tmpl.channel)
     setView('compose')
     setSelectedMsg(null)
     setMobilePanel('main')
@@ -155,7 +168,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
               transition: 'background 0.15s, box-shadow 0.15s',
             }}
           >
-            <span style={{ fontSize: '14px' }}>✏</span> Compose New Message
+            <span style={{ fontSize: '14px' }}>✏</span> {t('compose_new_message')}
           </button>
         </div>
 
@@ -189,12 +202,12 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
         </div>
 
         {/* Message list */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ flex: '1 1 0', overflowY: 'auto', minHeight: 0 }}>
           {filteredMessages.length === 0 && (
             <div style={{ padding: '48px 24px', textAlign: 'center' }}>
               <Inbox style={{ width: '28px', height: '28px', color: 'var(--surface-border)', margin: '0 auto 8px' }} />
-              <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>No messages sent yet</p>
-              <p style={{ fontSize: '12px', color: 'var(--text-faint)', marginTop: '4px' }}>Compose a message to get started</p>
+              <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>{t('no_messages')}</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-faint)', marginTop: '4px' }}>{t('no_messages_hint')}</p>
             </div>
           )}
 
@@ -248,6 +261,80 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
             )
           })}
         </div>
+
+        {/* Templates section */}
+        <div style={{ borderTop: '1px solid var(--surface-border-sub)', flexShrink: 0 }}>
+          <button
+            onClick={() => setShowTemplates(!showTemplates)}
+            style={{
+              width: '100%', padding: '10px 16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 700,
+              fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.06em',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <FileText style={{ width: '12px', height: '12px' }} />
+              {t('templates')}
+              <span style={{
+                padding: '1px 6px', borderRadius: '99px', fontSize: '10px',
+                background: 'var(--surface-bg)', color: 'var(--text-muted)',
+                border: '1px solid var(--surface-border)',
+                textTransform: 'none', letterSpacing: 0,
+              }}>{templates.length}</span>
+            </span>
+            {showTemplates
+              ? <ChevronDown style={{ width: '13px', height: '13px' }} />
+              : <ChevronRight style={{ width: '13px', height: '13px' }} />}
+          </button>
+          {showTemplates && (
+            <div style={{ borderTop: '1px solid var(--surface-border-sub)', maxHeight: 180, overflowY: 'auto' }}>
+              {templates.length === 0 ? (
+                <p style={{ fontSize: '12px', color: 'var(--text-faint)', padding: '12px 16px', textAlign: 'center' }}>
+                  {t('no_templates_yet')}
+                </p>
+              ) : templates.map(tmpl => (
+                <div
+                  key={tmpl.id}
+                  style={{
+                    padding: '8px 16px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
+                    borderBottom: '1px solid var(--surface-border-sub)',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', margin: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{tmpl.name}</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{tmpl.subject || '(no subject)'}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                    <button
+                      onClick={() => useTemplateInCompose(tmpl)}
+                      style={{
+                        padding: '3px 9px', borderRadius: '6px', border: 'none',
+                        background: 'var(--navy)', color: 'white',
+                        fontSize: '10px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                        letterSpacing: '0.02em',
+                      }}
+                    >{t('use_template')}</button>
+                    <button
+                      onClick={() => startTemplateTransition(async () => { await deleteTemplate(tmpl.id) })}
+                      style={{
+                        padding: '3px 6px', borderRadius: '6px',
+                        border: '1px solid var(--surface-border)',
+                        background: 'transparent', color: 'var(--text-muted)',
+                        fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      }}
+                      title="Delete template"
+                    >
+                      <Trash2 style={{ width: '11px', height: '11px' }} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Right: Compose / Detail ────────────────────────────── */}
@@ -264,7 +351,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
               style={{ display: 'none' /* shown by CSS on mobile */ }}
             >
               <ChevronLeft style={{ width: '14px', height: '14px' }} />
-              Messages
+              {t('messages_title')}
             </button>
 
             {/* Title */}
@@ -273,7 +360,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
               color: 'var(--text-primary)', fontFamily: 'var(--font-display)',
               letterSpacing: '-0.025em', lineHeight: 1, marginBottom: '20px',
             }}>
-              New Message
+              {t('new_message')}
             </h2>
 
             {/* Feedback */}
@@ -300,7 +387,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
 
             {/* Channel */}
             <div style={{ marginBottom: '18px' }}>
-              <label style={labelStyle}>Channel</label>
+              <label style={labelStyle}>{t('channel_label')}</label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                 {(Object.keys(CHANNEL_CONFIG) as MessageChannel[]).map(ch => {
                   const c = CHANNEL_CONFIG[ch]
@@ -329,7 +416,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
 
             {/* Recipients */}
             <div style={{ marginBottom: '18px' }}>
-              <label style={labelStyle}>To</label>
+              <label style={labelStyle}>{t('to_label')}</label>
               {/* Segmented control */}
               <div style={{
                 display: 'inline-flex', borderRadius: '8px',
@@ -348,7 +435,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
                       color: recipientType === rt ? 'white' : 'var(--text-secondary)',
                       fontFamily: 'inherit', transition: 'background 0.12s, color 0.12s',
                     }}
-                  >{rt === 'all' ? 'All' : rt === 'group' ? 'By Category' : 'Individuals'}</button>
+                  >{rt === 'all' ? t('all') : rt === 'group' ? t('by_category_label') : t('individuals_label')}</button>
                 ))}
               </div>
 
@@ -360,20 +447,20 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
                   border: '1px solid rgba(27,42,74,0.08)',
                 }}>
                   <Users style={{ width: '14px', height: '14px', flexShrink: 0 }} />
-                  Sending to all {volunteers.length} active volunteers
+                  {t('all_volunteers')} — {volunteers.length}
                 </div>
               )}
 
               {recipientType === 'group' && (
                 <select
                   value={selectedCategory}
-                  onChange={e => setSelectedCategory(e.target.value as VolunteerCategory | '')}
+                  onChange={e => setSelectedCategory(e.target.value)}
                   style={fieldStyle}
                 >
                   <option value="">Select a category…</option>
-                  {(Object.keys(CATEGORY_LABELS) as VolunteerCategory[]).map(cat => (
-                    <option key={cat} value={cat}>
-                      {CATEGORY_LABELS[cat]} ({volunteers.filter(v => v.category === cat).length})
+                  {categories.map(cat => (
+                    <option key={cat.slug} value={cat.slug}>
+                      {cat.name} ({volunteers.filter(v => v.category === cat.slug).length})
                     </option>
                   ))}
                 </select>
@@ -411,7 +498,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
                       </label>
                     ))}
                     {filteredVolunteers.length === 0 && (
-                      <p style={{ fontSize: '12px', color: 'var(--text-faint)', padding: '12px', textAlign: 'center' }}>No matches</p>
+                      <p style={{ fontSize: '12px', color: 'var(--text-faint)', padding: '12px', textAlign: 'center' }}>{t('no_results')}</p>
                     )}
                   </div>
                 </div>
@@ -427,7 +514,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
 
             {/* Subject */}
             <div style={{ marginBottom: '14px' }}>
-              <label style={labelStyle}>Subject</label>
+              <label style={labelStyle}>{t('subject')}</label>
               <input
                 value={subject}
                 onChange={e => setSubject(e.target.value)}
@@ -438,7 +525,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
 
             {/* Body */}
             <div style={{ marginBottom: '20px' }}>
-              <label style={labelStyle}>Message</label>
+              <label style={labelStyle}>{t('body')}</label>
               <textarea
                 value={body}
                 onChange={e => setBody(e.target.value)}
@@ -448,27 +535,90 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
               />
             </div>
 
-            {/* Send */}
-            <button
-              onClick={handleSend}
-              disabled={!canSend}
-              style={{
-                padding: '11px 24px', borderRadius: '9px',
-                fontSize: '13px', fontWeight: 700, border: 'none',
-                cursor: canSend ? 'pointer' : 'not-allowed',
-                background: canSend ? 'var(--navy)' : 'var(--surface-border)',
-                color: canSend ? 'white' : 'var(--text-faint)',
-                display: 'flex', alignItems: 'center', gap: '7px',
-                fontFamily: 'inherit', letterSpacing: '-0.01em',
-                boxShadow: canSend ? '0 2px 8px rgba(27,42,74,0.2)' : 'none',
-                transition: 'background 0.15s, box-shadow 0.15s',
-              }}
-            >
-              <Send style={{ width: '13px', height: '13px' }} />
-              {isPending
-                ? 'Sending…'
-                : `Send ${CHANNEL_CONFIG[channel].icon} to ${recipientIds.length} volunteer${recipientIds.length !== 1 ? 's' : ''}`}
-            </button>
+            {/* Send + Save as Template */}
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <button
+                onClick={handleSend}
+                disabled={!canSend}
+                style={{
+                  padding: '11px 24px', borderRadius: '9px',
+                  fontSize: '13px', fontWeight: 700, border: 'none',
+                  cursor: canSend ? 'pointer' : 'not-allowed',
+                  background: canSend ? 'var(--navy)' : 'var(--surface-border)',
+                  color: canSend ? 'white' : 'var(--text-faint)',
+                  display: 'flex', alignItems: 'center', gap: '7px',
+                  fontFamily: 'inherit', letterSpacing: '-0.01em',
+                  boxShadow: canSend ? '0 2px 8px rgba(27,42,74,0.2)' : 'none',
+                  transition: 'background 0.15s, box-shadow 0.15s',
+                }}
+              >
+                <Send style={{ width: '13px', height: '13px' }} />
+                {isPending
+                  ? t('sending_msg')
+                  : `${t('send')} ${CHANNEL_CONFIG[channel].icon} ${recipientIds.length}`}
+              </button>
+              <button
+                onClick={() => { setSavingTemplate(true); setTemplateName(''); setTemplateError(null) }}
+                style={{
+                  padding: '11px 18px', borderRadius: '9px',
+                  border: '1px solid var(--surface-border)',
+                  background: 'var(--surface-card)', color: 'var(--text-secondary)',
+                  fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  fontFamily: 'inherit',
+                }}
+              >
+                <FileText style={{ width: '13px', height: '13px' }} />
+                {t('save_template')}
+              </button>
+            </div>
+
+            {/* Save template inline form */}
+            {savingTemplate && (
+              <div style={{ marginTop: '12px', padding: '12px 14px', borderRadius: '9px', background: 'rgba(27,42,74,0.04)', border: '1px solid rgba(27,42,74,0.10)' }}>
+                <label style={labelStyle}>{t('template_name_label')}</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    value={templateName}
+                    onChange={e => setTemplateName(e.target.value)}
+                    placeholder="e.g. Shift reminder, HIPAA notice…"
+                    autoFocus
+                    style={fieldStyle}
+                  />
+                  <button
+                    onClick={() => {
+                      setTemplateError(null)
+                      startTemplateTransition(async () => {
+                        try {
+                          await saveTemplate({ name: templateName, subject: subject, body: body, channel })
+                          setSavingTemplate(false)
+                        } catch (e) {
+                          setTemplateError(e instanceof Error ? e.message : 'Failed to save')
+                        }
+                      })
+                    }}
+                    disabled={isPendingTemplate || !templateName.trim()}
+                    style={{
+                      padding: '9px 16px', borderRadius: '8px', border: 'none',
+                      background: 'var(--navy)', color: 'white',
+                      fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                      fontFamily: 'inherit', whiteSpace: 'nowrap',
+                      opacity: isPendingTemplate ? 0.7 : 1,
+                    }}
+                  >{isPendingTemplate ? t('saving') : t('save_label')}</button>
+                  <button
+                    onClick={() => setSavingTemplate(false)}
+                    style={{
+                      padding: '9px 12px', borderRadius: '8px',
+                      border: '1px solid var(--surface-border)',
+                      background: 'transparent', color: 'var(--text-secondary)',
+                      fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >{t('cancel')}</button>
+                </div>
+                {templateError && <p style={{ fontSize: '12px', color: '#dc2626', marginTop: '6px' }}>{templateError}</p>}
+              </div>
+            )}
           </div>
         )}
 
@@ -479,7 +629,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
         {view === 'detail' && !selectedMsg && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--text-faint)' }}>
             <Inbox style={{ width: '32px', height: '32px' }} />
-            <p style={{ fontSize: '14px', fontWeight: 500 }}>Select a message to view</p>
+            <p style={{ fontSize: '14px', fontWeight: 500 }}>{t('select_message_view')}</p>
           </div>
         )}
       </div>
@@ -490,6 +640,7 @@ export default function MessagesView({ initialMessages, volunteers }: Props) {
 // ─── Message Detail ────────────────────────────────────────────────────────────
 
 function MessageDetail({ msg, onBack }: { msg: MessageWithRecipients; onBack: () => void }) {
+  const t = useAdminT()
   const ch = CHANNEL_CONFIG[msg.channel as MessageChannel]
   const deliveryPct = msg.recipient_count > 0
     ? Math.round((msg.delivered_count / msg.recipient_count) * 100) : 0
@@ -506,7 +657,7 @@ function MessageDetail({ msg, onBack }: { msg: MessageWithRecipients; onBack: ()
         style={{ display: 'none' /* shown by CSS on mobile */ }}
       >
         <ChevronLeft style={{ width: '14px', height: '14px' }} />
-        Messages
+        {t('messages_title')}
       </button>
 
       {/* Header */}
@@ -526,17 +677,17 @@ function MessageDetail({ msg, onBack }: { msg: MessageWithRecipients; onBack: ()
           }}>{ch.icon} {ch.label}</span>
         </div>
         <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-          Sent {formatDate(msg.sent_at ?? msg.created_at ?? '')}
-          {' · '}{msg.recipient_type === 'all' ? 'All volunteers' : msg.recipient_type}
+          {t('sent_prefix')} {formatDate(msg.sent_at ?? msg.created_at ?? '')}
+          {' · '}{msg.recipient_type === 'all' ? t('all_volunteers') : msg.recipient_type}
         </p>
       </div>
 
       {/* Stats */}
       <div className="msg-stats-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '24px' }}>
         {[
-          { label: 'Recipients', value: String(msg.recipient_count),           icon: <Users style={{ width: '14px', height: '14px' }} />,     color: 'var(--text-secondary)' },
-          { label: 'Delivered',  value: `${msg.delivered_count} (${deliveryPct}%)`, icon: <CheckCheck style={{ width: '14px', height: '14px' }} />, color: '#10b981' },
-          { label: 'Read',       value: `${msg.read_count} (${readPct}%)`,      icon: <Eye style={{ width: '14px', height: '14px' }} />,        color: '#3b82f6' },
+          { label: t('recipients_stat'), value: String(msg.recipient_count),           icon: <Users style={{ width: '14px', height: '14px' }} />,     color: 'var(--text-secondary)' },
+          { label: t('delivered_stat'),  value: `${msg.delivered_count} (${deliveryPct}%)`, icon: <CheckCheck style={{ width: '14px', height: '14px' }} />, color: '#10b981' },
+          { label: t('read_stat'),       value: `${msg.read_count} (${readPct}%)`,      icon: <Eye style={{ width: '14px', height: '14px' }} />,        color: '#3b82f6' },
         ].map(stat => (
           <div key={stat.label} style={{
             padding: '14px 16px', borderRadius: '10px',
@@ -554,7 +705,7 @@ function MessageDetail({ msg, onBack }: { msg: MessageWithRecipients; onBack: ()
       {/* Message body */}
       <div style={{ marginBottom: '6px' }}>
         <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-faint)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
-          Message Body
+          {t('message_body_label')}
         </p>
         <div style={{
           padding: '18px 20px', background: 'var(--surface-bg)',

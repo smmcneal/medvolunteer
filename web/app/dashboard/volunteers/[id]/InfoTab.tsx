@@ -1,18 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import type { VolunteerCategory, Location, OrgTag } from '@/types/database'
+import type { Location, OrgTag, Category } from '@/types/database'
 import type { VolunteerDetail } from './page'
 import TagsPanel from './TagsPanel'
 import { updateVolunteerInfo, updateVolunteerLocations } from './actions'
-
-const CATEGORY_OPTIONS: { value: VolunteerCategory; label: string }[] = [
-  { value: 'medical_professional', label: 'Medical Professional' },
-  { value: 'support_staff',        label: 'Support Staff' },
-  { value: 'admin',                label: 'Admin' },
-  { value: 'trainee',              label: 'Trainee' },
-  { value: 'other',                label: 'Other' },
-]
+import { useAdminT } from '@/lib/admin-lang'
 
 const STATUS_LABELS: Record<string, string> = {
   applicant: 'Applicant',
@@ -28,7 +21,8 @@ interface EditState {
   last_name: string
   email: string
   phone: string
-  category: VolunteerCategory
+  category: string
+  volunteer_categories: string[]
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -38,12 +32,15 @@ export default function InfoTab({
   appliedTags,
   orgTags,
   orgLocations = [],
+  categories = [],
 }: {
   volunteer: VolunteerDetail
   appliedTags: OrgTag[]
   orgTags: OrgTag[]
   orgLocations?: Pick<Location, 'id' | 'name'>[]
+  categories?: Category[]
 }) {
+  const t = useAdminT()
   // Local copy of mutable fields so saves reflect immediately
   const [v, setV] = useState(initialVolunteer)
 
@@ -55,13 +52,28 @@ export default function InfoTab({
   const [editLocationIds, setEditLocationIds] = useState<string[]>([])
 
   function makeForm(vol: VolunteerDetail): EditState {
+    const cats: string[] = (vol as any).volunteer_categories?.length
+      ? (vol as any).volunteer_categories as string[]
+      : [vol.category]
     return {
-      first_name: vol.first_name,
-      last_name:  vol.last_name,
-      email:      vol.email,
-      phone:      vol.phone ?? '',
-      category:   vol.category,
+      first_name:           vol.first_name,
+      last_name:            vol.last_name,
+      email:                vol.email,
+      phone:                vol.phone ?? '',
+      category:             cats[0],
+      volunteer_categories: cats,
     }
+  }
+
+  function toggleCategory(slug: string) {
+    setForm(prev => {
+      const has = prev.volunteer_categories.includes(slug)
+      if (has && prev.volunteer_categories.length === 1) return prev // require at least one
+      const next = has
+        ? prev.volunteer_categories.filter(c => c !== slug)
+        : [...prev.volunteer_categories, slug]
+      return { ...prev, volunteer_categories: next, category: next[0] }
+    })
   }
 
   function startEdit() {
@@ -88,7 +100,7 @@ export default function InfoTab({
     setError(null)
 
     const [infoResult, locResult] = await Promise.all([
-      updateVolunteerInfo(v.id, form),
+      updateVolunteerInfo(v.id, { ...form, volunteer_categories: form.volunteer_categories }),
       updateVolunteerLocations(v.id, editLocationIds),
     ])
 
@@ -103,12 +115,13 @@ export default function InfoTab({
 
     setV(prev => ({
       ...prev,
-      first_name: form.first_name.trim(),
-      last_name:  form.last_name.trim(),
-      email:      form.email.trim().toLowerCase(),
-      phone:      form.phone.trim() || null,
-      category:   form.category,
-      locations:  newLocations,
+      first_name:           form.first_name.trim(),
+      last_name:            form.last_name.trim(),
+      email:                form.email.trim().toLowerCase(),
+      phone:                form.phone.trim() || null,
+      category:             form.volunteer_categories[0] ?? form.category,
+      volunteer_categories: form.volunteer_categories,
+      locations:            newLocations,
     }))
     setEditing(false)
     setSaved(true)
@@ -127,12 +140,12 @@ export default function InfoTab({
       {/* ── Header row with Edit / Save / Cancel ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: '13px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Volunteer Details
+          {t('volunteer_details')}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {saved && !editing && (
             <span style={{ fontSize: '12px', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <CheckIcon /> Saved
+              <CheckIcon /> {t('saved')}
             </span>
           )}
           {editing ? (
@@ -145,7 +158,7 @@ export default function InfoTab({
                   fontSize: '13px', color: '#6b7280', cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 onClick={handleSave}
@@ -158,7 +171,7 @@ export default function InfoTab({
                   display: 'flex', alignItems: 'center', gap: '6px',
                 }}
               >
-                {saving ? <><MiniSpinner />Saving…</> : 'Save changes'}
+                {saving ? <><MiniSpinner />{t('saving')}</> : t('save')}
               </button>
             </>
           ) : (
@@ -172,7 +185,7 @@ export default function InfoTab({
                 display: 'flex', alignItems: 'center', gap: '5px',
               }}
             >
-              <PencilIcon /> Edit
+              <PencilIcon /> {t('edit')}
             </button>
           )}
         </div>
@@ -194,29 +207,47 @@ export default function InfoTab({
       {/* ── Fields grid ── */}
       {editing ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-          <EditField label="First Name" value={form.first_name} onChange={v => field('first_name', v)} required />
-          <EditField label="Last Name"  value={form.last_name}  onChange={v => field('last_name', v)}  required />
-          <EditField label="Email"      value={form.email}      onChange={v => field('email', v)}      type="email" required />
-          <EditField label="Phone"      value={form.phone}      onChange={v => field('phone', v)}      type="tel" />
-          {/* Category dropdown */}
-          <div>
-            <label style={labelStyle}>Category</label>
-            <select
-              value={form.category}
-              onChange={e => field('category', e.target.value as VolunteerCategory)}
-              style={inputStyle}
-            >
-              {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+          <EditField label={t('first_name')} value={form.first_name} onChange={v => field('first_name', v)} required />
+          <EditField label={t('last_name')}  value={form.last_name}  onChange={v => field('last_name', v)}  required />
+          <EditField label={t('email')}      value={form.email}      onChange={v => field('email', v)}      type="email" required />
+          <EditField label={t('phone')}      value={form.phone}      onChange={v => field('phone', v)}      type="tel" />
+          {/* Category multi-select — spans full width */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>
+              {t('category')} <span style={{ fontSize: '10px', fontWeight: 400, color: '#d1d5db' }}>({t('select_all_that_apply')})</span>
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '2px' }}>
+              {categories.map(o => {
+                const checked = form.volunteer_categories.includes(o.slug)
+                return (
+                  <button
+                    key={o.slug}
+                    type="button"
+                    onClick={() => toggleCategory(o.slug)}
+                    style={{
+                      padding: '6px 14px', borderRadius: '8px', cursor: 'pointer',
+                      fontSize: '13px', fontWeight: 600, border: '1.5px solid',
+                      borderColor: checked ? '#1B2A4A' : '#e5e7eb',
+                      background: checked ? '#1B2A4A' : 'white',
+                      color: checked ? 'white' : '#374151',
+                      transition: 'all 0.15s',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    {o.name}
+                  </button>
+                )
+              })}
+            </div>
           </div>
           {/* Status — read-only, controlled by pipeline */}
-          <ReadonlyField label="Status" value={STATUS_LABELS[v.status] ?? v.status} hint="Managed via Pipeline tab" />
-          <ReadonlyField label="Emergency Contact" value={v.emergency_contact_name ?? '—'}  hint="Set by volunteer" />
-          <ReadonlyField label="Emergency Phone"   value={v.emergency_contact_phone ?? '—'} hint="Set by volunteer" />
+          <ReadonlyField label={t('status_field')} value={STATUS_LABELS[v.status] ?? v.status} hint={t('managed_via_pipeline')} />
+          <ReadonlyField label={t('emergency_contact')} value={v.emergency_contact_name ?? '—'}  hint={t('set_by_volunteer')} />
+          <ReadonlyField label={t('emergency_phone')}   value={v.emergency_contact_phone ?? '—'} hint={t('set_by_volunteer')} />
           {/* Location multi-select — spans full width */}
           {orgLocations.length > 0 && (
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Location(s)</label>
+              <label style={labelStyle}>{t('locations_field')}</label>
               <div style={{
                 display: 'flex', flexWrap: 'wrap', gap: '8px',
                 padding: '10px 12px', borderRadius: '8px',
@@ -250,14 +281,13 @@ export default function InfoTab({
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
           {[
-            { label: 'First Name',        value: v.first_name },
-            { label: 'Last Name',         value: v.last_name },
-            { label: 'Email',             value: v.email },
-            { label: 'Phone',             value: v.phone ?? '—' },
-            { label: 'Category',          value: CATEGORY_OPTIONS.find(o => o.value === v.category)?.label ?? v.category },
-            { label: 'Status',            value: STATUS_LABELS[v.status] ?? v.status },
-            { label: 'Emergency Contact', value: v.emergency_contact_name ?? '—' },
-            { label: 'Emergency Phone',   value: v.emergency_contact_phone ?? '—' },
+            { label: t('first_name'),        value: v.first_name },
+            { label: t('last_name'),         value: v.last_name },
+            { label: t('email'),             value: v.email },
+            { label: t('phone'),             value: v.phone ?? '—' },
+            { label: t('status_field'),      value: STATUS_LABELS[v.status] ?? v.status },
+            { label: t('emergency_contact'), value: v.emergency_contact_name ?? '—' },
+            { label: t('emergency_phone'),   value: v.emergency_contact_phone ?? '—' },
           ].map(({ label, value }) => (
             <div key={label} style={{
               padding: '14px 16px', background: '#fafafa', borderRadius: '8px',
@@ -269,6 +299,22 @@ export default function InfoTab({
               <p style={{ fontSize: '14px', color: '#111827', fontWeight: 500 }}>{value}</p>
             </div>
           ))}
+          {/* Categories — full width */}
+          <div style={{ gridColumn: '1 / -1', padding: '14px 16px', background: '#fafafa', borderRadius: '8px', border: '1px solid #f3f4f6' }}>
+            <p style={{ fontSize: '11px', fontWeight: 500, color: '#9ca3af', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {((v as any).volunteer_categories?.length ?? 0) > 1 ? t('categories') : t('category')}
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {((v as any).volunteer_categories?.length
+                ? (v as any).volunteer_categories as string[]
+                : [v.category]
+              ).map((cat: string) => (
+                <span key={cat} style={{ fontSize: '13px', fontWeight: 500, padding: '3px 10px', borderRadius: '6px', background: '#1B2A4A1a', color: '#1B2A4A', border: '1px solid #1B2A4A33' }}>
+                  {categories.find(o => o.slug === cat)?.name ?? cat}
+                </span>
+              ))}
+            </div>
+          </div>
           {/* Locations — full-width row */}
           <div style={{
             gridColumn: '1 / -1',
@@ -276,7 +322,7 @@ export default function InfoTab({
             border: '1px solid #f3f4f6',
           }}>
             <p style={{ fontSize: '11px', fontWeight: 500, color: '#9ca3af', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Location(s)
+              {t('locations_field')}
             </p>
             {v.locations.length === 0 ? (
               <p style={{ fontSize: '14px', color: '#9ca3af', fontWeight: 500 }}>—</p>
@@ -301,7 +347,7 @@ export default function InfoTab({
       {/* ── Tags ── */}
       <div>
         <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
-          Tags
+          {t('tags_label')}
         </p>
         <TagsPanel volunteerId={v.id} appliedTags={appliedTags} orgTags={orgTags} />
       </div>

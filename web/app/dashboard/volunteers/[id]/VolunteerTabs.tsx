@@ -2,13 +2,14 @@
 
 import { useState, useTransition } from 'react'
 import { CheckCircle2, Circle, Clock, AlertTriangle, FileText, ShieldCheck, BookOpen } from 'lucide-react'
+import { useAdminT } from '@/lib/admin-lang'
 import { toggleChecklistItem } from './actions'
 import { getUploadSignedUrl } from './actions'
 import type { ChecklistField } from './actions'
 import type {
   Volunteer, Credential, Document, BackgroundCheck,
   TimeEntry, LessonCompletion, Location,
-  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload,
+  OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload, Category,
 } from '@/types/database'
 import type { VolunteerDetail, OnboardingStageWithProgress } from './page'
 import PipelinePhaseBar from './PipelinePhaseBar'
@@ -44,8 +45,8 @@ const BG_RESULT_COLORS: Record<string, { bg: string; text: string }> = {
   pending:   { bg: '#eff6ff', text: '#1d4ed8' },
 }
 
-const TABS = ['Info', 'Onboarding', 'Credentials', 'Hours', 'Documents', 'Background Check', 'Flags', 'Notes'] as const
-type Tab = typeof TABS[number]
+const TAB_KEYS = ['Info', 'Onboarding', 'Credentials', 'Hours', 'Documents', 'Background Check', 'Flags', 'Notes'] as const
+type Tab = typeof TAB_KEYS[number]
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,8 @@ export default function VolunteerTabs({
   orgTags,
   orgFlags,
   orgLocations,
+  categories,
+  jotformApiKey,
 }: {
   volunteer: VolunteerDetail
   credentials: Credential[]
@@ -81,8 +84,22 @@ export default function VolunteerTabs({
   orgTags: OrgTag[]
   orgFlags: OrgFlag[]
   orgLocations?: Pick<Location, 'id' | 'name'>[]
+  categories?: Category[]
+  jotformApiKey?: string | null
 }) {
+  const t = useAdminT()
   const [activeTab, setActiveTab] = useState<Tab>('Info')
+
+  const TAB_LABELS: Record<Tab, string> = {
+    'Info': t('tab_info'),
+    'Onboarding': t('tab_onboarding'),
+    'Credentials': t('tab_credentials'),
+    'Hours': t('tab_hours'),
+    'Documents': t('tab_documents'),
+    'Background Check': t('tab_background_check'),
+    'Flags': t('tab_flags'),
+    'Notes': t('tab_notes'),
+  }
 
   // ── Onboarding checklist state (optimistic) ──
   const [checklist, setChecklist] = useState({
@@ -118,7 +135,7 @@ export default function VolunteerTabs({
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid #f0f0f0', padding: '0 8px', overflowX: 'auto' }}>
-        {TABS.map(tab => {
+        {TAB_KEYS.map(tab => {
           const badge = tab === 'Flags' && activeFlags.length > 0 ? activeFlags.length : null
           return (
             <button
@@ -135,7 +152,7 @@ export default function VolunteerTabs({
                 display: 'flex', alignItems: 'center', gap: '6px',
               }}
             >
-              {tab}
+              {TAB_LABELS[tab]}
               {badge !== null && (
                 <span style={{
                   fontSize: '10px', fontWeight: 700, lineHeight: 1,
@@ -155,7 +172,7 @@ export default function VolunteerTabs({
 
         {/* ── Info ── */}
         {activeTab === 'Info' && (
-          <InfoTab volunteer={volunteer} appliedTags={appliedTags} orgTags={orgTags} orgLocations={orgLocations ?? []} />
+          <InfoTab volunteer={volunteer} appliedTags={appliedTags} orgTags={orgTags} orgLocations={orgLocations ?? []} categories={categories ?? []} />
         )}
 
         {/* ── Onboarding ── */}
@@ -221,13 +238,13 @@ export default function VolunteerTabs({
                   {/* Header row */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                     <p style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      Onboarding Checklist
+                      {t('onboarding_checklist')}
                     </p>
                     <span style={{
                       fontSize: '12px', fontWeight: 600,
                       color: allDone ? '#16a34a' : '#6b7280',
                     }}>
-                      {doneCount}/{checklistItems.length} complete
+                      {doneCount}/{checklistItems.length} {t('complete')}
                     </span>
                   </div>
 
@@ -317,7 +334,7 @@ export default function VolunteerTabs({
                               color: isDone ? '#16a34a' : '#9ca3af',
                               flexShrink: 0, marginTop: '2px',
                             }}>
-                              {isDone ? 'Done' : 'Pending'}
+                              {isDone ? t('done_label') : t('pending_label')}
                             </span>
                           )}
                         </div>
@@ -334,7 +351,7 @@ export default function VolunteerTabs({
             {onboardingStages.length > 0 && (
               <div>
                 <p style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '14px' }}>
-                  Workflow Stages
+                  {t('workflow_stages')}
                 </p>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: '12px',
@@ -350,7 +367,7 @@ export default function VolunteerTabs({
                     }} />
                   </div>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' }}>
-                    {completed}/{onboardingStages.length} stages
+                    {completed}/{onboardingStages.length} {t('stages')}
                   </span>
                 </div>
 
@@ -398,7 +415,7 @@ export default function VolunteerTabs({
                             fontSize: '12px', fontWeight: 500, color: '#374151',
                             cursor: 'pointer', flexShrink: 0,
                           }}>
-                            Mark done
+                            {t('mark_done')}
                           </button>
                         )}
                       </div>
@@ -410,7 +427,7 @@ export default function VolunteerTabs({
 
             {onboardingStages.length === 0 && (
               <p style={{ fontSize: '14px', color: '#9ca3af', textAlign: 'center', padding: '16px 0' }}>
-                No onboarding workflow assigned to this volunteer.
+                {t('no_workflow')}
               </p>
             )}
           </div>
@@ -423,7 +440,7 @@ export default function VolunteerTabs({
             {/* Credential metadata cards */}
             {credentials.length === 0 ? (
               <p style={{ fontSize: '14px', color: '#9ca3af', textAlign: 'center', padding: '16px 0' }}>
-                No credentials on file
+                {t('no_credentials')}
               </p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -529,9 +546,9 @@ export default function VolunteerTabs({
           <div>
             <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
               {[
-                { label: 'Total Hours', value: totalHours.toFixed(1) },
-                { label: 'Sessions',   value: timeEntries.length },
-                { label: 'Avg Session', value: timeEntries.length ? `${(totalHours / timeEntries.length * 60).toFixed(0)}m` : '—' },
+                { label: t('total_hours'), value: totalHours.toFixed(1) },
+                { label: t('sessions'),   value: timeEntries.length },
+                { label: t('avg_session'), value: timeEntries.length ? `${(totalHours / timeEntries.length * 60).toFixed(0)}m` : '—' },
               ].map(({ label, value }) => (
                 <div key={label} style={{
                   flex: 1, padding: '14px 16px', background: '#fafafa',
@@ -544,12 +561,12 @@ export default function VolunteerTabs({
             </div>
 
             {timeEntries.length === 0 ? (
-              <p style={{ fontSize: '14px', color: '#9ca3af', textAlign: 'center', padding: '24px 0' }}>No time entries yet</p>
+              <p style={{ fontSize: '14px', color: '#9ca3af', textAlign: 'center', padding: '24px 0' }}>{t('no_time_entries')}</p>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#fafafa' }}>
-                    {['Date', 'Location', 'Clock In', 'Clock Out', 'Duration', 'Method'].map(h => (
+                    {[t('date'), t('location'), t('clock_in_col'), t('clock_out_col'), t('duration'), t('method')].map(h => (
                       <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: '#9ca3af', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>
                     ))}
                   </tr>
@@ -591,6 +608,7 @@ export default function VolunteerTabs({
             volunteerId={volunteer.id}
             uploads={uploads.filter(u => u.category !== 'credential')}
             signedDocuments={documents}
+            jotformApiKey={jotformApiKey}
           />
         )}
 
@@ -600,23 +618,23 @@ export default function VolunteerTabs({
             {!backgroundCheck ? (
               <div style={{ padding: '32px 0', textAlign: 'center' }}>
                 <ShieldCheck style={{ width: '32px', height: '32px', color: '#d1d5db', margin: '0 auto 8px' }} />
-                <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '16px' }}>No background check initiated</p>
+                <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '16px' }}>{t('no_bg_check')}</p>
                 <button style={{
                   padding: '8px 16px', borderRadius: '8px',
                   background: '#1B2A4A', color: 'white',
                   border: 'none', cursor: 'pointer',
                   fontSize: '13px', fontWeight: 600,
                 }}>
-                  Initiate Background Check
+                  {t('initiate_bg_check')}
                 </button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {[
-                  { label: 'Provider',  value: backgroundCheck.provider },
-                  { label: 'Status',    value: backgroundCheck.status },
-                  { label: 'Initiated', value: new Date(backgroundCheck.initiated_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) },
-                  { label: 'Completed', value: backgroundCheck.completed_at ? new Date(backgroundCheck.completed_at).toLocaleDateString() : '—' },
+                  { label: t('provider'),    value: backgroundCheck.provider },
+                  { label: t('bg_status'),   value: backgroundCheck.status },
+                  { label: t('initiated'),   value: new Date(backgroundCheck.initiated_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) },
+                  { label: t('bg_completed'), value: backgroundCheck.completed_at ? new Date(backgroundCheck.completed_at).toLocaleDateString() : '—' },
                 ].map(({ label, value }) => (
                   <div key={label} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -633,7 +651,7 @@ export default function VolunteerTabs({
                     borderColor: BG_RESULT_COLORS[backgroundCheck.result]?.bg ?? '#f3f4f6',
                     background: BG_RESULT_COLORS[backgroundCheck.result]?.bg ?? '#fafafa',
                   }}>
-                    <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Result</p>
+                    <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('bg_result')}</p>
                     <p style={{ fontSize: '18px', fontWeight: 700, color: BG_RESULT_COLORS[backgroundCheck.result]?.text ?? '#111827', textTransform: 'capitalize' }}>
                       {backgroundCheck.result}
                     </p>

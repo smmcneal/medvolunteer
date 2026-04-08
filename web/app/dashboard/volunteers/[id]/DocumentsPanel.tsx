@@ -1,13 +1,15 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { Upload, FileText, FileImage, File, Trash2, ExternalLink, X } from 'lucide-react'
+import { Upload, FileText, FileImage, File, Trash2, ExternalLink, Send, X } from 'lucide-react'
 import type { Document, VolunteerUpload } from '@/types/database'
 import {
   uploadVolunteerDocument,
   deleteVolunteerUpload,
   getUploadSignedUrl,
+  sendJotformRequest,
 } from './actions'
+import { useAdminT } from '@/lib/admin-lang'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -59,11 +61,14 @@ export default function DocumentsPanel({
   volunteerId,
   uploads: initialUploads,
   signedDocuments,
+  jotformApiKey,
 }: {
   volunteerId: string
   uploads: VolunteerUpload[]
   signedDocuments: Document[]
+  jotformApiKey?: string | null
 }) {
+  const t = useAdminT()
   const [uploads, setUploads]         = useState<VolunteerUpload[]>(initialUploads)
   const [dragging, setDragging]       = useState(false)
   const [uploading, setUploading]     = useState(false)
@@ -72,6 +77,25 @@ export default function DocumentsPanel({
   const [deletingId, setDeletingId]   = useState<string | null>(null)
   const fileInputRef                  = useRef<HTMLInputElement>(null)
   const [, startTransition]           = useTransition()
+
+  // Jotform state
+  const [jotformId, setJotformId]         = useState('')
+  const [jotformError, setJotformError]   = useState<string | null>(null)
+  const [jotformOk, setJotformOk]         = useState(false)
+  const [jotformPending, startJotform]    = useTransition()
+
+  function handleSendJotform(e: React.FormEvent) {
+    e.preventDefault()
+    setJotformError(null)
+    setJotformOk(false)
+    startJotform(async () => {
+      const result = await sendJotformRequest(volunteerId, jotformId)
+      if (result.error) { setJotformError(result.error); return }
+      setJotformId('')
+      setJotformOk(true)
+      setTimeout(() => setJotformOk(false), 3000)
+    })
+  }
 
   // ── Upload handler ─────────────────────────────────────────────────────────
 
@@ -139,6 +163,46 @@ export default function DocumentsPanel({
         </div>
       )}
 
+      {/* ── Jotform ── */}
+      {jotformApiKey && (
+        <div style={{
+          padding: '14px 16px', borderRadius: '10px',
+          border: '1px solid #f3f4f6', background: 'white',
+        }}>
+          <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '10px' }}>{t('send_via_jotform')}</p>
+          <form onSubmit={handleSendJotform} style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 180px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px' }}>{t('form_id')}</label>
+              <input
+                required
+                value={jotformId}
+                onChange={e => setJotformId(e.target.value)}
+                placeholder="e.g. 123456789"
+                style={{
+                  width: '100%', padding: '6px 10px', fontSize: '13px',
+                  border: '1px solid #e5e7eb', borderRadius: '7px',
+                  fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const,
+                }}
+              />
+            </div>
+            <button type="submit" disabled={jotformPending}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                padding: '7px 13px', borderRadius: '7px', fontSize: '12px', fontWeight: 600,
+                border: 'none', background: '#0f172a', color: 'white',
+                cursor: jotformPending ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit', opacity: jotformPending ? 0.7 : 1, flexShrink: 0,
+              }}
+            >
+              <Send style={{ width: '12px', height: '12px' }} />
+              {jotformPending ? t('sending') : t('send_form')}
+            </button>
+            {jotformOk && <span style={{ fontSize: '12px', color: '#15803d', alignSelf: 'center' }}>{t('form_sent')}</span>}
+            {jotformError && <p style={{ fontSize: '12px', color: '#dc2626', margin: 0, width: '100%' }}>{jotformError}</p>}
+          </form>
+        </div>
+      )}
+
       {/* ── Drop zone ── */}
       <div
         onDragOver={e => { e.preventDefault(); setDragging(true) }}
@@ -178,10 +242,10 @@ export default function DocumentsPanel({
         ) : (
           <>
             <p style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>
-              Drop files here, or <span style={{ color: '#14b8a6' }}>browse</span>
+              {t('drop_files_here')} <span style={{ color: '#14b8a6' }}>{t('browse')}</span>
             </p>
             <p style={{ fontSize: '12px', color: '#9ca3af' }}>
-              PDF, Word, Excel, PNG, JPG — up to 50 MB each
+              {t('drop_files_sub')}
             </p>
           </>
         )}
@@ -191,7 +255,7 @@ export default function DocumentsPanel({
       {uploads.length > 0 && (
         <div>
           <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
-            Uploaded Files ({uploads.length})
+            {t('uploaded_files')} ({uploads.length})
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {uploads.map(u => (
@@ -264,7 +328,7 @@ export default function DocumentsPanel({
       {signedDocuments.length > 0 && (
         <div>
           <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
-            Signed Documents ({signedDocuments.length})
+            {t('signed_documents')} ({signedDocuments.length})
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {signedDocuments.map(d => (
@@ -318,7 +382,7 @@ export default function DocumentsPanel({
       {/* Empty state */}
       {uploads.length === 0 && signedDocuments.length === 0 && (
         <p style={{ fontSize: '14px', color: '#9ca3af', textAlign: 'center', padding: '8px 0' }}>
-          No documents on file — upload one above
+          {t('no_documents')}
         </p>
       )}
 

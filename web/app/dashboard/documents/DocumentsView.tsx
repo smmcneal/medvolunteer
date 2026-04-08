@@ -7,6 +7,7 @@ import {
   toggleDocumentVisibility,
 } from './actions'
 import type { OrgDocument } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ function DocRow({
   showPresetBadge?: boolean
   showAdminBadge?:  boolean
 }) {
+  const t = useAdminT()
   const color    = fileColor(doc.mime_type)
   const isHidden = onToggleVisibility && !doc.volunteer_visible
 
@@ -103,13 +105,13 @@ function DocRow({
               background: '#f3f4f6', color: '#6b7280',
               textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0,
             }}>
-              Hidden
+              {t('hidden')}
             </span>
           )}
         </div>
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '2px 0 0' }}>
           {showPresetBadge
-            ? 'Standard form · Always visible to volunteers'
+            ? t('standard_form')
             : `${formatBytes(doc.size_bytes)}${doc.size_bytes > 0 ? ' · ' : ''}${new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
           }
         </p>
@@ -121,7 +123,7 @@ function DocRow({
           fontSize: '11px', fontWeight: 600, padding: '3px 8px', borderRadius: '6px',
           background: '#eff6ff', color: '#1d4ed8', flexShrink: 0,
         }}>
-          Preset
+          {t('preset')}
         </span>
       )}
 
@@ -132,7 +134,7 @@ function DocRow({
           background: 'rgba(245,158,11,0.1)', color: '#92400e', flexShrink: 0,
           display: 'flex', alignItems: 'center', gap: '4px',
         }}>
-          <LockIcon /> Internal
+          <LockIcon /> {t('internal')}
         </span>
       )}
 
@@ -154,7 +156,7 @@ function DocRow({
           }}
         >
           {doc.volunteer_visible ? <EyeIcon /> : <EyeOffIcon />}
-          {doc.volunteer_visible ? 'Visible' : 'Hidden'}
+          {doc.volunteer_visible ? t('visible') : t('hidden')}
         </button>
       )}
 
@@ -197,6 +199,7 @@ interface Props {
 }
 
 export default function DocumentsView({ initialDocs }: Props) {
+  const t = useAdminT()
   const [docs, setDocs]                     = useState<OrgDocument[]>(initialDocs)
   const [uploading, setUploading]           = useState(false)
   const [uploadProgress, setUploadProgress] = useState<string | null>(null)
@@ -315,8 +318,8 @@ export default function DocumentsView({ initialDocs }: Props) {
       {/* ── 1. Standard Forms & Disclosures ── */}
       <section style={{ marginBottom: '36px' }}>
         <SectionHeader
-          title="Standard Forms & Disclosures"
-          description="These documents are automatically available to all volunteers in their portal."
+          title={t('preset_docs')}
+          description={t('standard_form')}
         />
         <div style={{ background: 'var(--surface-card)', borderRadius: '12px', border: '1px solid var(--surface-border)', overflow: 'hidden' }}>
           {presetDocs.map((doc, i) => (
@@ -330,10 +333,10 @@ export default function DocumentsView({ initialDocs }: Props) {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
           <div>
             <h2 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
-              Volunteer Repository
+              {t('volunteer_repo')}
             </h2>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Uploaded documents for volunteers. Toggle visibility to show or hide each one in their portal.
+              {t('visible')} / {t('hidden')}
             </p>
           </div>
           <input ref={fileInputRef} type="file" accept={ACCEPT} multiple style={{ display: 'none' }}
@@ -343,7 +346,7 @@ export default function DocumentsView({ initialDocs }: Props) {
 
         <div style={{ background: 'var(--surface-card)', borderRadius: '12px', border: '1px solid var(--surface-border)', overflow: 'hidden' }}>
           {volunteerDocs.length === 0 ? (
-            <EmptyState label="No volunteer documents yet" hint="Upload PDFs, Word docs, spreadsheets, or images" />
+            <EmptyState label={t('no_documents_found')} hint={t('drop_files_sub')} />
           ) : (
             volunteerDocs.map((doc, i) => (
               <DocRow
@@ -379,7 +382,7 @@ export default function DocumentsView({ initialDocs }: Props) {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '4px' }}>
               <h2 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
-                Internal Repository
+                {t('internal_docs')}
               </h2>
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: '4px',
@@ -387,11 +390,11 @@ export default function DocumentsView({ initialDocs }: Props) {
                 background: 'rgba(245,158,11,0.1)', color: '#92400e',
                 textTransform: 'uppercase', letterSpacing: '0.05em',
               }}>
-                <LockIcon /> Admin Only
+                <LockIcon /> {t('internal')}
               </span>
             </div>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-              Documents for internal use only — never shown to volunteers.
+              {t('internal_docs')}
             </p>
           </div>
           <input ref={adminFileInputRef} type="file" accept={ACCEPT} multiple style={{ display: 'none' }}
@@ -415,7 +418,7 @@ export default function DocumentsView({ initialDocs }: Props) {
             These documents are not accessible to volunteers
           </div>
           {internalDocs.length === 0 ? (
-            <EmptyState label="No internal documents yet" hint="Contracts, compliance records, staff-only policies" icon="🔒" />
+            <EmptyState label={t('no_documents_found')} hint={t('internal_docs')} icon="🔒" />
           ) : (
             internalDocs.map((doc, i) => (
               <DocRow key={doc.id} doc={doc} index={i} {...sharedRowProps} onDelete={handleDelete} showAdminBadge />
@@ -456,6 +459,7 @@ function EmptyState({ label, hint, icon = '📄' }: { label: string; hint: strin
 function UploadButton({ uploading, progress, onClick, variant = 'navy' }: {
   uploading: boolean; progress: string | null; onClick: () => void; variant?: 'navy' | 'amber'
 }) {
+  const t = useAdminT()
   const bg = uploading ? '#9ca3af' : variant === 'amber' ? '#92400e' : 'var(--navy)'
   return (
     <button onClick={onClick} disabled={uploading} style={{
@@ -464,7 +468,7 @@ function UploadButton({ uploading, progress, onClick, variant = 'navy' }: {
       border: 'none', color: 'white', fontSize: '13px', fontWeight: 600,
       cursor: uploading ? 'wait' : 'pointer', fontFamily: 'inherit', flexShrink: 0,
     }}>
-      {uploading ? <><SpinnerIcon /> {progress ?? 'Uploading…'}</> : <><UploadIcon /> Upload</>}
+      {uploading ? <><SpinnerIcon /> {progress ?? t('sending')}</> : <><UploadIcon /> {t('upload_file')}</>}
     </button>
   )
 }

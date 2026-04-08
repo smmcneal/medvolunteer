@@ -1,8 +1,8 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'crypto'
 
 // ─── Shifts ───────────────────────────────────────────────────────────────────
 
@@ -62,6 +62,110 @@ export async function createShift(data: {
   return { shiftId: shift.id }
 }
 
+// ─── Recurring Shifts ─────────────────────────────────────────────────────────
+
+export async function createRecurringShifts(data: {
+  name: string
+  location_id: string | null
+  start_time: string
+  end_time: string
+  required_count: number
+  notes: string
+}, frequency: 'weekly' | 'biweekly' | 'monthly', endDate: string | null) {
+  const admin = createAdminClient()
+
+  const { data: org } = await admin
+    .from('organizations')
+    .select('id')
+    .limit(1)
+    .single()
+  if (!org) throw new Error('No organization found')
+
+  const recurrence_group_id = randomUUID()
+  const intervalDays = frequency === 'monthly' ? null : frequency === 'biweekly' ? 14 : 7
+  const MAX_OCCURRENCES = 52
+
+  const rows: object[] = []
+  let start = new Date(data.start_time)
+  const durationMs = new Date(data.end_time).getTime() - start.getTime()
+  const cutoff = endDate ? new Date(endDate + 'T23:59:59Z') : null
+
+  for (let i = 0; i < MAX_OCCURRENCES; i++) {
+    if (cutoff && start > cutoff) break
+    rows.push({
+      org_id: org.id,
+      name: data.name,
+      location_id: data.location_id,
+      start_time: start.toISOString(),
+      end_time: new Date(start.getTime() + durationMs).toISOString(),
+      required_count: data.required_count,
+      notes: data.notes || null,
+      recurrence_rule: frequency,
+      recurrence_group_id,
+      recurrence_end_date: endDate ?? null,
+    })
+
+    if (frequency === 'monthly') {
+      const next = new Date(start)
+      next.setMonth(next.getMonth() + 1)
+      start = next
+    } else {
+      start = new Date(start.getTime() + intervalDays! * 86400000)
+    }
+  }
+
+  if (rows.length === 0) throw new Error('No occurrences generated for the given range')
+
+  const { error } = await admin.from('shifts').insert(rows)
+  if (error) throw new Error(error.message)
+  revalidatePath('/dashboard/shifts')
+  revalidatePath('/volunteer/shifts')
+}
+
+export async function bulkUpdateRecurringShifts(
+  groupId: string,
+  fromShiftId: string,
+  data: { name?: string; location_id?: string | null; required_count?: number; notes?: string },
+) {
+  const admin = createAdminClient()
+
+  const { data: refShift } = await admin
+    .from('shifts')
+    .select('start_time')
+    .eq('id', fromShiftId)
+    .single()
+  if (!refShift) throw new Error('Reference shift not found')
+
+  const { error } = await admin
+    .from('shifts')
+    .update(data)
+    .eq('recurrence_group_id', groupId)
+    .gte('start_time', refShift.start_time)
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/dashboard/shifts')
+}
+
+export async function bulkDeleteRecurringShifts(groupId: string, fromShiftId: string) {
+  const admin = createAdminClient()
+
+  const { data: refShift } = await admin
+    .from('shifts')
+    .select('start_time')
+    .eq('id', fromShiftId)
+    .single()
+  if (!refShift) throw new Error('Reference shift not found')
+
+  const { error } = await admin
+    .from('shifts')
+    .delete()
+    .eq('recurrence_group_id', groupId)
+    .gte('start_time', refShift.start_time)
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/dashboard/shifts')
+}
+
 export async function updateShift(id: string, data: {
   name?: string
   location_id?: string | null
@@ -70,15 +174,15 @@ export async function updateShift(id: string, data: {
   required_count?: number
   notes?: string
 }) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('shifts').update(data).eq('id', id)
+  const admin = createAdminClient()
+  const { error } = await admin.from('shifts').update(data).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/shifts')
 }
 
 export async function deleteShift(id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('shifts').delete().eq('id', id)
+  const admin = createAdminClient()
+  const { error } = await admin.from('shifts').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/shifts')
 }
@@ -91,7 +195,6 @@ export async function assignVolunteer(
   role = '',
   mentor_id?: string,
 ) {
-  const supabase = await createClient()
   const admin = createAdminClient()
 
   // Enforce mentor requirement for training-phase volunteers
@@ -105,14 +208,31 @@ export async function assignVolunteer(
     throw new Error('Mentor required for training-phase volunteers')
   }
 
-  const { error } = await supabase.from('shift_assignments').insert({
-    shift_id,
-    volunteer_id,
-    role: role || null,
-    status: 'assigned',
-    mentor_id: mentor_id ?? null,
-  })
-  if (error) throw new Error(error.message)
+  // Upsert: unique(shift_id, volunteer_id) means a cancelled row blocks re-insert
+  const { data: existing } = await admin
+    .from('shift_assignments')
+    .select('id')
+    .eq('shift_id', shift_id)
+    .eq('volunteer_id', volunteer_id)
+    .maybeSingle()
+
+  if (existing) {
+    const { error } = await admin
+      .from('shift_assignments')
+      .update({ status: 'assigned', role: role || null, mentor_id: mentor_id ?? null })
+      .eq('id', existing.id)
+    if (error) throw new Error(error.message)
+  } else {
+    const { error } = await admin.from('shift_assignments').insert({
+      shift_id,
+      volunteer_id,
+      role: role || null,
+      status: 'assigned',
+      mentor_id: mentor_id ?? null,
+    })
+    if (error) throw new Error(error.message)
+  }
+
   revalidatePath('/dashboard/shifts')
   revalidatePath('/volunteer/shifts')
 }
@@ -123,43 +243,64 @@ export async function assignTraineeWithMentor(
   mentor_id: string,
   role = '',
 ) {
-  const supabase = await createClient()
+  const admin = createAdminClient()
 
-  // Ensure mentor is already on the shift; add them if not
-  const { data: existing } = await supabase
+  // Ensure mentor is on the shift — upsert to handle the unique(shift_id, volunteer_id) constraint
+  const { data: existingMentor } = await admin
     .from('shift_assignments')
-    .select('id')
+    .select('id, status')
     .eq('shift_id', shift_id)
     .eq('volunteer_id', mentor_id)
     .maybeSingle()
 
-  if (!existing) {
-    const { error: mentorError } = await supabase.from('shift_assignments').insert({
+  if (!existingMentor) {
+    const { error: mentorError } = await admin.from('shift_assignments').insert({
       shift_id,
       volunteer_id: mentor_id,
       role: null,
       status: 'assigned',
     })
     if (mentorError) throw new Error(mentorError.message)
+  } else if (existingMentor.status === 'cancelled') {
+    const { error: mentorError } = await admin
+      .from('shift_assignments')
+      .update({ status: 'assigned', role: null })
+      .eq('id', existingMentor.id)
+    if (mentorError) throw new Error(mentorError.message)
   }
 
-  // Assign trainee linked to mentor
-  const { error } = await supabase.from('shift_assignments').insert({
-    shift_id,
-    volunteer_id: trainee_id,
-    role: role || null,
-    status: 'assigned',
-    mentor_id,
-  })
-  if (error) throw new Error(error.message)
+  // Assign trainee linked to mentor — upsert for same reason
+  const { data: existingTrainee } = await admin
+    .from('shift_assignments')
+    .select('id')
+    .eq('shift_id', shift_id)
+    .eq('volunteer_id', trainee_id)
+    .maybeSingle()
+
+  if (existingTrainee) {
+    const { error } = await admin
+      .from('shift_assignments')
+      .update({ status: 'assigned', role: role || null, mentor_id })
+      .eq('id', existingTrainee.id)
+    if (error) throw new Error(error.message)
+  } else {
+    const { error } = await admin.from('shift_assignments').insert({
+      shift_id,
+      volunteer_id: trainee_id,
+      role: role || null,
+      status: 'assigned',
+      mentor_id,
+    })
+    if (error) throw new Error(error.message)
+  }
 
   revalidatePath('/dashboard/shifts')
   revalidatePath('/volunteer/shifts')
 }
 
 export async function removeAssignment(id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('shift_assignments').delete().eq('id', id)
+  const admin = createAdminClient()
+  const { error } = await admin.from('shift_assignments').update({ status: 'cancelled' }).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/shifts')
   revalidatePath('/volunteer/shifts')
@@ -168,10 +309,10 @@ export async function removeAssignment(id: string) {
 // ─── Clock in / out ───────────────────────────────────────────────────────────
 
 export async function manualClockIn(volunteer_id: string, shift_id: string, location_id: string | null) {
-  const supabase = await createClient()
+  const admin = createAdminClient()
 
   // Check if already clocked in
-  const { data: existing } = await supabase
+  const { data: existing } = await admin
     .from('time_entries')
     .select('id')
     .eq('volunteer_id', volunteer_id)
@@ -181,7 +322,7 @@ export async function manualClockIn(volunteer_id: string, shift_id: string, loca
 
   if (existing) throw new Error('Volunteer is already clocked in for this shift')
 
-  const { error } = await supabase.from('time_entries').insert({
+  const { error } = await admin.from('time_entries').insert({
     volunteer_id,
     shift_id,
     location_id,
@@ -193,8 +334,8 @@ export async function manualClockIn(volunteer_id: string, shift_id: string, loca
 }
 
 export async function manualClockOut(time_entry_id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase
+  const admin = createAdminClient()
+  const { error } = await admin
     .from('time_entries')
     .update({ clock_out: new Date().toISOString() })
     .eq('id', time_entry_id)

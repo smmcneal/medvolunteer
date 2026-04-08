@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { updatePipelinePhase } from './actions'
 import type { PipelinePhase } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 const NAVY = '#1B2A4A'
 const TEAL = '#00897B'
@@ -25,6 +26,7 @@ export default function PipelinePhaseBar({
   volunteerId: string
   currentPhase: PipelinePhase
 }) {
+  const t = useAdminT()
   const [phase, setPhase] = useState<PipelinePhase>(currentPhase)
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -116,7 +118,7 @@ export default function PipelinePhaseBar({
               onClick={() => setShowOverride(v => !v)}
               style={{ padding: '6px 10px', borderRadius: 7, border: '1px solid #e5e7eb', background: '#fff', fontSize: 12, color: '#6b7280', cursor: 'pointer' }}
             >
-              Override ▾
+              {t('override')} ▾
             </button>
             {showOverride && (
               <div style={{ position: 'absolute', right: 0, top: '110%', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 50, minWidth: 160 }}>
@@ -144,11 +146,11 @@ export default function PipelinePhaseBar({
                 fontSize: 13, fontWeight: 600, cursor: pending ? 'not-allowed' : 'pointer',
               }}
             >
-              {pending ? 'Saving…' : `Advance to ${PHASES[PHASE_ORDER.indexOf(phase) + 1]?.label} →`}
+              {pending ? t('saving') : `${t('advance_to')} ${PHASES[PHASE_ORDER.indexOf(phase) + 1]?.label} →`}
             </button>
           )}
           {!nextPhase && (
-            <span style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>Final phase</span>
+            <span style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>{t('final_phase')}</span>
           )}
         </div>
       </div>

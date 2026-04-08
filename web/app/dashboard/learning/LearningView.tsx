@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef } from 'react'
 import type { ModuleWithLessons, LessonWithQuiz, QuizQuestionRow } from './page'
+import { useAdminT } from '@/lib/admin-lang'
 import {
   createModule, updateModule, deleteModule,
   createLesson, updateLesson, deleteLesson, reorderLessons,
@@ -38,6 +39,7 @@ interface Props {
 }
 
 export default function LearningView({ initialModules, totalVolunteers }: Props) {
+  const t = useAdminT()
   const [modules, setModules] = useState(initialModules)
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(
     initialModules[0]?.id ?? null
@@ -83,7 +85,7 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
         margin: '12px 16px',
       }}>
         <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          New Module
+          {t('new_module')}
         </p>
         <input
           autoFocus
@@ -134,8 +136,8 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
             }}
             disabled={!title.trim() || isPending}
             style={primaryBtnSmall}
-          >Create</button>
-          <button onClick={() => setShowNewModule(false)} style={ghostBtnSmall}>Cancel</button>
+          >{t('save_module')}</button>
+          <button onClick={() => setShowNewModule(false)} style={ghostBtnSmall}>{t('cancel')}</button>
         </div>
       </div>
     )
@@ -164,7 +166,7 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
         marginTop: '8px',
       }}>
         <p style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
-          {isEdit ? 'Edit Lesson' : 'Add Lesson'}
+          {isEdit ? t('edit') : t('add_lesson')}
         </p>
         <input
           autoFocus
@@ -174,10 +176,10 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
           style={fieldStyle}
         />
         <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
-          {(['video', 'text', 'quiz'] as const).map(t => (
+          {(['video', 'text', 'quiz'] as const).map(lt => (
             <button
-              key={t}
-              onClick={() => setType(t)}
+              key={lt}
+              onClick={() => setType(lt)}
               style={{
                 flex: 1,
                 padding: '5px',
@@ -186,13 +188,13 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                 fontWeight: 600,
                 border: '1px solid',
                 cursor: 'pointer',
-                background: type === t ? LESSON_TYPE_COLORS[t] : 'white',
-                borderColor: type === t ? LESSON_TYPE_COLORS[t] : '#d1d5db',
-                color: type === t ? 'white' : '#6b7280',
+                background: type === lt ? LESSON_TYPE_COLORS[lt] : 'white',
+                borderColor: type === lt ? LESSON_TYPE_COLORS[lt] : '#d1d5db',
+                color: type === lt ? 'white' : '#6b7280',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
               }}
-            >{LESSON_TYPE_ICONS[t]} {t}</button>
+            >{LESSON_TYPE_ICONS[lt]} {lt}</button>
           ))}
         </div>
         {type !== 'quiz' && (
@@ -228,8 +230,8 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
             }}
             disabled={!title.trim() || isPending}
             style={primaryBtnSmall}
-          >{isEdit ? 'Save' : 'Add Lesson'}</button>
-          <button onClick={onClose} style={ghostBtnSmall}>Cancel</button>
+          >{isEdit ? t('save') : t('add_lesson')}</button>
+          <button onClick={onClose} style={ghostBtnSmall}>{t('cancel')}</button>
         </div>
       </div>
     )
@@ -301,8 +303,8 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
             }}
             disabled={!question.trim() || isPending}
             style={{ ...primaryBtnSmall, background: '#f59e0b', borderColor: '#f59e0b' }}
-          >{isEdit ? 'Save' : 'Add Question'}</button>
-          <button onClick={onClose} style={ghostBtnSmall}>Cancel</button>
+          >{isEdit ? t('save') : t('add_lesson')}</button>
+          <button onClick={onClose} style={ghostBtnSmall}>{t('cancel')}</button>
         </div>
       </div>
     )
@@ -408,7 +410,7 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                 color: activeTab === tab ? '#1B2A4A' : '#9ca3af',
                 textTransform: 'capitalize',
               }}
-            >{tab}</button>
+            >{tab === 'lessons' ? t('lessons') : t('completions')}</button>
           ))}
         </div>
 
@@ -422,7 +424,7 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                   color: '#9ca3af', fontSize: '13px',
                   border: '2px dashed #e5e7eb', borderRadius: '8px',
                 }}>
-                  No lessons yet. Add your first lesson below.
+                  {t('no_modules')}
                 </div>
               )}
               {mod.lessons.map((lesson, idx) => (
@@ -526,7 +528,7 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                         <button
                           onClick={() => setShowAddQuestion(true)}
                           style={{ ...primaryBtnSmall, background: '#f59e0b', borderColor: '#f59e0b', fontSize: '11px', padding: '4px 10px' }}
-                        >+ Add Question</button>
+                        >+ {t('add_lesson')}</button>
                       </div>
                       {lesson.quiz_questions.map((q, qi) => (
                         <div key={q.id} style={{
@@ -610,7 +612,7 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                     cursor: 'pointer',
                     marginTop: '4px',
                   }}
-                >+ Add Lesson</button>
+                >+ {t('add_lesson')}</button>
               )}
             </div>
           )}
@@ -749,7 +751,7 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
         <div style={{ overflow: 'auto', flex: 1 }}>
           {modules.length === 0 && !showNewModule && (
             <p style={{ padding: '20px 16px', fontSize: '13px', color: '#9ca3af', textAlign: 'center' }}>
-              No modules yet.<br />Click + to create one.
+              {t('no_modules')}
             </p>
           )}
           {modules.map(mod => {

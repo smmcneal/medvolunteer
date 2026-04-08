@@ -4,15 +4,8 @@ import { useState, useTransition, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, UserPlus, Loader2 } from 'lucide-react'
 import { createVolunteer } from './actions'
-import type { VolunteerCategory, VolunteerStatus } from '@/types/database'
-
-const CATEGORIES: { value: VolunteerCategory; label: string }[] = [
-  { value: 'medical_professional', label: 'Medical Professional' },
-  { value: 'support_staff',        label: 'Support Staff' },
-  { value: 'admin',                label: 'Admin' },
-  { value: 'trainee',              label: 'Trainee' },
-  { value: 'other',                label: 'Other' },
-]
+import type { VolunteerCategory, VolunteerStatus, Category } from '@/types/database'
+import { useAdminT } from '@/lib/admin-lang'
 
 const STATUSES: { value: VolunteerStatus; label: string }[] = [
   { value: 'applicant', label: 'Applicant' },
@@ -23,6 +16,7 @@ const STATUSES: { value: VolunteerStatus; label: string }[] = [
 
 interface Props {
   locations: { id: string; name: string }[]
+  categories: Category[]
   onClose: () => void
 }
 
@@ -47,8 +41,9 @@ const labelStyle: React.CSSProperties = {
   marginBottom: '5px',
 }
 
-export default function AddVolunteerModal({ locations, onClose }: Props) {
+export default function AddVolunteerModal({ locations, categories, onClose }: Props) {
   const router = useRouter()
+  const t = useAdminT()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -59,7 +54,7 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
-  const [category, setCategory] = useState<VolunteerCategory>('medical_professional')
+  const [category, setCategory] = useState<VolunteerCategory>(categories[0]?.slug ?? '')
   const [status, setStatus] = useState<VolunteerStatus>('applicant')
   const [locationIds, setLocationIds] = useState<string[]>([])
   const [sendInvite, setSendInvite] = useState(true)
@@ -155,10 +150,10 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
             </div>
             <div>
               <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#111827', margin: 0 }}>
-                Add Volunteer
+                {t('add_volunteer_title')}
               </h2>
               <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>
-                Creates an account and volunteer profile
+                {t('add_volunteer_sub')}
               </p>
             </div>
           </div>
@@ -189,10 +184,10 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
               <span style={{ fontSize: '18px' }}>✓</span>
               <div>
                 <p style={{ fontSize: '13px', fontWeight: 700, color: '#15803d', margin: 0 }}>
-                  Volunteer added!
+                  {t('volunteer_added')}
                 </p>
                 <p style={{ fontSize: '12px', color: '#166534', margin: 0 }}>
-                  {sendInvite ? 'An invite email has been sent.' : 'Account created successfully.'}
+                  {sendInvite ? t('invite_sent') : t('account_created')}
                 </p>
               </div>
             </div>
@@ -215,7 +210,7 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
             {/* Name row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>First name *</label>
+                <label style={labelStyle}>{t('first_name_required')}</label>
                 <input
                   ref={firstFieldRef}
                   type="text"
@@ -227,7 +222,7 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
                 />
               </div>
               <div>
-                <label style={labelStyle}>Last name *</label>
+                <label style={labelStyle}>{t('last_name_required')}</label>
                 <input
                   type="text"
                   value={lastName}
@@ -241,7 +236,7 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
 
             {/* Email */}
             <div>
-              <label style={labelStyle}>Email address *</label>
+              <label style={labelStyle}>{t('email_address_required')}</label>
               <input
                 type="email"
                 value={email}
@@ -254,7 +249,7 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
 
             {/* Phone */}
             <div>
-              <label style={labelStyle}>Phone <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span></label>
+              <label style={labelStyle}>{t('phone_optional')} <span style={{ fontWeight: 400, color: '#9ca3af' }}>({t('optional')})</span></label>
               <input
                 type="tel"
                 value={phone}
@@ -267,19 +262,19 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
             {/* Category + Status row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={labelStyle}>Category *</label>
+                <label style={labelStyle}>{t('category_required')}</label>
                 <select
                   value={category}
                   onChange={e => setCategory(e.target.value as VolunteerCategory)}
                   style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
                 >
-                  {CATEGORIES.map(c => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
+                  {categories.map(c => (
+                    <option key={c.slug} value={c.slug}>{c.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label style={labelStyle}>Status *</label>
+                <label style={labelStyle}>{t('status_required')}</label>
                 <select
                   value={status}
                   onChange={e => setStatus(e.target.value as VolunteerStatus)}
@@ -296,7 +291,7 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
             {locations.length > 0 && (
               <div>
                 <label style={labelStyle}>
-                  Assign to location(s) <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span>
+                  {t('assign_locations')} <span style={{ fontWeight: 400, color: '#9ca3af' }}>({t('optional')})</span>
                 </label>
                 <div style={{
                   border: '1px solid #e5e7eb', borderRadius: '8px',
@@ -343,10 +338,10 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
               />
               <div>
                 <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827', margin: '0 0 2px' }}>
-                  Send invite email
+                  {t('send_invite_email')}
                 </p>
                 <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>
-                  Volunteer receives a link to set their own password. Uncheck to create the account silently (you'll need to share credentials manually).
+                  {t('send_invite_desc')}
                 </p>
               </div>
             </label>
@@ -374,7 +369,7 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
               cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             type="submit"
@@ -395,7 +390,7 @@ export default function AddVolunteerModal({ locations, onClose }: Props) {
           >
             {isPending && <Loader2 style={{ width: '13px', height: '13px', animation: 'spin 1s linear infinite' }} />}
             <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-            {isPending ? 'Creating…' : success ? '✓ Done' : 'Add Volunteer'}
+            {isPending ? t('creating') : success ? t('done') : t('add_volunteer')}
           </button>
         </div>
       </div>

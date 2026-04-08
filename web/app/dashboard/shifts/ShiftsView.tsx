@@ -7,8 +7,12 @@ import {
   MapPin, Clock, Users, Trash2, UserPlus, X,
   LogIn, LogOut, AlertCircle, Search, ArrowLeft, GraduationCap,
 } from 'lucide-react'
+import CalendarWeekView from './CalendarWeekView'
+import CalendarDayView from './CalendarDayView'
+import { useAdminT } from '@/lib/admin-lang'
 import {
   createShift, deleteShift,
+  createRecurringShifts, bulkUpdateRecurringShifts, bulkDeleteRecurringShifts,
   assignVolunteer, assignTraineeWithMentor, removeAssignment,
   manualClockIn, manualClockOut,
 } from './actions'
@@ -95,18 +99,29 @@ export default function ShiftsView({
   shifts,
   locations,
   volunteers,
+  holidays = [],
 }: {
   shifts: ShiftWithRoster[]
   locations: Pick<Location, 'id' | 'name'>[]
   volunteers: VolunteerLike[]
+  holidays?: { id: string; name: string; date: string; is_recurring: boolean }[]
 }) {
   const router = useRouter()
+  const t = useAdminT()
   const [isPending, startTransition] = useTransition()
 
   const today = new Date()
-  const [view, setView]         = useState<'calendar' | 'list'>('calendar')
+  const [view, setView]         = useState<'calendar' | 'list' | 'week' | 'day'>('calendar')
   const [calYear, setCalYear]   = useState(today.getFullYear())
   const [calMonth, setCalMonth] = useState(today.getMonth())
+  const [weekStart, setWeekStart] = useState<Date>(() => {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    d.setDate(d.getDate() - d.getDay())
+    return d
+  })
+  const [selectedDayView, setSelectedDayView] = useState<Date>(() =>
+    new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  )
   const [selectedId, setSelectedId]     = useState<string | null>(null)
   const [showCreate, setShowCreate]     = useState(false)
   const [createForm, setCreateForm]     = useState<CreateForm>(EMPTY_CREATE)
@@ -122,6 +137,13 @@ export default function ShiftsView({
   // Mentor-pairing state: when a trainee is selected, wait for mentor pick
   const [pendingTrainee, setPendingTrainee] = useState<VolunteerLike | null>(null)
   const [mentorSearch, setMentorSearch]     = useState('')
+
+  // Recurring shift creation state
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null)
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [recurFrequency, setRecurFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly')
+  const [recurEndDate, setRecurEndDate] = useState('')
+
 
   const selected = shifts.find(s => s.id === selectedId) ?? null
 
@@ -158,6 +180,21 @@ export default function ShiftsView({
     }
     return map
   }, [shifts])
+
+  const holidayByDay = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const h of holidays) {
+      if (h.is_recurring) {
+        const [, mm, dd] = h.date.split('-')
+        for (let y = calYear - 1; y <= calYear + 1; y++) {
+          map.set(`${y}-${mm}-${dd}`, h.name)
+        }
+      } else {
+        map.set(h.date, h.name)
+      }
+    }
+    return map
+  }, [holidays, calYear])
 
   function prevMonth() {
     if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11) }
@@ -210,15 +247,31 @@ export default function ShiftsView({
     if (!createForm.name || !createForm.start_date || !createForm.start_time || !createForm.end_date || !createForm.end_time) return
     run(async () => {
       const shiftDate = new Date(buildISO(createForm.start_date, createForm.start_time))
-      const { shiftId } = await createShift({
+      const shiftData = {
         name: createForm.name,
         location_id: createForm.location_id || null,
         start_time: buildISO(createForm.start_date, createForm.start_time),
         end_time: buildISO(createForm.end_date, createForm.end_time),
         required_count: parseInt(createForm.required_count) || 1,
         notes: createForm.notes,
-        volunteer_ids: [...createVolunteerIds],
-      })
+      }
+
+      if (isRecurring) {
+        await createRecurringShifts(shiftData, recurFrequency, recurEndDate || null)
+        setCreateForm(EMPTY_CREATE)
+        setIsRecurring(false)
+        setRecurFrequency('weekly')
+        setRecurEndDate('')
+        setCreateVolunteerIds(new Set())
+        setCreateVolSearch('')
+        setShowCreate(false)
+        setCalYear(shiftDate.getFullYear())
+        setCalMonth(shiftDate.getMonth())
+        setView('calendar')
+        return
+      }
+
+      const { shiftId } = await createShift({ ...shiftData, volunteer_ids: [...createVolunteerIds] })
       setCreateForm(EMPTY_CREATE)
       setCreateVolunteerIds(new Set())
       setCreateVolSearch('')
@@ -232,8 +285,19 @@ export default function ShiftsView({
   }
 
   function handleDelete(id: string) {
-    if (!confirm('Delete this shift?')) return
-    run(async () => { await deleteShift(id); setSelectedId(null) })
+    const s = shifts.find(x => x.id === id)
+    if (s?.recurrence_group_id) {
+      // For recurring shifts, show a two-option confirm
+      const choice = window.confirm('Delete all future shifts in this series?\n\nOK = Delete this and all future shifts\nCancel = Delete only this shift')
+      if (choice) {
+        run(async () => { await bulkDeleteRecurringShifts(s.recurrence_group_id!, id); setSelectedId(null) })
+      } else {
+        run(async () => { await deleteShift(id); setSelectedId(null) })
+      }
+    } else {
+      if (!confirm('Delete this shift?')) return
+      run(async () => { await deleteShift(id); setSelectedId(null) })
+    }
   }
 
   function handlePickVolunteer(v: VolunteerLike) {
@@ -268,6 +332,7 @@ export default function ShiftsView({
   }
 
   function handleRemoveAssignment(assignmentId: string) {
+    setRemoveConfirmId(null)
     run(() => removeAssignment(assignmentId))
   }
 
@@ -309,7 +374,7 @@ export default function ShiftsView({
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
           <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.3px' }}>
-            Shifts
+            {t('shifts_title')}
           </h1>
           <span style={{
             fontSize: '12px', fontWeight: 600, color: 'var(--teal)',
@@ -323,16 +388,22 @@ export default function ShiftsView({
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {/* View toggle */}
           <div style={{ display: 'flex', border: '1px solid var(--surface-border)', borderRadius: '8px', overflow: 'hidden', background: 'white' }}>
-            {(['calendar', 'list'] as const).map(v => (
-              <button key={v} onClick={() => setView(v)} className="shift-view-toggle-btn" style={{
-                padding: '7px 14px', border: 'none', cursor: 'pointer',
-                background: view === v ? NAVY : 'transparent',
-                color: view === v ? 'white' : 'var(--text-muted)',
-                fontSize: '13px', fontWeight: 500,
-                display: 'flex', alignItems: 'center', gap: '5px',
+            {([
+              { key: 'calendar', label: t('month_view'), icon: <Calendar style={{ width: '13px', height: '13px' }} /> },
+              { key: 'week',     label: t('week_view'),  icon: null },
+              { key: 'day',      label: t('day_view'),   icon: null },
+              { key: 'list',     label: t('list_view'),  icon: <List style={{ width: '13px', height: '13px' }} /> },
+            ] as const).map(({ key, label, icon }) => (
+              <button key={key} onClick={() => setView(key as any)} className="shift-view-toggle-btn" style={{
+                padding: '7px 12px', border: 'none', cursor: 'pointer',
+                background: view === key ? NAVY : 'transparent',
+                color: view === key ? 'white' : 'var(--text-muted)',
+                fontSize: '12px', fontWeight: 500,
+                display: 'flex', alignItems: 'center', gap: '4px',
+                borderLeft: key !== 'calendar' ? '1px solid var(--surface-border)' : 'none',
               }}>
-                {v === 'calendar' ? <Calendar style={{ width: '13px', height: '13px' }} /> : <List style={{ width: '13px', height: '13px' }} />}
-                {v.charAt(0).toUpperCase() + v.slice(1)}
+                {icon}
+                {label}
               </button>
             ))}
           </div>
@@ -341,7 +412,7 @@ export default function ShiftsView({
             className="shift-new-btn"
             style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            <Plus style={{ width: '14px', height: '14px' }} /> New Shift
+            <Plus style={{ width: '14px', height: '14px' }} /> {t('new_shift')}
           </button>
         </div>
       </div>
@@ -382,7 +453,7 @@ export default function ShiftsView({
                   <button
                     onClick={() => { setCalYear(today.getFullYear()); setCalMonth(today.getMonth()) }}
                     style={{ ...btnSecondary, fontSize: '12px', padding: '6px 10px', fontWeight: 600 }}
-                  >Today</button>
+                  >{t('today')}</button>
                   <button onClick={nextMonth} style={{ ...btnSecondary, padding: '6px 10px' }}>
                     <ChevronRight style={{ width: '14px', height: '14px' }} />
                   </button>
@@ -418,17 +489,18 @@ export default function ShiftsView({
                   const dayShifts = shiftsByDate[key] ?? []
                   const isToday = cell.toDateString() === today.toDateString()
                   const isPast = cell < today && !isToday
+                  const holidayName = holidayByDay.get(key) ?? null
 
                   return (
                     <div key={i} className="shift-cal-cell" style={{
-                      background: isPast ? 'var(--surface-bg)' : 'var(--surface-card)',
+                      background: holidayName ? '#fef9f0' : isPast ? 'var(--surface-bg)' : 'var(--surface-card)',
                       minHeight: '100px', padding: '7px 6px',
                       position: 'relative',
                     }}>
                       <div style={{
                         width: '24px', height: '24px', borderRadius: '50%',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        marginBottom: '5px',
+                        marginBottom: '3px',
                         background: isToday ? TEAL : 'transparent',
                         color: isToday ? 'white' : isPast ? 'var(--text-faint)' : 'var(--text-secondary)',
                         fontSize: '12px', fontWeight: isToday ? 700 : 500,
@@ -436,6 +508,17 @@ export default function ShiftsView({
                       }}>
                         {cell.getDate()}
                       </div>
+
+                      {holidayName && (
+                        <div style={{
+                          fontSize: '9.5px', fontWeight: 600, color: '#92400e',
+                          background: '#fde68a', borderRadius: '3px',
+                          padding: '1px 4px', marginBottom: '3px',
+                          overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                        }} title={holidayName}>
+                          🏖 {holidayName}
+                        </div>
+                      )}
 
                       {dayShifts.slice(0, 2).map(s => {
                         const color = locationColor(s.location_id, locations)
@@ -487,7 +570,7 @@ export default function ShiftsView({
                     fontSize: '13px', fontWeight: 600,
                     boxShadow: listFilter === f ? '0 2px 8px rgba(0,172,193,0.2)' : 'none',
                   }}>
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                    {t(f)}
                   </button>
                 ))}
               </div>
@@ -495,9 +578,9 @@ export default function ShiftsView({
               {listShifts.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '64px 0' }}>
                   <Calendar style={{ width: '32px', height: '32px', color: 'var(--surface-border)', margin: '0 auto 10px' }} />
-                  <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-muted)' }}>No {listFilter} shifts</p>
+                  <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-muted)' }}>{t('no_shifts')} ({t(listFilter)})</p>
                   <p style={{ fontSize: '13px', color: 'var(--text-faint)', marginTop: '4px' }}>
-                    {listFilter === 'upcoming' ? 'Create a shift to get started' : 'Past shifts will appear here'}
+                    {listFilter === 'upcoming' ? t('create_shift') : t('past')}
                   </p>
                 </div>
               ) : (
@@ -505,7 +588,7 @@ export default function ShiftsView({
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: 'var(--surface-bg)' }}>
-                        {['Shift', 'Date', 'Time', 'Location', 'Roster', ''].map(h => (
+                        {[t('new_shift'), t('shift_date'), t('shift_time'), t('shift_location'), t('assign_volunteers'), ''].map(h => (
                           <th key={h} style={{
                             padding: '10px 20px', textAlign: 'left',
                             fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)',
@@ -534,7 +617,18 @@ export default function ShiftsView({
                             <td style={{ padding: '13px 20px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <div style={{ width: '3px', height: '30px', borderRadius: '2px', background: color, flexShrink: 0 }} />
-                                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</span>
+                                <div>
+                                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</span>
+                                  {s.recurrence_rule && (
+                                    <span style={{
+                                      marginLeft: '7px', fontSize: '10px', fontWeight: 700,
+                                      padding: '1px 6px', borderRadius: '4px',
+                                      background: '#ede9fe', color: '#6d28d9',
+                                    }}>
+                                      ↻ {s.recurrence_rule === 'biweekly' ? 'Biweekly' : s.recurrence_rule.charAt(0).toUpperCase() + s.recurrence_rule.slice(1)}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
                             <td style={{ padding: '13px 20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
@@ -574,6 +668,67 @@ export default function ShiftsView({
               )}
             </div>
           )}
+
+          {/* ── Week view ──────────────────────────────────────── */}
+          {view === 'week' && (
+            <div style={{ background: 'var(--surface-card)', borderRadius: '12px', border: '1px solid var(--surface-border)', overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 16px', borderBottom: '1px solid var(--surface-border-sub)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <button onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <ChevronLeft style={{ width: '14px', height: '14px' }} />
+                  </button>
+                  <button onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <ChevronRight style={{ width: '14px', height: '14px' }} />
+                  </button>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(weekStart)}
+                    {' – '}
+                    {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(weekStart.getTime() + 6 * 86400000))}
+                  </span>
+                </div>
+                <button onClick={() => { const now = new Date(); const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()); d.setDate(d.getDate() - d.getDay()); setWeekStart(d) }} style={{ fontSize: '12px', fontWeight: 600, padding: '4px 10px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  {t('today')}
+                </button>
+              </div>
+              <CalendarWeekView
+                weekStart={weekStart}
+                shifts={shifts}
+                onSelectShift={id => setSelectedId(id)}
+                holidays={holidays ?? []}
+              />
+            </div>
+          )}
+
+          {/* ── Day view ───────────────────────────────────────── */}
+          {view === 'day' && (
+            <div style={{ background: 'var(--surface-card)', borderRadius: '12px', border: '1px solid var(--surface-border)', overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 16px', borderBottom: '1px solid var(--surface-border-sub)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <button onClick={() => { const d = new Date(selectedDayView); d.setDate(d.getDate() - 1); setSelectedDayView(d) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <ChevronLeft style={{ width: '14px', height: '14px' }} />
+                  </button>
+                  <button onClick={() => { const d = new Date(selectedDayView); d.setDate(d.getDate() + 1); setSelectedDayView(d) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <ChevronRight style={{ width: '14px', height: '14px' }} />
+                  </button>
+                </div>
+                <button onClick={() => { const now = new Date(); setSelectedDayView(new Date(now.getFullYear(), now.getMonth(), now.getDate())) }} style={{ fontSize: '12px', fontWeight: 600, padding: '4px 10px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  {t('today')}
+                </button>
+              </div>
+              <CalendarDayView
+                day={selectedDayView}
+                shifts={shifts}
+                onSelectShift={id => setSelectedId(id)}
+                holidays={holidays ?? []}
+              />
+            </div>
+          )}
         </div>
 
         {/* ── Right: Roster panel ───────────────────────────────── */}
@@ -586,7 +741,19 @@ export default function ShiftsView({
             {/* Panel header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--surface-border-sub)' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', flex: 1, marginRight: '8px', fontFamily: 'var(--font-display)', letterSpacing: '-0.2px', lineHeight: 1.3 }}>{selected.name}</h3>
+                <div style={{ flex: 1, marginRight: '8px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.2px', lineHeight: 1.3 }}>{selected.name}</h3>
+                  {selected.recurrence_rule && (
+                    <span style={{
+                      display: 'inline-block', marginTop: '4px',
+                      fontSize: '10px', fontWeight: 700,
+                      padding: '2px 7px', borderRadius: '4px',
+                      background: '#ede9fe', color: '#6d28d9',
+                    }}>
+                      ↻ {selected.recurrence_rule === 'biweekly' ? 'Biweekly' : selected.recurrence_rule.charAt(0).toUpperCase() + selected.recurrence_rule.slice(1)} recurring
+                    </span>
+                  )}
+                </div>
                 <button onClick={() => { setSelectedId(null); setShowAssign(false); setPendingTrainee(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: '2px', borderRadius: '4px' }}>
                   <X style={{ width: '16px', height: '16px' }} />
                 </button>
@@ -604,7 +771,7 @@ export default function ShiftsView({
                 )}
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
                   <Users style={{ width: '12px', height: '12px', color: 'var(--teal)', flexShrink: 0 }} />
-                  {selected.assignments.length} / {selected.required_count} filled
+                  {selected.assignments.length} / {selected.required_count} {t('spots_open')}
                 </span>
               </div>
               <div style={{ marginTop: '12px', height: '4px', background: 'var(--surface-border)', borderRadius: '99px', overflow: 'hidden' }}>
@@ -620,7 +787,7 @@ export default function ShiftsView({
             <div style={{ flex: 1, padding: '14px 20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                 <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Assigned Volunteers
+                  {t('assign_volunteers')}
                 </span>
                 {!pendingTrainee && (
                   <button
@@ -636,7 +803,7 @@ export default function ShiftsView({
                     }}
                   >
                     <UserPlus style={{ width: '12px', height: '12px' }} />
-                    Assign
+                    {t('assign_btn')}
                   </button>
                 )}
               </div>
@@ -648,7 +815,7 @@ export default function ShiftsView({
                     <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', width: '13px', height: '13px', color: '#9ca3af' }} />
                     <input
                       style={{ ...inputStyle, paddingLeft: '28px' }}
-                      placeholder="Search volunteers…"
+                      placeholder={t('search_volunteers')}
                       value={assignSearch}
                       onChange={e => setAssignSearch(e.target.value)}
                       autoFocus
@@ -681,7 +848,7 @@ export default function ShiftsView({
                             </span>
                             {isTrainee && (
                               <span style={{ fontSize: '10px', background: '#fef3c7', color: '#92400e', padding: '1px 5px', borderRadius: '4px', marginLeft: '5px' }}>
-                                needs mentor
+                                {t('select_mentor')} …
                               </span>
                             )}
                           </div>
@@ -690,7 +857,7 @@ export default function ShiftsView({
                     })}
                     {assignableVolunteers.length === 0 && (
                       <p style={{ fontSize: '12px', color: '#9ca3af', padding: '12px', textAlign: 'center' }}>
-                        {assignSearch ? 'No matches' : 'All volunteers assigned'}
+                        {assignSearch ? t('no_results') : t('assign_volunteers')}
                       </p>
                     )}
                   </div>
@@ -706,16 +873,16 @@ export default function ShiftsView({
                     </button>
                     <div>
                       <p style={{ fontSize: '12px', fontWeight: 600, color: '#92400e' }}>
-                        Select mentor for {pendingTrainee.first_name} {pendingTrainee.last_name}
+                        {t('select_mentor')} {pendingTrainee.first_name} {pendingTrainee.last_name}
                       </p>
-                      <p style={{ fontSize: '11px', color: '#b45309' }}>Training-phase volunteers require a mentor</p>
+                      <p style={{ fontSize: '11px', color: '#b45309' }}>{t('trainee_label')}</p>
                     </div>
                   </div>
                   <div style={{ position: 'relative', padding: '8px' }}>
                     <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', width: '13px', height: '13px', color: '#9ca3af' }} />
                     <input
                       style={{ ...inputStyle, paddingLeft: '28px' }}
-                      placeholder="Search mentors…"
+                      placeholder={t('search_volunteers')}
                       value={mentorSearch}
                       onChange={e => setMentorSearch(e.target.value)}
                       autoFocus
@@ -748,7 +915,7 @@ export default function ShiftsView({
                     ))}
                     {eligibleMentors.length === 0 && (
                       <p style={{ fontSize: '12px', color: '#9ca3af', padding: '12px', textAlign: 'center' }}>
-                        {mentorSearch ? 'No matches' : 'No active volunteers available as mentors'}
+                        {mentorSearch ? t('no_results') : t('no_eligible_mentors')}
                       </p>
                     )}
                   </div>
@@ -759,8 +926,8 @@ export default function ShiftsView({
               {selected.assignments.length === 0 && !showAssign && !pendingTrainee ? (
                 <div style={{ padding: '28px 0', textAlign: 'center' }}>
                   <Users style={{ width: '26px', height: '26px', color: 'var(--surface-border)', margin: '0 auto 8px' }} />
-                  <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>No volunteers assigned yet</p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-faint)', marginTop: '3px' }}>Click Assign to add volunteers</p>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>{t('no_shifts')}</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-faint)', marginTop: '3px' }}>{t('assign_volunteers')}</p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
@@ -797,24 +964,24 @@ export default function ShiftsView({
                             </p>
                             {isTrainee && (
                               <span style={{ fontSize: '10px', background: '#fef3c7', color: '#92400e', padding: '1px 5px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                <GraduationCap style={{ width: '10px', height: '10px' }} /> Trainee
+                                <GraduationCap style={{ width: '10px', height: '10px' }} /> {t('trainee_label')}
                               </span>
                             )}
                           </div>
                           {/* Mentor line */}
                           {isTrainee && mentorVol && (
                             <p style={{ fontSize: '11px', color: '#92400e', marginTop: '2px' }}>
-                              Mentor: {mentorVol.first_name} {mentorVol.last_name}
+                              {t('select_mentor')} {mentorVol.first_name} {mentorVol.last_name}
                             </p>
                           )}
                           {isTrainee && !mentorVol && (
                             <p style={{ fontSize: '11px', color: '#dc2626', marginTop: '2px' }}>
-                              ⚠ No mentor assigned
+                              ⚠ {t('no_eligible_mentors')}
                             </p>
                           )}
                           {isClockedIn && (
                             <p style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px' }}>
-                              Clocked in {fmtTime(te.clock_in)}
+                              {t('clocked_in')} {fmtTime(te.clock_in)}
                             </p>
                           )}
                           {isClockedOut && (
@@ -859,13 +1026,31 @@ export default function ShiftsView({
                               <LogOut style={{ width: '11px', height: '11px' }} /> Out
                             </button>
                           )}
-                          <button
-                            onClick={() => handleRemoveAssignment(a.id)}
-                            title="Remove"
-                            style={{ padding: '5px 6px', borderRadius: '6px', border: '1px solid var(--surface-border-sub)', background: 'transparent', cursor: 'pointer', color: 'var(--text-faint)', transition: 'color 0.1s, border-color 0.1s' }}
-                          >
-                            <X style={{ width: '11px', height: '11px' }} />
-                          </button>
+                          {removeConfirmId === a.id ? (
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                              <button
+                                onClick={() => handleRemoveAssignment(a.id)}
+                                disabled={isPending}
+                                style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fef2f2', cursor: 'pointer', color: '#dc2626', fontSize: '11px', fontWeight: 600 }}
+                              >
+                                Remove
+                              </button>
+                              <button
+                                onClick={() => setRemoveConfirmId(null)}
+                                style={{ padding: '4px 6px', borderRadius: '6px', border: '1px solid var(--surface-border-sub)', background: 'transparent', cursor: 'pointer', color: 'var(--text-faint)' }}
+                              >
+                                <X style={{ width: '11px', height: '11px' }} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setRemoveConfirmId(a.id)}
+                              title="Unassign volunteer"
+                              style={{ padding: '5px 6px', borderRadius: '6px', border: '1px solid var(--surface-border-sub)', background: 'transparent', cursor: 'pointer', color: 'var(--text-faint)', transition: 'color 0.1s, border-color 0.1s' }}
+                            >
+                              <X style={{ width: '11px', height: '11px' }} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     )
@@ -886,7 +1071,7 @@ export default function ShiftsView({
                       }}>
                         <Plus style={{ width: '11px', height: '11px', color: 'var(--text-faint)' }} />
                       </div>
-                      <span style={{ fontSize: '12px', color: 'var(--text-faint)', fontStyle: 'italic' }}>Open slot</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-faint)', fontStyle: 'italic' }}>{t('spot_open')}</span>
                     </div>
                   ))}
                 </div>
@@ -906,7 +1091,7 @@ export default function ShiftsView({
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fef2f2' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
               >
-                <Trash2 style={{ width: '12px', height: '12px' }} /> Delete shift
+                <Trash2 style={{ width: '12px', height: '12px' }} /> {t('delete_shift')}
               </button>
             </div>
           </div>
@@ -925,25 +1110,26 @@ export default function ShiftsView({
             padding: '28px', width: '100%', maxWidth: '490px',
             boxShadow: '0 24px 64px rgba(10,15,30,0.2), 0 4px 16px rgba(10,15,30,0.1)',
             border: '1px solid var(--surface-border)',
+            maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px' }}>
               <div>
-                <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.2px' }}>New Shift</h2>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Fill in the details below to create a shift</p>
+                <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.2px' }}>{t('new_shift')}</h2>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{t('create_shift')}</p>
               </div>
-              <button onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: '4px', borderRadius: '6px' }}>
+              <button onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch(''); setIsRecurring(false); setRecurFrequency('weekly'); setRecurEndDate('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: '4px', borderRadius: '6px' }}>
                 <X style={{ width: '18px', height: '18px' }} />
               </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Shift Name *</label>
+                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('shift_name')} *</label>
                 <input style={inputStyle} value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Saturday Morning Clinic" autoFocus />
               </div>
 
               <div>
-                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Location</label>
+                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('shift_location')}</label>
                 <select style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }} value={createForm.location_id} onChange={e => setCreateForm(f => ({ ...f, location_id: e.target.value }))}>
                   <option value="">No location</option>
                   {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -952,39 +1138,90 @@ export default function ShiftsView({
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Start Date *</label>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('start_date')} *</label>
                   <input style={inputStyle} type="date" value={createForm.start_date} onChange={e => setCreateForm(f => ({ ...f, start_date: e.target.value }))} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Start Time *</label>
-                  <input style={inputStyle} type="time" value={createForm.start_time} onChange={e => setCreateForm(f => ({ ...f, start_time: e.target.value }))} />
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('start_time')} *</label>
+                  <input style={inputStyle} type="time" value={createForm.start_time} onChange={e => { if (e.target.value) setCreateForm(f => ({ ...f, start_time: e.target.value })) }} />
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>End Date *</label>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {isRecurring ? t('end_date_occurrence') : t('end_date')} *
+                  </label>
                   <input style={inputStyle} type="date" value={createForm.end_date} onChange={e => setCreateForm(f => ({ ...f, end_date: e.target.value }))} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>End Time *</label>
-                  <input style={inputStyle} type="time" value={createForm.end_time} onChange={e => setCreateForm(f => ({ ...f, end_time: e.target.value }))} />
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {isRecurring ? t('end_time_occurrence') : t('end_time')} *
+                  </label>
+                  <input style={inputStyle} type="time" value={createForm.end_time} onChange={e => { if (e.target.value) setCreateForm(f => ({ ...f, end_time: e.target.value })) }} />
                 </div>
               </div>
 
               <div>
-                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Volunteers Needed</label>
+                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('required_volunteers')}</label>
                 <input style={inputStyle} type="number" min="1" value={createForm.required_count} onChange={e => setCreateForm(f => ({ ...f, required_count: e.target.value }))} />
               </div>
 
               <div>
-                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</label>
-                <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '56px', lineHeight: 1.5 }} value={createForm.notes} onChange={e => setCreateForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" />
+                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('shift_notes')}</label>
+                <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '56px', lineHeight: 1.5 }} value={createForm.notes} onChange={e => setCreateForm(f => ({ ...f, notes: e.target.value }))} placeholder={t('shift_notes')} />
+              </div>
+
+              {/* Repeat toggle */}
+              <div style={{ borderTop: '1px solid var(--surface-border-sub)', paddingTop: '14px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: isRecurring ? '10px' : 0 }}>
+                  <div
+                    onClick={() => setIsRecurring(p => !p)}
+                    style={{
+                      width: '36px', height: '20px', borderRadius: '10px',
+                      background: isRecurring ? TEAL : '#d1d5db',
+                      position: 'relative', flexShrink: 0, cursor: 'pointer',
+                      transition: 'background 0.2s',
+                    }}
+                  >
+                    <div style={{
+                      position: 'absolute', top: '2px',
+                      left: isRecurring ? '18px' : '2px',
+                      width: '16px', height: '16px', borderRadius: '50%',
+                      background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      transition: 'left 0.2s',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    {t('repeat_frequency')}
+                  </span>
+                </label>
+                {isRecurring && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('recurring_shift')}</label>
+                      <select
+                        style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
+                        value={recurFrequency}
+                        onChange={e => setRecurFrequency(e.target.value as 'weekly' | 'biweekly' | 'monthly')}
+                      >
+                        <option value="weekly">Weekly</option>
+                        <option value="biweekly">Every 2 weeks</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('end_date_optional')}</label>
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '5px' }}>{t('series_end_date_hint')}</p>
+                      <input type="date" style={inputStyle} value={recurEndDate} onChange={e => setRecurEndDate(e.target.value)} />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Volunteer picker */}
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Assign Volunteers
+                  {t('assign_volunteers')}
                 </label>
 
                 {/* Selected volunteer chips */}
@@ -1021,7 +1258,7 @@ export default function ShiftsView({
                   <Search style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', width: '13px', height: '13px', color: '#9ca3af', pointerEvents: 'none' }} />
                   <input
                     style={{ ...inputStyle, paddingLeft: '28px' }}
-                    placeholder="Search volunteers to add…"
+                    placeholder={t('search_volunteers')}
                     value={createVolSearch}
                     onChange={e => setCreateVolSearch(e.target.value)}
                   />
@@ -1034,7 +1271,7 @@ export default function ShiftsView({
                     background: 'white', maxHeight: '160px', overflowY: 'auto',
                   }}>
                     {createVolunteerOptions.length === 0 ? (
-                      <div style={{ padding: '10px 12px', fontSize: '12px', color: '#9ca3af' }}>No volunteers found</div>
+                      <div style={{ padding: '10px 12px', fontSize: '12px', color: '#9ca3af' }}>{t('no_results')}</div>
                     ) : createVolunteerOptions.slice(0, 10).map(v => (
                       <button
                         key={v.id}
@@ -1074,11 +1311,18 @@ export default function ShiftsView({
             </div>
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '22px', paddingTop: '18px', borderTop: '1px solid var(--surface-border-sub)' }}>
+              {(!createForm.name || !createForm.start_date || !createForm.start_time || !createForm.end_date || !createForm.end_time) && (
+                <p style={{ fontSize: '11px', color: '#ef4444', marginBottom: '2px' }}>
+                  {!createForm.name ? 'Shift name is required.' :
+                   !createForm.start_date || !createForm.start_time ? 'Start date and time are required.' :
+                   'End date and time are required.'}
+                </p>
+              )}
               <button className="shift-new-btn" style={btnPrimary} onClick={handleCreate} disabled={!createForm.name || !createForm.start_date || !createForm.start_time || !createForm.end_date || !createForm.end_time || isPending}>
-                Create Shift
+                {isRecurring ? t('recurring_shift') : t('create_shift')}
               </button>
-              <button style={btnSecondary} onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch('') }}>
-                Cancel
+              <button style={btnSecondary} onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch(''); setIsRecurring(false); setRecurFrequency('weekly'); setRecurEndDate('') }}>
+                {t('cancel')}
               </button>
             </div>
           </div>

@@ -1,0 +1,85 @@
+name: Notion PR Sync
+
+# Automatically updates the Notion Dev Tasks & QA database when PRs move
+# through the GitHub lifecycle. Extracts DEV-### from branch name or PR title.
+#
+# Required GitHub secrets:
+#   NOTION_TOKEN           — Notion integration secret (starts with secret_)
+#   NOTION_DEV_TASKS_DB_ID — Dev Tasks & QA database ID (from Notion URL)
+
+on:
+  pull_request:
+    types: [opened, reopened, review_requested, closed]
+
+jobs:
+  sync-notion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Extract task ID
+        id: task
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          TITLE="${{ github.event.pull_request.title }}"
+
+          # Try branch name first, then PR title
+          TASK_ID=$(echo "$BRANCH $TITLE" | grep -oE 'DEV-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
+
+          if [ -z "$TASK_ID" ]; then
+            echo "No DEV-### found in branch '$BRANCH' or title '$TITLE' — skipping."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Found task: $TASK_ID"
+            echo "task_id=$TASK_ID" >> "$GITHUB_OUTPUT"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── PR opened / reopened → Code Review ────────────────────────────────
+      - name: Set status → Code Review
+        if: >
+          steps.task.outputs.found == 'true' &&
+          (github.event.action == 'opened' ||
+           github.event.action == 'reopened' ||
+           github.event.action == 'review_requested')
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
+        run: node scripts/notion-sync.cjs status "${{ steps.task.outputs.task_id }}" "Code Review"
+
+      - name: Add PR link
+        if: >
+          steps.task.outputs.found == 'true' &&
+          (github.event.action == 'opened' || github.event.action == 'reopened')
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
+        run: node scripts/notion-sync.cjs pr "${{ steps.task.outputs.task_id }}" "${{ github.event.pull_request.html_url }}"
+
+      # ── PR merged → Done ──────────────────────────────────────────────────
+      - name: Set status → Done
+        if: >
+          steps.task.outputs.found == 'true' &&
+          github.event.action == 'closed' &&
+          github.event.pull_request.merged == true
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
+        run: node scripts/notion-sync.cjs status "${{ steps.task.outputs.task_id }}" "Done"
+
+      # ── PR closed without merge → Ready ───────────────────────────────────
+      - name: Set status → Ready (PR closed unmerged)
+        if: >
+          steps.task.outputs.found == 'true' &&
+          github.event.action == 'closed' &&
+          github.event.pull_request.merged == false
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
+        run: node scripts/notion-sync.cjs status "${{ steps.task.outputs.task_id }}" "Ready"

@@ -17,7 +17,7 @@ export default async function VolunteerTabsLayout({ children }: { children: Reac
   const admin = createAdminClient()
   const { data: volunteer } = await admin
     .from('volunteers')
-    .select('id, first_name, last_name, status, category')
+    .select('id, first_name, last_name, status, category, preferred_language')
     .eq('user_id', user.id)
     .single()
 
@@ -28,7 +28,7 @@ export default async function VolunteerTabsLayout({ children }: { children: Reac
   if (!volunteer) redirect('/')
 
   return (
-    <VolunteerShell volunteer={volunteer}>
+    <VolunteerShell volunteer={volunteer} initialLang={volunteer.preferred_language ?? 'en'}>
       {children}
     </VolunteerShell>
   )
