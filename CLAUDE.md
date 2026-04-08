@@ -30,6 +30,22 @@ GET http://localhost:3000/api/dev/login?role=volunteer&redirect=/volunteer/home
 ```
 Credentials are in `web/.env.local` (`DEV_ADMIN_EMAIL` etc.). Blocked with 403 in production.
 
+## Environment Variables
+
+Copy `web/.env.example` → `web/.env.local` for local dev. Key split:
+
+| Var | Where | Purpose |
+|-----|-------|---------|
+| `NEXT_PUBLIC_SUPABASE_URL` / `ANON_KEY` | `.env.local` | Supabase client |
+| `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` | Admin client (bypasses RLS) |
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | `.env.local` | Email sending |
+| `NOTION_TOKEN` / `NOTION_DEV_TASKS_DB_ID` | `.env.local` + GitHub Secrets | Notion automation |
+| `VERCEL_WEBHOOK_SECRET` | `.env.local` | Webhook signature verification |
+| `CRON_SECRET` | Vercel env + `.env.local` | Protects `/api/cron/*` routes |
+| `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_ID` | GitHub Secrets only | CI migration runner |
+
+Local Notion automation is a no-op if `NOTION_TOKEN` is not set — it silently skips.
+
 ## Architecture
 
 ### Repo Layout
@@ -37,9 +53,11 @@ Credentials are in `web/.env.local` (`DEV_ADMIN_EMAIL` etc.). Blocked with 403 i
 ```
 web/          Next.js 14 app (admin + volunteer UI)
 supabase/     Migrations, seed data, edge functions
-scripts/      notion-sync.cjs (PR → Notion), build-heather-guide.cjs
+scripts/      notion-sync.cjs — Notion API helper used by hooks/CI
+              build-heather-guide.cjs — generates Heather_Notion_Setup_Guide.docx
 .mex/         Project memory submodule (patterns, context, drift detection)
-.github/      CI: supabase-migrate.yml, notion-pr-sync.yml
+.github/      supabase-migrate.yml — auto-applies migrations on merge to main
+              notion-pr-sync.yml — PR events → Notion Dev Tasks status
 ```
 
 ### Route Structure
@@ -85,6 +103,15 @@ export async function doThing(input) {
 
 Errors are thrown (caught by the client `run()` wrapper in ShiftsView / similar). `revalidatePath` is always called after mutations.
 
+### API Routes
+
+| Route | Purpose |
+|-------|---------|
+| `GET /api/dev/login` | Dev-only auto-login (403 in production) |
+| `GET /api/cron/send-auto-messages` | Vercel Cron — daily midnight UTC, runs auto-message rules. Must include `Authorization: Bearer <CRON_SECRET>` header |
+| `POST /api/webhooks/vercel` | Vercel deploy events → Notion Dev Tasks status + preview URL. HMAC-verified via `VERCEL_WEBHOOK_SECRET` |
+| `POST /api/push-subscription` | PWA push notification subscription management |
+
 ### Key Data Patterns
 
 **Soft-delete for shift assignments**: `removeAssignment` sets `status = 'cancelled'`, never hard-deletes. The `shift_assignments` table has `unique(shift_id, volunteer_id)`, so re-assigning a previously-cancelled volunteer requires an upsert (check for existing row, update rather than insert).
@@ -92,6 +119,16 @@ Errors are thrown (caught by the client `run()` wrapper in ShiftsView / similar)
 **Volunteer status flow**: `applicant` → `prospect` → `volunteer` → `inactive`. Gate feature access on `status === 'volunteer'`, not on `pipeline_phase`.
 
 **Single-org setup**: `org_id` is always resolved as `select('id').from('organizations').limit(1).single()`.
+
+### Notion Automation Pipeline
+
+When a branch is pushed or a PR is opened/merged, the system updates the Notion Dev Tasks & QA database automatically:
+
+1. **PostToolUse hook** (`.claude/settings.local.json`) — git commit/push → marks task "In Progress"
+2. **`notion-pr-sync.yml`** — PR opened/merged/closed → updates task status in Notion
+3. **`/api/webhooks/vercel`** — deploy succeeded → moves task to "Testing" + stores preview URL in GitHub Link field
+
+Task ID is extracted from the branch name (must contain `DEV-###`). All steps silently no-op if Notion env vars are absent.
 
 ### i18n
 

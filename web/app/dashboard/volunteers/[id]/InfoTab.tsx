@@ -115,12 +115,13 @@ export default function InfoTab({
 
     setV(prev => ({
       ...prev,
-      first_name: form.first_name.trim(),
-      last_name:  form.last_name.trim(),
-      email:      form.email.trim().toLowerCase(),
-      phone:      form.phone.trim() || null,
-      category:   form.volunteer_categories[0] ?? form.category,
-      locations:  newLocations,
+      first_name:           form.first_name.trim(),
+      last_name:            form.last_name.trim(),
+      email:                form.email.trim().toLowerCase(),
+      phone:                form.phone.trim() || null,
+      category:             form.volunteer_categories[0] ?? form.category,
+      volunteer_categories: form.volunteer_categories,
+      locations:            newLocations,
     }))
     setEditing(false)
     setSaved(true)
