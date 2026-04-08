@@ -64,7 +64,7 @@ export async function createVolunteer(
     )
     if (inviteError) {
       // If user already exists in Auth, look them up
-      if (inviteError.message.includes('already been registered')) {
+      if (inviteError.message.toLowerCase().includes('already registered')) {
         const { data: existingUsers } = await admin.auth.admin.listUsers()
         const existing = existingUsers?.users.find(u => u.email === input.email)
         if (!existing) return { error: 'Email already registered but user not found' }
@@ -85,7 +85,7 @@ export async function createVolunteer(
       user_metadata: { first_name: input.first_name, last_name: input.last_name },
     })
     if (createError) {
-      if (createError.message.includes('already been registered')) {
+      if (createError.message.toLowerCase().includes('already registered')) {
         const { data: existingUsers } = await admin.auth.admin.listUsers()
         const existing = existingUsers?.users.find(u => u.email === input.email)
         if (!existing) return { error: 'Email already registered but user not found' }
