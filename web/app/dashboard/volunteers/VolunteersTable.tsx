@@ -67,6 +67,16 @@ function maxFlagSeverity(flags: VolunteerRow['active_flags']): number {
 
 type SortOption = { key: SortKey; dir: SortDir; label: string }
 
+const selectStyle: React.CSSProperties = {
+  padding: '7px 10px', borderRadius: '8px',
+  border: '1px solid var(--surface-border)',
+  fontSize: '13px', color: 'var(--text-secondary)',
+  background: 'white', cursor: 'pointer',
+  appearance: 'none', WebkitAppearance: 'none',
+  paddingRight: '28px',
+  outline: 'none',
+}
+
 const SORT_OPTIONS: SortOption[] = [
   { key: 'name',             dir: 'asc',  label: 'Name A→Z' },
   { key: 'name',             dir: 'desc', label: 'Name Z→A' },
@@ -152,16 +162,6 @@ export default function VolunteersTable({
     })
     return rows
   }, [volunteers, search, category, status, location, sort])
-
-  const selectStyle: React.CSSProperties = {
-    padding: '7px 10px', borderRadius: '8px',
-    border: '1px solid var(--surface-border)',
-    fontSize: '13px', color: 'var(--text-secondary)',
-    background: 'white', cursor: 'pointer',
-    appearance: 'none', WebkitAppearance: 'none',
-    paddingRight: '28px',
-    outline: 'none',
-  }
 
   const hasFilters = !!(search || category || status || location)
 
@@ -294,7 +294,6 @@ export default function VolunteersTable({
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '940px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--surface-border-sub)' }}>
-                {/* TODO: remove in Task 2 — column-header sort replaced by SortDropdown */}
                 <ThFirst label={t('col_name')} />
                 <Th label={t('col_category')} />
                 <Th label={t('col_status')} />
@@ -546,15 +545,7 @@ function SortDropdown({
           const [k, d] = e.target.value.split('__')
           onChange(k as SortKey, d as SortDir)
         }}
-        style={{
-          padding: '7px 10px', borderRadius: '8px',
-          border: '1px solid var(--surface-border)',
-          fontSize: '13px', color: 'var(--text-secondary)',
-          background: 'white', cursor: 'pointer',
-          appearance: 'none', WebkitAppearance: 'none',
-          paddingRight: '28px',
-          outline: 'none',
-        }}
+        style={selectStyle}
       >
         {SORT_OPTIONS.map(opt => (
           <option key={`${opt.key}__${opt.dir}`} value={`${opt.key}__${opt.dir}`}>
