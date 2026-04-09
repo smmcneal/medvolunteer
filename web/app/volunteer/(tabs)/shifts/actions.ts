@@ -69,11 +69,15 @@ export async function volunteerClockOut(timeEntryId: string): Promise<void> {
   const owner = (entry?.volunteers as unknown as { user_id: string } | null)?.user_id
   if (!entry || owner !== user.id) throw new Error('Entry not found or access denied')
 
-  const clockOut = new Date().toISOString()
+  // Check org setting to determine approval status
+  const admin = createAdminClient()
+  const { data: orgData } = await admin.from('organizations').select('settings').limit(1).single()
+  const requireApproval = !!(orgData?.settings as Record<string, unknown>)?.require_hour_approval
+  const approvalStatus = requireApproval ? 'pending' : 'auto_approved'
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('time_entries')
-    .update({ clock_out: clockOut })
+    .update({ clock_out: new Date().toISOString(), approval_status: approvalStatus })
     .eq('id', timeEntryId)
 
   if (error) throw new Error(error.message)

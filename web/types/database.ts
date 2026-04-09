@@ -244,6 +244,9 @@ export interface TimeEntry {
   duration_minutes: number | null
   method: CheckMethod
   notes: string | null
+  approval_status: 'auto_approved' | 'pending' | 'approved' | 'rejected'
+  approved_by: string | null
+  approved_at: string | null
 }
 
 export interface LearningModule {
