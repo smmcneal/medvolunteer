@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Search, ChevronDown, ArrowRight, ChevronRight } from 'lucide-react'
 import type { VolunteerRow } from './page'
@@ -295,14 +295,10 @@ export default function VolunteersTable({
             <thead>
               <tr style={{ borderBottom: '1px solid var(--surface-border-sub)' }}>
                 <ThFirst label={t('col_name')} />
-                <Th label={t('col_category')} />
                 <Th label={t('col_status')} />
                 <Th label={t('col_pipeline')} />
-                <Th label={t('col_tags')} />
-                <Th label={t('col_flags')} />
-                <Th label={t('col_locations')} />
                 <Th label={t('col_hours')} />
-                <th style={{ padding: '10px 16px', width: '36px' }} />
+                <th style={{ padding: '10px 16px', width: '36px', background: '#fafbfc' }} />
               </tr>
             </thead>
             <tbody>
@@ -311,15 +307,80 @@ export default function VolunteersTable({
                 const statStyle = STATUS_COLORS[v.status] ?? STATUS_COLORS.inactive
                 const step      = PHASE_STEP[v.pipeline_phase]
                 const total     = 6
+
+                // Left border color for flagged rows
+                const borderColor = v.active_flags.some(f => f.severity === 'critical')
+                  ? '#dc2626'
+                  : v.active_flags.some(f => f.severity === 'warning')
+                    ? '#f59e0b'
+                    : undefined
+
+                // Sub-row groups: categories → flags → tags → locations
+                const subRowGroups: React.ReactNode[] = []
+
+                if (v.volunteer_categories.length > 0) {
+                  subRowGroups.push(
+                    <span key="cats" style={{ display: 'contents' }}>
+                      {v.volunteer_categories.map(cat => {
+                        const cs = getCatStyle(cat)
+                        return (
+                          <span key={cat} style={{ fontSize: '12px', fontWeight: 500, padding: '3px 9px', borderRadius: '6px', background: cs.bg, color: cs.text, whiteSpace: 'nowrap' }}>
+                            {getCatLabel(cat)}
+                          </span>
+                        )
+                      })}
+                    </span>
+                  )
+                }
+
+                if (v.active_flags.length > 0) {
+                  subRowGroups.push(
+                    <span key="flags" style={{ display: 'contents' }}>
+                      {v.active_flags.map(flag => {
+                        const c = flag.severity === 'critical' ? '#dc2626' : flag.severity === 'warning' ? '#f59e0b' : '#3b82f6'
+                        return (
+                          <span key={flag.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: c + '15', color: c, border: `1px solid ${c}33`, whiteSpace: 'nowrap' }}>
+                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                            {flag.name}
+                          </span>
+                        )
+                      })}
+                    </span>
+                  )
+                }
+
+                if (v.tags.length > 0) {
+                  subRowGroups.push(
+                    <span key="tags" style={{ display: 'contents' }}>
+                      {v.tags.map(tag => (
+                        <span key={tag.id} style={{ fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: tag.color + '1a', color: tag.color, border: `1px solid ${tag.color}33`, whiteSpace: 'nowrap' }}>
+                          {tag.name}
+                        </span>
+                      ))}
+                    </span>
+                  )
+                }
+
+                if (v.locations.length > 0) {
+                  subRowGroups.push(
+                    <span key="locs" style={{ fontSize: '11px', color: '#9098b1' }}>
+                      📍 {v.locations.join(' · ')}
+                    </span>
+                  )
+                }
+
                 return (
                   <tr
                     key={v.id}
                     className="vol-row"
                     style={{ borderTop: i === 0 ? 'none' : '1px solid var(--surface-border-sub)' }}
                   >
-                    {/* Volunteer */}
-                    <td style={{ padding: '12px 16px 12px 20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
+                    {/* Volunteer name + sub-row */}
+                    <td style={{
+                      padding: '12px 16px 12px 20px',
+                      ...(borderColor ? { boxShadow: `inset 3px 0 0 ${borderColor}` } : {}),
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '11px' }}>
                         <div style={{
                           width: '34px', height: '34px', borderRadius: '50%',
                           background: catStyle.bg, border: `2px solid ${catStyle.ring}`,
@@ -334,22 +395,19 @@ export default function VolunteersTable({
                             {v.first_name} {v.last_name}
                           </Link>
                           <p style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '1px' }}>{v.email}</p>
+                          {subRowGroups.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '5px', alignItems: 'center' }}>
+                              {subRowGroups.flatMap((group, idx) =>
+                                idx === 0
+                                  ? [group]
+                                  : [<span key={`sep-${idx}`} style={{ color: '#d1d5db', fontSize: '11px', lineHeight: 1 }}>·</span>, group]
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
-                    {/* Category */}
-                    <td style={{ padding: '12px 12px' }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {v.volunteer_categories.map(cat => {
-                          const cs = getCatStyle(cat)
-                          return (
-                            <span key={cat} style={{ fontSize: '12px', fontWeight: 500, padding: '3px 9px', borderRadius: '6px', background: cs.bg, color: cs.text, whiteSpace: 'nowrap' }}>
-                              {getCatLabel(cat)}
-                            </span>
-                          )
-                        })}
-                      </div>
-                    </td>
+
                     {/* Status */}
                     <td style={{ padding: '12px 12px' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 500, padding: '3px 9px', borderRadius: '6px', background: statStyle.bg, color: statStyle.text }}>
@@ -357,6 +415,7 @@ export default function VolunteersTable({
                         {STATUS_LABELS[v.status]}
                       </span>
                     </td>
+
                     {/* Pipeline */}
                     <td style={{ padding: '12px 12px' }}>
                       <div style={{ minWidth: 108 }}>
@@ -371,36 +430,7 @@ export default function VolunteersTable({
                         </div>
                       </div>
                     </td>
-                    {/* Tags */}
-                    <td style={{ padding: '12px 12px' }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 156 }}>
-                        {v.tags.length === 0 ? <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>—</span> : v.tags.map(tag => (
-                          <span key={tag.id} style={{ fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: tag.color + '1a', color: tag.color, border: `1px solid ${tag.color}33`, whiteSpace: 'nowrap' }}>{tag.name}</span>
-                        ))}
-                      </div>
-                    </td>
-                    {/* Flags */}
-                    <td style={{ padding: '12px 12px' }}>
-                      {v.active_flags.length === 0 ? <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>—</span> : (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, maxWidth: 176 }}>
-                          {v.active_flags.slice(0, 3).map(flag => {
-                            const c = flag.severity === 'critical' ? '#dc2626' : flag.severity === 'warning' ? '#f59e0b' : '#3b82f6'
-                            return (
-                              <span key={flag.id} title={flag.name} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: c + '15', color: c, border: `1px solid ${c}33`, whiteSpace: 'nowrap' }}>
-                                <span style={{ width: 5, height: 5, borderRadius: '50%', background: c, flexShrink: 0 }} />{flag.name}
-                              </span>
-                            )
-                          })}
-                          {v.active_flags.length > 3 && <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>+{v.active_flags.length - 3}</span>}
-                        </div>
-                      )}
-                    </td>
-                    {/* Locations */}
-                    <td style={{ padding: '12px 12px' }}>
-                      {v.locations.length === 0 ? <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>—</span> : v.locations.map(l => (
-                        <span key={l} style={{ fontSize: '11px', background: 'var(--surface-bg)', color: 'var(--text-secondary)', padding: '2px 7px', borderRadius: '5px', marginRight: '4px', border: '1px solid var(--surface-border)' }}>{l}</span>
-                      ))}
-                    </td>
+
                     {/* Hours */}
                     <td style={{ padding: '12px 12px' }}>
                       {v.hours_this_month === 0 ? <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>—</span> : (
@@ -409,6 +439,7 @@ export default function VolunteersTable({
                         </span>
                       )}
                     </td>
+
                     {/* Arrow */}
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                       <Link href={`/dashboard/volunteers/${v.id}`} style={{ color: '#9098b1', textDecoration: 'none', display: 'inline-flex' }}>
@@ -558,56 +589,32 @@ function SortDropdown({
   )
 }
 
-function Th({
-  label, onClick, sortIcon, active,
-}: {
-  label: string; onClick?: () => void; sortIcon?: React.ReactNode; active?: boolean
-}) {
+function Th({ label }: { label: string }) {
   return (
-    <th
-      onClick={onClick}
-      className={onClick ? 'vol-th-sortable' : undefined}
-      style={{
-        padding: '10px 12px', textAlign: 'left',
-        fontSize: '10.5px', fontWeight: 700,
-        color: active ? 'var(--teal)' : 'var(--text-muted)',
-        letterSpacing: '0.07em', textTransform: 'uppercase',
-        cursor: onClick ? 'pointer' : 'default',
-        userSelect: 'none', whiteSpace: 'nowrap',
-        background: '#fafbfc',
-        transition: 'color 0.1s',
-      }}
-    >
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-        {label}{sortIcon}
-      </span>
+    <th style={{
+      padding: '10px 12px', textAlign: 'left',
+      fontSize: '10.5px', fontWeight: 700,
+      color: 'var(--text-muted)',
+      letterSpacing: '0.07em', textTransform: 'uppercase',
+      whiteSpace: 'nowrap',
+      background: '#fafbfc',
+    }}>
+      {label}
     </th>
   )
 }
 
-function ThFirst({
-  label, onClick, sortIcon, active,
-}: {
-  label: string; onClick?: () => void; sortIcon?: React.ReactNode; active?: boolean
-}) {
+function ThFirst({ label }: { label: string }) {
   return (
-    <th
-      onClick={onClick}
-      className={onClick ? 'vol-th-sortable' : undefined}
-      style={{
-        padding: '10px 12px 10px 20px', textAlign: 'left',
-        fontSize: '10.5px', fontWeight: 700,
-        color: active ? 'var(--teal)' : 'var(--text-muted)',
-        letterSpacing: '0.07em', textTransform: 'uppercase',
-        cursor: onClick ? 'pointer' : 'default',
-        userSelect: 'none', whiteSpace: 'nowrap',
-        background: '#fafbfc',
-        transition: 'color 0.1s',
-      }}
-    >
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-        {label}{sortIcon}
-      </span>
+    <th style={{
+      padding: '10px 12px 10px 20px', textAlign: 'left',
+      fontSize: '10.5px', fontWeight: 700,
+      color: 'var(--text-muted)',
+      letterSpacing: '0.07em', textTransform: 'uppercase',
+      whiteSpace: 'nowrap',
+      background: '#fafbfc',
+    }}>
+      {label}
     </th>
   )
 }
