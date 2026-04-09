@@ -13,14 +13,17 @@ All commands run from `web/`:
 ```bash
 npm run dev       # Start Next.js dev server (port 3000)
 npm run build     # Production build
-npm run lint      # ESLint
+npm run lint      # ESLint (bare eslint, not next lint)
 ```
+
+There is no test suite in this project.
 
 Supabase (run from repo root, requires Docker):
 ```bash
 npx supabase start         # Start local Supabase stack (port 54321)
 npx supabase db reset      # Reset DB and re-run all migrations + seed.sql
 npx supabase migration new <name>   # Create new migration file
+npx supabase gen types typescript --local > web/types/database.ts  # Regenerate DB types after schema changes
 ```
 
 Dev auto-login (development only):
@@ -56,7 +59,7 @@ supabase/     Migrations, seed data, edge functions
 scripts/      notion-sync.cjs — Notion API helper used by hooks/CI
               build-heather-guide.cjs — generates Heather_Notion_Setup_Guide.docx
 .mex/         Project memory submodule (patterns, context, drift detection)
-.github/      supabase-migrate.yml — auto-applies migrations on merge to main
+.github/      supabase-migrate.yml — auto-applies migrations on merge to main (runs check job on every push; migrate job only when supabase/migrations/** changed)
               notion-pr-sync.yml — PR events → Notion Dev Tasks status
 ```
 
@@ -112,11 +115,41 @@ Errors are thrown (caught by the client `run()` wrapper in ShiftsView / similar)
 | `POST /api/webhooks/vercel` | Vercel deploy events → Notion Dev Tasks status + preview URL. HMAC-verified via `VERCEL_WEBHOOK_SECRET` |
 | `POST /api/push-subscription` | PWA push notification subscription management |
 
+### Page + View Pattern
+
+Every dashboard page follows a strict split:
+
+- **`page.tsx`** — async server component, fetches all data with `createAdminClient()`, sets `export const dynamic = 'force-dynamic'`, exports the page-specific TypeScript types (e.g. `ShiftWithRoster`), renders the `*View` component with typed props.
+- **`*View.tsx`** — `'use client'` component, receives all data as props, owns all interactivity and state, imports actions from `./actions`.
+
+Never fetch data in a `*View.tsx` — it receives everything from the page. Never put UI in `page.tsx` beyond rendering the View.
+
+Every `*View.tsx` uses a local `run()` helper for mutations (defined inline, not imported):
+
+```ts
+async function run(fn: () => Promise<void>) {
+  setError(null)
+  try {
+    await fn()
+    startTransition(() => { router.refresh() })
+  } catch (e) {
+    setError(e instanceof Error ? e.message : 'Something went wrong')
+  }
+}
+```
+
+`await fn()` runs the server action, then `router.refresh()` is wrapped in `startTransition` so `isPending` reflects the server re-fetch. This is the React 18 pattern — don't call `router.refresh()` outside a transition.
+
+### Utilities
+
+- `cn(...classes)` — Tailwind class merging via `clsx` + `tailwind-merge`. Import from `@/lib/utils`.
+- Shared DB row types live in `web/types/database.ts` (hand-maintained, not auto-generated at build time). Regenerate after schema changes with `npx supabase gen types typescript --local > web/types/database.ts`.
+
 ### Key Data Patterns
 
 **Soft-delete for shift assignments**: `removeAssignment` sets `status = 'cancelled'`, never hard-deletes. The `shift_assignments` table has `unique(shift_id, volunteer_id)`, so re-assigning a previously-cancelled volunteer requires an upsert (check for existing row, update rather than insert).
 
-**Volunteer status flow**: `applicant` → `prospect` → `volunteer` → `inactive`. Gate feature access on `status === 'volunteer'`, not on `pipeline_phase`.
+**Volunteer status flow**: `applicant` → `prospect` → `volunteer` → `inactive`. Gate feature access on `status === 'volunteer'`, not on `pipeline_phase`. The canonical phase→status mapping is `PHASE_STATUS_MAP` in `web/app/dashboard/volunteers/[id]/actions.ts` — don't duplicate this logic elsewhere.
 
 **Single-org setup**: `org_id` is always resolved as `select('id').from('organizations').limit(1).single()`.
 
@@ -138,6 +171,15 @@ Two separate React Context translation systems:
 
 All user-visible strings go through these hooks — no hardcoded English in JSX.
 
+### Volunteer PWA
+
+The volunteer app (`/volunteer`) is a full PWA. Key files:
+
+- `web/public/sw.js` — service worker (cache name `medvolunteer-v2`). Static assets are cache-first; navigation is network-first with `/volunteer/offline` as the offline fallback.
+- `web/public/manifest.json` — web app manifest.
+
+When bumping the service worker (e.g. after cache invalidation), increment `CACHE_NAME` in `sw.js`. Old caches are deleted on activate.
+
 ### Hydration Gotcha
 
 Never read `localStorage` in a `useState` initializer — it causes server/client mismatch. Use `useEffect`:
@@ -153,4 +195,4 @@ Update `.mex/ROUTER.md` project state and any `.mex/` files that are now out of 
 
 ## Navigation
 
-At the start of every session, read `.mex/ROUTER.md` before doing anything else.
+At the start of every session, read `.mex/ROUTER.md` before doing anything else. (`.mex/AGENTS.md` and `.mex/conventions.md` are unpopulated templates — skip them until filled.)
