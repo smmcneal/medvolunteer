@@ -23,48 +23,40 @@ on:
         type: boolean
 
 jobs:
-  # Runs on every push to prevent "No jobs were run" (which GitHub marks as a
-  # workflow failure). Uses git diff to check whether migration files changed.
-  check:
+  # Single job that always runs (prevents "No jobs were run" failure).
+  # Migration steps are gated by SHOULD_MIGRATE env var so they only run
+  # when supabase/migrations/** files actually changed.
+  migrate:
     runs-on: ubuntu-latest
-    outputs:
-      should_migrate: ${{ steps.diff.outputs.should_migrate }}
+    environment: production
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - name: Detect migration changes
-        id: diff
+      - name: Check for migration changes
+        id: guard
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "should_migrate=true" >> "$GITHUB_OUTPUT"
+            echo "SHOULD_MIGRATE=true" >> "$GITHUB_ENV"
             echo "Manual dispatch — will run migrations."
           elif git diff --name-only HEAD~1 HEAD | grep -q '^supabase/migrations/'; then
-            echo "should_migrate=true" >> "$GITHUB_OUTPUT"
+            echo "SHOULD_MIGRATE=true" >> "$GITHUB_ENV"
             echo "Migration files changed — will apply."
           else
-            echo "should_migrate=false" >> "$GITHUB_OUTPUT"
-            echo "No migration files changed — skipping."
+            echo "SHOULD_MIGRATE=false" >> "$GITHUB_ENV"
+            echo "No migration files changed — skipping migration steps."
           fi
 
-  migrate:
-    needs: check
-    if: needs.check.outputs.should_migrate == 'true'
-    runs-on: ubuntu-latest
-    environment: production   # Requires manual approval in GitHub → Settings → Environments
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Setup Supabase CLI
+        if: env.SHOULD_MIGRATE == 'true'
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
       - name: List pending migrations (dry run)
-        if: ${{ inputs.dry_run == 'true' }}
+        if: env.SHOULD_MIGRATE == 'true' && inputs.dry_run == 'true'
         run: |
           echo "=== Pending migrations ==="
           supabase db push --dry-run \
@@ -73,7 +65,7 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Apply migrations
-        if: ${{ inputs.dry_run != 'true' }}
+        if: env.SHOULD_MIGRATE == 'true' && inputs.dry_run != 'true'
         run: |
           supabase db push \
             --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}"
@@ -82,21 +74,19 @@ jobs:
           SUPABASE_DB_PASSWORD:  ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Setup Node.js (for Notion sync)
-        if: ${{ inputs.dry_run != 'true' && secrets.NOTION_TOKEN != '' }}
+        if: env.SHOULD_MIGRATE == 'true' && inputs.dry_run != 'true' && secrets.NOTION_TOKEN != ''
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Notify Notion (migrations applied)
-        if: ${{ inputs.dry_run != 'true' && secrets.NOTION_TOKEN != '' }}
+        if: env.SHOULD_MIGRATE == 'true' && inputs.dry_run != 'true' && secrets.NOTION_TOKEN != ''
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
         run: |
-          # Extract DEV-### from any migration file names or recent commit messages
           RECENT_COMMITS=$(git log --oneline -10)
           TASK_ID=$(echo "$RECENT_COMMITS" | grep -oE 'DEV-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
-
           if [ -n "$TASK_ID" ]; then
             echo "Updating Notion task $TASK_ID → Testing (migrations applied)"
             node scripts/notion-sync.cjs status "$TASK_ID" "Testing"
@@ -110,7 +100,9 @@ jobs:
           echo "### Migration Result" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Branch:** main" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Time:** $(date -u)" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "${SHOULD_MIGRATE}" != "true" ]; then
+            echo "- **Mode:** Skipped (no migration files changed)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ inputs.dry_run }}" = "true" ]; then
             echo "- **Mode:** Dry run (no changes applied)" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "- **Mode:** Applied to production Supabase" >> "$GITHUB_STEP_SUMMARY"
