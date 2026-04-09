@@ -361,6 +361,7 @@ export default function ReportsView({
     padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: '8px',
     fontSize: '13px', color: '#374151', background: 'white',
     cursor: 'pointer', outline: 'none', appearance: 'none', WebkitAppearance: 'none',
+    fontFamily: 'inherit',
   }
 
   const inputStyle: React.CSSProperties = {

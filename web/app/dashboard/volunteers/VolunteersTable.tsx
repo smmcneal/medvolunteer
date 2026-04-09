@@ -75,6 +75,7 @@ const selectStyle: React.CSSProperties = {
   appearance: 'none', WebkitAppearance: 'none',
   paddingRight: '28px',
   outline: 'none',
+  fontFamily: 'inherit',
 }
 
 const SORT_OPTIONS: SortOption[] = [
