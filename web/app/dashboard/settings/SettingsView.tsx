@@ -553,6 +553,7 @@ function AutomationTab({
   activeVolunteers: { id: string; first_name: string; last_name: string }[]
   categories: Category[]
 }) {
+  const router = useRouter()
   const [rules, setRules] = useState(initialRules)
   const [fieldKey, setFieldKey] = useState('category')
   const [fieldValue, setFieldValue] = useState('')
@@ -574,7 +575,8 @@ function AutomationTab({
     setDocError(null)
     startDocTransition(async () => {
       try {
-        await saveDocumentAutomationRule({ trigger_document_type: docType, alert_message: docMessage, assigned_to: docAssignedTo || null })
+        const newRule = await saveDocumentAutomationRule({ trigger_document_type: docType, alert_message: docMessage, assigned_to: docAssignedTo || null })
+        setDocRules(prev => [...prev, newRule as DocumentAutomationRule])
         setDocType('')
         setDocMessage('')
         setDocAssignedTo('')
@@ -585,8 +587,16 @@ function AutomationTab({
   }
 
   function handleDeleteDocRule(ruleId: string) {
-    setDocRules(prev => prev.filter(r => r.id !== ruleId))
-    startDocTransition(async () => { await deleteDocumentAutomationRule(ruleId) })
+    const prev = docRules
+    setDocRules(p => p.filter(r => r.id !== ruleId))
+    startDocTransition(async () => {
+      try {
+        await deleteDocumentAutomationRule(ruleId)
+      } catch {
+        setDocRules(prev)
+        setDocError('Failed to delete rule')
+      }
+    })
   }
 
   // Auto Message Rules state
@@ -604,8 +614,13 @@ function AutomationTab({
     setMsgError(null)
     startMsgTransition(async () => {
       try {
-        await saveAutoMessageRule({ name: msgName, triggerType: msgTrigger, templateId: msgTemplateId, daysBefore: msgDaysBefore, channel: msgChannel })
+        const newRule = await saveAutoMessageRule({ name: msgName, triggerType: msgTrigger, templateId: msgTemplateId, daysBefore: msgDaysBefore, channel: msgChannel })
+        setMsgRules(prev => [...prev, newRule as AutoMessageRule])
         setMsgName('')
+        setMsgTrigger('shift_reminder')
+        setMsgTemplateId(messageTemplates[0]?.id ?? '')
+        setMsgDaysBefore(1)
+        setMsgChannel('email')
       } catch (err: unknown) {
         setMsgError(err instanceof Error ? err.message : 'Failed to save')
       }
@@ -613,16 +628,27 @@ function AutomationTab({
   }
 
   function handleDeleteMsg(ruleId: string) {
+    const prev = msgRules
+    setMsgRules(p => p.filter(r => r.id !== ruleId))
     startMsgTransition(async () => {
-      await deleteAutoMessageRule(ruleId)
-      setMsgRules(prev => prev.filter(r => r.id !== ruleId))
+      try {
+        await deleteAutoMessageRule(ruleId)
+      } catch {
+        setMsgRules(prev)
+        setMsgError('Failed to delete rule')
+      }
     })
   }
 
   function handleToggleMsg(ruleId: string, current: boolean) {
+    setMsgRules(prev => prev.map(r => r.id === ruleId ? { ...r, is_active: !current } : r))
     startMsgTransition(async () => {
-      await toggleAutoMessageRule(ruleId, !current)
-      setMsgRules(prev => prev.map(r => r.id === ruleId ? { ...r, is_active: !current } : r))
+      try {
+        await toggleAutoMessageRule(ruleId, !current)
+      } catch {
+        setMsgRules(prev => prev.map(r => r.id === ruleId ? { ...r, is_active: current } : r))
+        setMsgError('Failed to update rule')
+      }
     })
   }
 
@@ -632,15 +658,21 @@ function AutomationTab({
     open_shift: 'Open Shift Broadcast',
   }
 
+  const ACTION_TYPE_LABELS: Record<FormAutomationRule['action_type'], string> = {
+    assign_category: 'Assign Category',
+    assign_flag: 'Raise Flag',
+    assign_tag: 'Add Tag',
+  }
+
   function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     startTransition(async () => {
       try {
-        await saveFormAutomationRule({ fieldKey, fieldValue, actionType, actionValue })
+        const newRule = await saveFormAutomationRule({ fieldKey, fieldValue, actionType, actionValue })
+        setRules(prev => [...prev, newRule as FormAutomationRule])
         setFieldValue('')
         setActionValue('')
-        // Optimistically add a placeholder — page will refresh on next load
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to save')
       }
@@ -736,7 +768,7 @@ function AutomationTab({
             }}>
               <span style={{ fontSize: '13px', color: '#374151' }}>
                 If <strong>{rule.field_key}</strong> = &ldquo;<strong>{rule.field_value}</strong>&rdquo;
-                &nbsp;→ <strong>{rule.action_type.replace('_', ' ')}</strong>{' '}
+                &nbsp;→ <strong>{ACTION_TYPE_LABELS[rule.action_type]}</strong>{' '}
                 <em>{actionValueLabel(rule.action_value)}</em>
               </span>
               <button onClick={() => handleDelete(rule.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d1d5db', padding: '2px', display: 'flex', flexShrink: 0 }}
@@ -767,10 +799,12 @@ function AutomationTab({
               <option value="open_shift">Open Shift Broadcast</option>
             </select>
           </div>
-          <div style={{ flex: '0 0 70px' }}>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Days Before</label>
-            <input type="number" min={0} max={90} value={msgDaysBefore} onChange={e => setMsgDaysBefore(Number(e.target.value))} style={{ ...inputStyle, width: '70px' }} />
-          </div>
+          {msgTrigger !== 'open_shift' && (
+            <div style={{ flex: '0 0 70px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Days Before</label>
+              <input type="number" min={0} max={90} value={msgDaysBefore} onChange={e => setMsgDaysBefore(Number(e.target.value))} style={{ ...inputStyle, width: '70px' }} />
+            </div>
+          )}
           <div style={{ flex: '1 1 150px' }}>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Template</label>
             {messageTemplates.length === 0 ? (

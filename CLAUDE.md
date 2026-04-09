@@ -127,7 +127,7 @@ Every dashboard page follows a strict split:
 
 Never fetch data in a `*View.tsx` — it receives everything from the page. Never put UI in `page.tsx` beyond rendering the View.
 
-Every `*View.tsx` uses a local `run()` helper for mutations (defined inline, not imported):
+Every `*View.tsx` uses a local `run()` helper for mutations (defined inline per-View — not importable because it closes over that View's `setError` and `router`):
 
 ```ts
 async function run(fn: () => Promise<void>) {
@@ -198,4 +198,15 @@ Update `.mex/ROUTER.md` project state and any `.mex/` files that are now out of 
 
 ## Navigation
 
-At the start of every session, read `.mex/ROUTER.md` before doing anything else. (`.mex/AGENTS.md` and `.mex/conventions.md` are unpopulated templates — skip them until filled.)
+At the start of every session, read `.mex/ROUTER.md` before doing anything else.
+
+**`.mex/` file status**: Only `ROUTER.md` is populated. All `.mex/context/` files (`architecture.md`, `conventions.md`, `decisions.md`, `setup.md`, `stack.md`) and `patterns/INDEX.md` are unpopulated templates — skip them until filled.
+
+### Task loop (from ROUTER.md)
+
+For every task:
+1. **CONTEXT** — Check `patterns/INDEX.md` for a matching pattern. Load relevant `context/` files from ROUTER's routing table.
+2. **BUILD** — Do the work. If deviating from an established pattern, say so before writing code.
+3. **VERIFY** — Run the Verify Checklist from `context/conventions.md` item by item once populated.
+4. **DEBUG** — If something breaks, check `patterns/INDEX.md` for a debug pattern.
+5. **GROW** — Create or update a pattern in `.mex/patterns/` for this task type. Update ROUTER.md project state if the work was significant.

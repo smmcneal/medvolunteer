@@ -122,15 +122,16 @@ export async function saveFormAutomationRule(input: {
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
-  const { error } = await admin.from('form_automation_rules').insert({
+  const { data: newRule, error } = await admin.from('form_automation_rules').insert({
     org_id: org.id,
     field_key: input.fieldKey.trim(),
     field_value: input.fieldValue.trim(),
     action_type: input.actionType,
     action_value: input.actionValue.trim(),
-  })
+  }).select().single()
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/settings')
+  return newRule
 }
 
 export async function deleteFormAutomationRule(ruleId: string) {
@@ -154,7 +155,7 @@ export async function saveAutoMessageRule(input: {
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
-  const { error } = await admin.from('auto_message_rules').insert({
+  const { data: newRule, error } = await admin.from('auto_message_rules').insert({
     org_id: org.id,
     name: input.name.trim(),
     trigger_type: input.triggerType,
@@ -162,9 +163,10 @@ export async function saveAutoMessageRule(input: {
     days_before: input.daysBefore,
     channel: input.channel,
     is_active: true,
-  })
+  }).select().single()
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/settings')
+  return newRule
 }
 
 export async function deleteAutoMessageRule(ruleId: string) {
@@ -245,13 +247,17 @@ export async function saveDocumentAutomationRule(data: {
 }) {
   if (!data.trigger_document_type.trim() || !data.alert_message.trim()) throw new Error('Document type and message are required')
   const admin = createAdminClient()
-  const { error } = await admin.from('document_automation_rules').insert({
+  const { data: org } = await admin.from('organizations').select('id').limit(1).single()
+  if (!org) throw new Error('No organization found')
+  const { data: newRule, error } = await admin.from('document_automation_rules').insert({
+    org_id: org.id,
     trigger_document_type: data.trigger_document_type.trim(),
     alert_message: data.alert_message.trim(),
     assigned_to: data.assigned_to || null,
-  })
+  }).select().single()
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/settings')
+  return newRule
 }
 
 export async function deleteDocumentAutomationRule(ruleId: string) {
