@@ -79,6 +79,7 @@ interface CreateForm {
   end_date: string
   end_time: string
   required_count: string
+  required_categories: string[]
   notes: string
 }
 
@@ -86,7 +87,7 @@ const EMPTY_CREATE: CreateForm = {
   name: '', location_id: '',
   start_date: '', start_time: '',
   end_date: '', end_time: '',
-  required_count: '1', notes: '',
+  required_count: '1', required_categories: [], notes: '',
 }
 
 function buildISO(date: string, time: string): string {
@@ -100,11 +101,13 @@ export default function ShiftsView({
   locations,
   volunteers,
   holidays = [],
+  categories = [],
 }: {
   shifts: ShiftWithRoster[]
   locations: Pick<Location, 'id' | 'name'>[]
   volunteers: VolunteerLike[]
   holidays?: { id: string; name: string; date: string; is_recurring: boolean }[]
+  categories?: { id: string; slug: string; name: string }[]
 }) {
   const router = useRouter()
   const t = useAdminT()
@@ -253,6 +256,7 @@ export default function ShiftsView({
         start_time: buildISO(createForm.start_date, createForm.start_time),
         end_time: buildISO(createForm.end_date, createForm.end_time),
         required_count: parseInt(createForm.required_count) || 1,
+        required_categories: createForm.required_categories,
         notes: createForm.notes,
       }
 
@@ -1165,6 +1169,40 @@ export default function ShiftsView({
                 <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('required_volunteers')}</label>
                 <input style={inputStyle} type="number" min="1" value={createForm.required_count} onChange={e => setCreateForm(f => ({ ...f, required_count: e.target.value }))} />
               </div>
+
+              {categories.length > 0 && (
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {t('categories')} <span style={{ fontWeight: 400, textTransform: 'none' }}>(leave empty for all)</span>
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {categories.map(c => {
+                      const checked = createForm.required_categories.includes(c.slug)
+                      return (
+                        <button
+                          key={c.slug}
+                          type="button"
+                          onClick={() => setCreateForm(f => ({
+                            ...f,
+                            required_categories: checked
+                              ? f.required_categories.filter(s => s !== c.slug)
+                              : [...f.required_categories, c.slug],
+                          }))}
+                          style={{
+                            fontSize: '12px', fontWeight: 500,
+                            padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
+                            border: `1.5px solid ${checked ? (CAT_COLORS[c.slug] ?? TEAL) : 'var(--surface-border)'}`,
+                            background: checked ? `${(CAT_COLORS[c.slug] ?? TEAL)}22` : 'transparent',
+                            color: checked ? (CAT_COLORS[c.slug] ?? TEAL) : 'var(--text-secondary)',
+                          }}
+                        >
+                          {c.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('shift_notes')}</label>
