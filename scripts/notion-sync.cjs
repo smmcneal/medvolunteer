@@ -85,7 +85,10 @@ async function setUrl(pageId, field, url) {
       properties: { [field]: { url } },
     }),
   });
-  if (!res.ok) throw new Error(`Notion URL update failed (${res.status})`);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Notion URL update failed (${res.status}): ${err}`);
+  }
   return res.json();
 }
 

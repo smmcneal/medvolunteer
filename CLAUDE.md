@@ -118,14 +118,31 @@ Errors are thrown (caught by the client `run()` wrapper in ShiftsView / similar)
 | `POST /api/webhooks/vercel` | Vercel deploy events → Notion Dev Tasks status + preview URL. HMAC-verified via `VERCEL_WEBHOOK_SECRET` |
 | `POST /api/push-subscription` | PWA push notification subscription management |
 
+### Shared Components
+
+`web/components/` holds truly shared UI:
+- `Sidebar.tsx` — admin nav (import via `@/components/Sidebar`)
+- `ui/` — low-level primitives
+
+The `@/*` alias maps to `web/*`, so `@/components/Sidebar` and `@/lib/utils` both resolve correctly.
+
+### Shell Components
+
+- **`web/app/dashboard/DashboardShell.tsx`** — wraps all admin pages; provides `AdminLangProvider`. Rendered by `web/app/dashboard/layout.tsx`.
+- **`web/app/volunteer/(tabs)/VolunteerShell.tsx`** — wraps volunteer tab pages; provides volunteer lang context.
+
+These are the injection points for context providers. If you add a new context that all admin or volunteer pages need, add it here.
+
 ### Page + View Pattern
 
 Every dashboard page follows a strict split:
 
-- **`page.tsx`** — async server component, fetches all data with `createAdminClient()`, sets `export const dynamic = 'force-dynamic'`, exports the page-specific TypeScript types (e.g. `ShiftWithRoster`), renders the `*View` component with typed props.
+- **`page.tsx`** — async server component, fetches all data with `createAdminClient()`, sets `export const dynamic = 'force-dynamic'` and calls `unstable_noStore()` (imported from `next/cache`) at the top of its fetch function, exports the page-specific TypeScript types (e.g. `ShiftWithRoster`), renders the `*View` component with typed props.
 - **`*View.tsx`** — `'use client'` component, receives all data as props, owns all interactivity and state, imports actions from `./actions`.
 
 Never fetch data in a `*View.tsx` — it receives everything from the page. Never put UI in `page.tsx` beyond rendering the View.
+
+Complex pages (e.g. volunteers detail, settings) co-locate additional components alongside `page.tsx` (e.g. `AddVolunteerModal.tsx`, `VolunteersTable.tsx`) and may split a very large `actions.ts` into multiple action files (e.g. `settingsActions.ts`). All action files are `'use server'`.
 
 Every `*View.tsx` uses a local `run()` helper for mutations (defined inline per-View — not importable because it closes over that View's `setError` and `router`):
 

@@ -57,6 +57,7 @@ jobs:
         if: >
           steps.task.outputs.found == 'true' &&
           (github.event.action == 'opened' || github.event.action == 'reopened')
+        continue-on-error: true
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
