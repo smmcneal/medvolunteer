@@ -497,7 +497,7 @@ export default function VolunteersTable({
                     <ChevronRight style={{ width: '15px', height: '15px', color: 'var(--text-faint)', flexShrink: 0, marginTop: '2px' }} />
                   </div>
 
-                  {/* Row 2: category badges + hours */}
+                  {/* Row 2: categories → flags → tags → locations + hours */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
                     {v.volunteer_categories.map(cat => {
                       const cs = getCatStyle(cat)
@@ -507,10 +507,33 @@ export default function VolunteersTable({
                         </span>
                       )
                     })}
-                    {v.active_flags.length > 0 && (
-                      <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '5px', background: v.active_flags[0].severity === 'critical' ? '#fef2f2' : v.active_flags[0].severity === 'warning' ? '#fffbeb' : '#eff6ff', color: v.active_flags[0].severity === 'critical' ? '#dc2626' : v.active_flags[0].severity === 'warning' ? '#f59e0b' : '#3b82f6' }}>
-                        {v.active_flags.length} flag{v.active_flags.length !== 1 ? 's' : ''}
+                    {v.active_flags.length > 0 && v.volunteer_categories.length > 0 && (
+                      <span style={{ color: '#d1d5db', fontSize: '11px' }}>·</span>
+                    )}
+                    {v.active_flags.slice(0, 2).map(flag => {
+                      const c = flag.severity === 'critical' ? '#dc2626' : flag.severity === 'warning' ? '#f59e0b' : '#3b82f6'
+                      return (
+                        <span key={flag.id} style={{ fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: c + '15', color: c, border: `1px solid ${c}33`, whiteSpace: 'nowrap' }}>
+                          {flag.name}
+                        </span>
+                      )
+                    })}
+                    {v.active_flags.length > 2 && (
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>+{v.active_flags.length - 2}</span>
+                    )}
+                    {v.tags.length > 0 && (v.volunteer_categories.length > 0 || v.active_flags.length > 0) && (
+                      <span style={{ color: '#d1d5db', fontSize: '11px' }}>·</span>
+                    )}
+                    {v.tags.map(tag => (
+                      <span key={tag.id} style={{ fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: tag.color + '1a', color: tag.color, border: `1px solid ${tag.color}33`, whiteSpace: 'nowrap' }}>
+                        {tag.name}
                       </span>
+                    ))}
+                    {v.locations.length > 0 && (v.volunteer_categories.length > 0 || v.active_flags.length > 0 || v.tags.length > 0) && (
+                      <span style={{ color: '#d1d5db', fontSize: '11px' }}>·</span>
+                    )}
+                    {v.locations.length > 0 && (
+                      <span style={{ fontSize: '11px', color: '#9098b1' }}>📍 {v.locations.join(' · ')}</span>
                     )}
                     {v.hours_this_month > 0 && (
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>
@@ -539,16 +562,6 @@ export default function VolunteersTable({
                     </div>
                   </div>
 
-                  {/* Tags */}
-                  {v.tags.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
-                      {v.tags.map(tag => (
-                        <span key={tag.id} style={{ fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: tag.color + '1a', color: tag.color, border: `1px solid ${tag.color}33` }}>
-                          {tag.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </Link>
             )
