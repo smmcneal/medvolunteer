@@ -29,7 +29,16 @@ jobs:
 
       - name: Check for migration changes
         id: guard
+        env:
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
         run: |
+          # Skip entirely if secrets are not configured yet
+          if [ -z "$SUPABASE_PROJECT_ID" ]; then
+            echo "SUPABASE_PROJECT_ID secret not set — skipping migrations."
+            echo "SHOULD_MIGRATE=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "SHOULD_MIGRATE=true" >> "$GITHUB_ENV"
           elif git diff --name-only HEAD~1 HEAD | grep -q '^supabase/migrations/'; then
@@ -49,14 +58,16 @@ jobs:
       - name: List pending migrations (dry run)
         if: env.SHOULD_MIGRATE == 'true' && github.event.inputs.dry_run == 'true'
         run: |
-          supabase db push --dry-run --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}"
+          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}"
+          supabase db push --dry-run
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Apply migrations
         if: env.SHOULD_MIGRATE == 'true' && github.event.inputs.dry_run != 'true'
         run: |
-          supabase db push --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}"
+          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}"
+          supabase db push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
