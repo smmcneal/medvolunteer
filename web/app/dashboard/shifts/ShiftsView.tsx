@@ -131,7 +131,8 @@ export default function ShiftsView({
   const [assignSearch, setAssignSearch] = useState('')
   const [showAssign, setShowAssign]     = useState(false)
   const [error, setError]               = useState<string | null>(null)
-  const [listFilter, setListFilter]     = useState<'upcoming' | 'past'>('upcoming')
+  const [listFilter, setListFilter]         = useState<'upcoming' | 'past'>('upcoming')
+  const [listCategoryFilter, setListCategoryFilter] = useState<string>('')
 
   // New Shift modal volunteer picker state
   const [createVolunteerIds, setCreateVolunteerIds] = useState<Set<string>>(new Set())
@@ -212,8 +213,12 @@ export default function ShiftsView({
 
   const listShifts = useMemo(() => {
     const now = new Date().toISOString()
-    return shifts.filter(s => listFilter === 'upcoming' ? s.start_time >= now : s.start_time < now)
-  }, [shifts, listFilter])
+    return shifts.filter(s => {
+      if (listFilter === 'upcoming' ? s.start_time < now : s.start_time >= now) return false
+      if (listCategoryFilter && !s.required_categories.includes(listCategoryFilter)) return false
+      return true
+    })
+  }, [shifts, listFilter, listCategoryFilter])
 
   // ── Assignable volunteers (exclude already assigned) ──────────
 
@@ -564,19 +569,54 @@ export default function ShiftsView({
 
           {view === 'list' && (
             <div>
-              <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
-                {(['upcoming', 'past'] as const).map(f => (
-                  <button key={f} onClick={() => setListFilter(f)} className="shift-view-toggle-btn" style={{
-                    padding: '6px 16px', borderRadius: '7px', cursor: 'pointer',
-                    background: listFilter === f ? TEAL : 'var(--surface-card)',
-                    color: listFilter === f ? 'white' : 'var(--text-secondary)',
-                    border: listFilter === f ? 'none' : '1px solid var(--surface-border)',
-                    fontSize: '13px', fontWeight: 600,
-                    boxShadow: listFilter === f ? '0 2px 8px rgba(0,172,193,0.2)' : 'none',
-                  }}>
-                    {t(f)}
-                  </button>
-                ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {(['upcoming', 'past'] as const).map(f => (
+                    <button key={f} onClick={() => setListFilter(f)} className="shift-view-toggle-btn" style={{
+                      padding: '6px 16px', borderRadius: '7px', cursor: 'pointer',
+                      background: listFilter === f ? TEAL : 'var(--surface-card)',
+                      color: listFilter === f ? 'white' : 'var(--text-secondary)',
+                      border: listFilter === f ? 'none' : '1px solid var(--surface-border)',
+                      fontSize: '13px', fontWeight: 600,
+                      boxShadow: listFilter === f ? '0 2px 8px rgba(0,172,193,0.2)' : 'none',
+                    }}>
+                      {t(f)}
+                    </button>
+                  ))}
+                </div>
+                {categories.length > 0 && (
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => setListCategoryFilter('')}
+                      className="shift-view-toggle-btn"
+                      style={{
+                        padding: '6px 14px', borderRadius: '7px', cursor: 'pointer',
+                        background: listCategoryFilter === '' ? NAVY : 'var(--surface-card)',
+                        color: listCategoryFilter === '' ? 'white' : 'var(--text-secondary)',
+                        border: listCategoryFilter === '' ? 'none' : '1px solid var(--surface-border)',
+                        fontSize: '12px', fontWeight: 600,
+                      }}
+                    >
+                      {t('all_categories')}
+                    </button>
+                    {categories.map(cat => (
+                      <button
+                        key={cat.slug}
+                        onClick={() => setListCategoryFilter(listCategoryFilter === cat.slug ? '' : cat.slug)}
+                        className="shift-view-toggle-btn"
+                        style={{
+                          padding: '6px 14px', borderRadius: '7px', cursor: 'pointer',
+                          background: listCategoryFilter === cat.slug ? (CAT_COLORS[cat.slug] ?? NAVY) : 'var(--surface-card)',
+                          color: listCategoryFilter === cat.slug ? 'white' : 'var(--text-secondary)',
+                          border: listCategoryFilter === cat.slug ? 'none' : '1px solid var(--surface-border)',
+                          fontSize: '12px', fontWeight: 600,
+                        }}
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {listShifts.length === 0 ? (

@@ -107,7 +107,7 @@ export async function doThing(input) {
 }
 ```
 
-Errors are thrown (caught by the client `run()` wrapper in ShiftsView / similar). `revalidatePath` is always called after mutations.
+Errors are thrown (caught by the client `run()` wrapper in ShiftsView / similar). `revalidatePath` is always called after mutations — pass the full page path, e.g. `revalidatePath('/dashboard/shifts')`.
 
 ### API Routes
 
@@ -181,7 +181,7 @@ When a branch is pushed or a PR is opened/merged, the system updates the Notion 
 2. **`notion-pr-sync.yml`** — PR opened/merged/closed → updates task status in Notion
 3. **`/api/webhooks/vercel`** — deploy succeeded → moves task to "Testing" + stores preview URL in GitHub Link field
 
-Task ID is extracted from the branch name (must contain `DEV-###`). All steps silently no-op if Notion env vars are absent.
+Task ID is extracted from the branch name (must contain `DEV-###`). **Branch names must follow `feat/DEV-###-slug` — the entire pipeline (hook → PR sync → webhook) fires only if the branch name contains a `DEV-###` token.** All steps silently no-op if Notion env vars are absent.
 
 ### i18n
 
@@ -215,15 +215,6 @@ Update `.mex/ROUTER.md` project state and any `.mex/` files that are now out of 
 
 ## Navigation
 
-At the start of every session, read `.mex/ROUTER.md` before doing anything else.
+At the start of every session, read `.mex/ROUTER.md` before doing anything else. It contains current project state, the routing table for which context files to load, and the full behavioural contract (CONTEXT → BUILD → VERIFY → DEBUG → GROW). `.mex/AGENTS.md` is an unfilled template — skip it.
 
 **`.mex/` file status**: Only `ROUTER.md` is populated. All `.mex/context/` files (`architecture.md`, `conventions.md`, `decisions.md`, `setup.md`, `stack.md`) and `patterns/INDEX.md` are unpopulated templates — skip them until filled.
-
-### Task loop (from ROUTER.md)
-
-For every task:
-1. **CONTEXT** — Check `patterns/INDEX.md` for a matching pattern. Load relevant `context/` files from ROUTER's routing table.
-2. **BUILD** — Do the work. If deviating from an established pattern, say so before writing code.
-3. **VERIFY** — Run the Verify Checklist from `context/conventions.md` item by item once populated.
-4. **DEBUG** — If something breaks, check `patterns/INDEX.md` for a debug pattern.
-5. **GROW** — Create or update a pattern in `.mex/patterns/` for this task type. Update ROUTER.md project state if the work was significant.
