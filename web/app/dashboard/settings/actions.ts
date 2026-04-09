@@ -91,6 +91,23 @@ export async function deleteHoliday(holidayId: string) {
   revalidatePath('/dashboard/shifts')
 }
 
+export async function bulkAddHolidays(holidays: { name: string; date: string; is_recurring: boolean }[]) {
+  if (holidays.length === 0) return
+  const admin = createAdminClient()
+  const { data: org } = await admin.from('organizations').select('id').limit(1).single()
+  if (!org) throw new Error('No organization found')
+  const { data: existing } = await admin.from('org_holidays').select('date, name').eq('org_id', org.id)
+  const existingKeys = new Set((existing ?? []).map(h => `${h.date}|${h.name}`))
+  const toInsert = holidays
+    .filter(h => !existingKeys.has(`${h.date}|${h.name}`))
+    .map(h => ({ org_id: org.id, name: h.name, date: h.date, is_recurring: h.is_recurring }))
+  if (toInsert.length === 0) return
+  const { error } = await admin.from('org_holidays').insert(toInsert)
+  if (error) throw new Error(error.message)
+  revalidatePath('/dashboard/settings')
+  revalidatePath('/dashboard/shifts')
+}
+
 // ─── Form Automation ──────────────────────────────────────────────────────────
 
 export async function saveFormAutomationRule(input: {

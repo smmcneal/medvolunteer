@@ -12,6 +12,7 @@ import {
   updateCategoryDescriptions,
   addHoliday,
   deleteHoliday,
+  bulkAddHolidays,
   saveFormAutomationRule,
   deleteFormAutomationRule,
   saveAutoMessageRule,
@@ -926,6 +927,28 @@ function AutomationTab({
 
 // ─── Holidays Tab ─────────────────────────────────────────────────────────────
 
+const PRESET_HOLIDAYS: { name: string; date: string; is_recurring: boolean; group: string }[] = [
+  // US Federal — fixed-date (recurring)
+  { name: 'New Year\'s Day',    date: '2026-01-01', is_recurring: true,  group: 'Federal' },
+  { name: 'Juneteenth',         date: '2026-06-19', is_recurring: true,  group: 'Federal' },
+  { name: 'Independence Day',   date: '2026-07-04', is_recurring: true,  group: 'Federal' },
+  { name: 'Veterans Day',       date: '2026-11-11', is_recurring: true,  group: 'Federal' },
+  { name: 'Christmas Day',      date: '2026-12-25', is_recurring: true,  group: 'Federal' },
+  // US Federal — floating (year-specific, not recurring)
+  { name: 'MLK Jr. Day',        date: '2026-01-19', is_recurring: false, group: 'Federal' },
+  { name: 'Presidents\' Day',   date: '2026-02-16', is_recurring: false, group: 'Federal' },
+  { name: 'Memorial Day',       date: '2026-05-25', is_recurring: false, group: 'Federal' },
+  { name: 'Labor Day',          date: '2026-09-07', is_recurring: false, group: 'Federal' },
+  { name: 'Columbus Day',       date: '2026-10-12', is_recurring: false, group: 'Federal' },
+  { name: 'Thanksgiving',       date: '2026-11-26', is_recurring: false, group: 'Federal' },
+  // Religious / widely observed
+  { name: 'Ash Wednesday',      date: '2026-02-18', is_recurring: false, group: 'Religious' },
+  { name: 'Good Friday',        date: '2026-04-03', is_recurring: false, group: 'Religious' },
+  { name: 'Easter Sunday',      date: '2026-04-05', is_recurring: false, group: 'Religious' },
+  { name: 'Christmas Eve',      date: '2026-12-24', is_recurring: true,  group: 'Religious' },
+  { name: 'New Year\'s Eve',    date: '2026-12-31', is_recurring: true,  group: 'Religious' },
+]
+
 function HolidaysTab({ initialHolidays }: { initialHolidays: OrgHoliday[] }) {
   const [holidays, setHolidays] = useState<OrgHoliday[]>(initialHolidays)
   const [name, setName] = useState('')
@@ -933,6 +956,8 @@ function HolidaysTab({ initialHolidays }: { initialHolidays: OrgHoliday[] }) {
   const [isRecurring, setIsRecurring] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [showPresets, setShowPresets] = useState(false)
+  const [selectedPresets, setSelectedPresets] = useState<Set<number>>(() => new Set(PRESET_HOLIDAYS.map((_, i) => i)))
 
   function handleAdd() {
     if (!name.trim() || !date) return
@@ -946,6 +971,37 @@ function HolidaysTab({ initialHolidays }: { initialHolidays: OrgHoliday[] }) {
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to add holiday')
       }
+    })
+  }
+
+  function handleBulkAdd() {
+    const selected = PRESET_HOLIDAYS.filter((_, i) => selectedPresets.has(i))
+    if (selected.length === 0) return
+    setError(null)
+    startTransition(async () => {
+      try {
+        await bulkAddHolidays(selected)
+        setShowPresets(false)
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to add holidays')
+      }
+    })
+  }
+
+  function togglePreset(i: number) {
+    setSelectedPresets(prev => {
+      const next = new Set(prev)
+      next.has(i) ? next.delete(i) : next.add(i)
+      return next
+    })
+  }
+
+  function toggleGroup(group: string, indices: number[]) {
+    const allSelected = indices.every(i => selectedPresets.has(i))
+    setSelectedPresets(prev => {
+      const next = new Set(prev)
+      indices.forEach(i => allSelected ? next.delete(i) : next.add(i))
+      return next
     })
   }
 
@@ -974,6 +1030,56 @@ function HolidaysTab({ initialHolidays }: { initialHolidays: OrgHoliday[] }) {
       />
 
       {error && <ErrorBanner msg={error} />}
+
+      {/* Common holidays preset panel */}
+      <div style={{ marginBottom: '12px' }}>
+        <button
+          onClick={() => setShowPresets(v => !v)}
+          style={{ ...ghostBtnSm, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <span>{showPresets ? '▾' : '▸'}</span>
+          Add Common Holidays
+        </button>
+        {showPresets && (
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px', background: '#f9fafb', marginTop: '8px' }}>
+            <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '14px' }}>
+              Select holidays to add. Fixed-date holidays (New Year&apos;s Day, July 4th, etc.) are marked recurring. Floating holidays (MLK Day, Thanksgiving, etc.) are added for 2026 only — update dates each year.
+            </p>
+            {(['Federal', 'Religious'] as const).map(group => {
+              const groupItems = PRESET_HOLIDAYS.map((h, i) => ({ h, i })).filter(({ h }) => h.group === group)
+              const groupIndices = groupItems.map(({ i }) => i)
+              const allChecked = groupIndices.every(i => selectedPresets.has(i))
+              return (
+                <div key={group} style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={allChecked} onChange={() => toggleGroup(group, groupIndices)} />
+                    {group} Holidays
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '6px', paddingLeft: '4px' }}>
+                    {groupItems.map(({ h, i }) => (
+                      <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', color: '#374151', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={selectedPresets.has(i)} onChange={() => togglePreset(i)} />
+                        <span style={{ flex: 1 }}>{h.name}</span>
+                        <span style={{ fontSize: '11px', color: '#9ca3af' }}>{h.is_recurring ? 'recurring' : h.date.slice(5).replace('-', '/')}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <button
+                onClick={handleBulkAdd}
+                disabled={selectedPresets.size === 0 || isPending}
+                style={{ ...primaryBtn, opacity: selectedPresets.size === 0 ? 0.5 : 1, cursor: selectedPresets.size === 0 ? 'not-allowed' : 'pointer' }}
+              >
+                Add Selected ({selectedPresets.size})
+              </button>
+              <button onClick={() => setShowPresets(false)} style={ghostBtnSm}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Add form */}
       <div style={{

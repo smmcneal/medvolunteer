@@ -1,0 +1,161 @@
+name: Auto Build Features
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # nightly 3am UTC (1hr after bug workflow)
+  workflow_dispatch:
+    inputs:
+      max_tasks:
+        description: 'Max features to build this run (default: 2)'
+        default: '2'
+        required: false
+
+jobs:
+  auto-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Install repo dependencies
+        run: cd web && npm ci
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check all bugs are resolved
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
+        run: |
+          if ! node scripts/notion-sync.cjs bugs-clear; then
+            echo "Bug backlog not clear — skipping feature automation."
+            exit 0
+          fi
+
+      - name: Build features
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
+          NOTION_FEATURE_REQUESTS_DB_ID: ${{ secrets.NOTION_FEATURE_REQUESTS_DB_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          MAX_TASKS: ${{ github.event.inputs.max_tasks || '2' }}
+        run: |
+          set -euo pipefail
+
+          # Re-check bugs-clear (in case the gate step was skipped via exit 0)
+          if ! node scripts/notion-sync.cjs bugs-clear 2>/dev/null; then
+            echo "Bug backlog not clear — skipping feature automation."
+            exit 0
+          fi
+
+          # Fetch triaged feature list
+          node scripts/notion-sync.cjs list-ready-features --max "$MAX_TASKS" > /tmp/features.json
+          TASK_COUNT=$(python3 -c "import json; print(len(json.load(open('/tmp/features.json'))))")
+          echo "Features to process: $TASK_COUNT"
+
+          if [ "$TASK_COUNT" -eq 0 ]; then
+            echo "No Ready features — nothing to do."
+            exit 0
+          fi
+
+          for i in $(seq 0 $((TASK_COUNT - 1))); do
+            TASK_ID=$(python3    -c "import json; print(json.load(open('/tmp/features.json'))[$i].get('taskId',''))")
+            TITLE=$(python3      -c "import json; print(json.load(open('/tmp/features.json'))[$i].get('title',''))")
+            DESCRIPTION=$(python3 -c "import json; print(json.load(open('/tmp/features.json'))[$i].get('description',''))")
+
+            if [ -z "$TASK_ID" ] || [ -z "$TITLE" ]; then
+              echo "Skipping task $i — missing taskId or title"
+              continue
+            fi
+
+            echo ""
+            echo "=== [$((i+1))/$TASK_COUNT] $TASK_ID: $TITLE ==="
+
+            SLUG=$(echo "$TITLE" \
+              | tr '[:upper:]' '[:lower:]' \
+              | sed 's/[^a-z0-9]/-/g' \
+              | sed 's/-\+/-/g' \
+              | sed 's/^-\|-$//g' \
+              | cut -c1-50)
+            BRANCH="feat/${TASK_ID}-${SLUG}"
+
+            git checkout main
+            git pull origin main
+
+            git push origin --delete "$BRANCH" 2>/dev/null || true
+            git branch -D "$BRANCH" 2>/dev/null || true
+
+            # Mark In Progress in Feature Requests DB
+            node scripts/notion-sync.cjs feature-status "$TASK_ID" "In Progress"
+
+            git checkout -b "$BRANCH"
+
+            PROMPT_FILE=$(mktemp /tmp/prompt-XXXXXX.txt)
+            printf '%s\n' \
+              "You are implementing a feature request in the MedVolunteer codebase." \
+              "Working directory: web/" \
+              "" \
+              "Feature ID: $TASK_ID" \
+              "Title: $TITLE" \
+              "Description: $DESCRIPTION" \
+              "" \
+              "Instructions:" \
+              "1. Read CLAUDE.md first for project patterns and conventions" \
+              "2. Implement this feature following existing patterns (page/view split, server actions, admin client for mutations)" \
+              "3. All user-visible strings must go through useT() or useAdminT() — no hardcoded English in JSX" \
+              "4. Keep the change focused — implement exactly what the feature requests, no extras" \
+              "5. Do NOT run git or npm commands — only edit source files" \
+              > "$PROMPT_FILE"
+
+            claude -p "$(cat "$PROMPT_FILE")" --dangerously-skip-permissions || true
+            rm -f "$PROMPT_FILE"
+
+            if git diff --quiet && git diff --cached --quiet; then
+              echo "$TASK_ID: No changes made — reverting to Ready"
+              git checkout main
+              git branch -D "$BRANCH"
+              node scripts/notion-sync.cjs feature-status "$TASK_ID" "Ready"
+              continue
+            fi
+
+            COMMIT_MSG="feat($TASK_ID): $(echo "$TITLE" | tr '[:upper:]' '[:lower:]')"
+            git add -A
+            git commit -m "$COMMIT_MSG"
+            git push origin "$BRANCH"
+
+            PR_TITLE="feat: $TASK_ID $TITLE"
+            PR_BODY="Automated implementation of \`$TASK_ID\`: $TITLE"
+            if ! gh pr create \
+                --title "$PR_TITLE" \
+                --body "$PR_BODY" \
+                --base main \
+                --head "$BRANCH"; then
+              echo "$TASK_ID: PR creation failed — reverting to Ready"
+              git checkout main
+              node scripts/notion-sync.cjs feature-status "$TASK_ID" "Ready"
+              continue
+            fi
+
+            echo "$TASK_ID: PR opened ✓"
+            git checkout main
+          done

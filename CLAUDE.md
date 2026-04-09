@@ -43,6 +43,8 @@ Copy `web/.env.example` → `web/.env.local` for local dev. Key split:
 | `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` | Admin client (bypasses RLS) |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | `.env.local` | Email sending |
 | `NOTION_TOKEN` / `NOTION_DEV_TASKS_DB_ID` | `.env.local` + GitHub Secrets | Notion automation |
+| `NOTION_FEATURE_REQUESTS_DB_ID` | GitHub Secrets only | Auto-build CI reads triaged features from this DB |
+| `ANTHROPIC_API_KEY` | GitHub Secrets only | Auto-build CI invokes Claude Code to implement features |
 | `VERCEL_WEBHOOK_SECRET` | `.env.local` | Webhook signature verification |
 | `CRON_SECRET` | Vercel env + `.env.local` | Protects `/api/cron/*` routes |
 | `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_ID` | GitHub Secrets only | CI migration runner |
@@ -61,6 +63,7 @@ scripts/      notion-sync.cjs — Notion API helper used by hooks/CI
 .mex/         Project memory submodule (patterns, context, drift detection)
 .github/      supabase-migrate.yml — auto-applies migrations on merge to main (runs check job on every push; migrate job only when supabase/migrations/** changed)
               notion-pr-sync.yml — PR events → Notion Dev Tasks status
+              auto-build-features.yml — nightly (3am UTC) Claude Code agent that reads "Ready" tasks from Notion Feature Requests DB and opens PRs. Skips if bug backlog is not clear. Branch names follow feat/DEV-###-slug. Requires ANTHROPIC_API_KEY, NOTION_FEATURE_REQUESTS_DB_ID, GH_PAT secrets.
 ```
 
 ### Route Structure

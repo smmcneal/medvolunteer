@@ -89,9 +89,9 @@ async function setUrl(pageId, field, url) {
   return res.json();
 }
 
-/** Extract DEV-### from a string (branch name, PR title, commit message) */
+/** Extract DEV-### or AB-##### from a string (branch name, PR title, commit message) */
 function extractTaskId(str = '') {
-  const match = str.match(/DEV-\d+/i);
+  const match = str.match(/(?:DEV|AB)-\d+/i);
   return match ? match[0].toUpperCase() : null;
 }
 
@@ -267,6 +267,108 @@ async function main() {
       break;
     }
 
+    case 'bugs-clear': {
+      // Exit 0 if no bugs are in flight (Ready/In Progress/Code Review), exit 1 if any exist
+      const { token, dbId } = getEnv();
+      const res = await fetch(`${NOTION_BASE}/databases/${dbId}/query`, {
+        method: 'POST',
+        headers: headers(token),
+        body: JSON.stringify({
+          filter: {
+            or: [
+              { property: 'Status', select: { equals: 'Ready' } },
+              { property: 'Status', select: { equals: 'In Progress' } },
+              { property: 'Status', select: { equals: 'Code Review' } },
+            ],
+          },
+          page_size: 1,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Notion query failed (${res.status}): ${err}`);
+      }
+      const data = await res.json();
+      const count = data.results?.length ?? 0;
+      if (count > 0) {
+        console.log(`[notion-sync] ${count} bug(s) still in flight — feature automation blocked.`);
+        process.exit(1);
+      }
+      console.log('[notion-sync] All bugs clear — OK to process features.');
+      process.exit(0);
+    }
+
+    case 'list-ready-features': {
+      const maxIdx = args.indexOf('--max');
+      const max = maxIdx >= 0 ? parseInt(args[maxIdx + 1], 10) : 3;
+      const featureDbId = process.env.NOTION_FEATURE_REQUESTS_DB_ID;
+      if (!featureDbId) {
+        console.error('[notion-sync] Missing NOTION_FEATURE_REQUESTS_DB_ID env var.');
+        process.exit(1);
+      }
+      const { token } = getEnv();
+      const res = await fetch(`${NOTION_BASE}/databases/${featureDbId}/query`, {
+        method: 'POST',
+        headers: headers(token),
+        body: JSON.stringify({
+          filter: {
+            property: 'Status',
+            select: { equals: 'Ready' },
+          },
+          sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Notion query failed (${res.status}): ${err}`);
+      }
+      const data = await res.json();
+      const pages = data.results ?? [];
+
+      const PRIORITY_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+      pages.sort((a, b) => {
+        const pa = PRIORITY_ORDER[a.properties['Priority']?.select?.name] ?? 4;
+        const pb = PRIORITY_ORDER[b.properties['Priority']?.select?.name] ?? 4;
+        return pa - pb;
+      });
+
+      const tasks = pages.slice(0, max).map(page => {
+        const titleParts = page.properties['Task ID']?.title ?? [];
+        const fullTitle = titleParts.map(t => t.plain_text).join('');
+        const taskId = extractTaskId(fullTitle) ?? '';
+        const title = fullTitle.replace(/^AB-\d+:\s*/i, '').trim();
+        const descParts = page.properties['Component/File']?.rich_text ?? [];
+        const description = descParts.map(t => t.plain_text).join('').trim();
+        return { pageId: page.id, taskId, title, description };
+      }).filter(t => t.taskId !== '');
+
+      console.log(JSON.stringify(tasks, null, 2));
+      break;
+    }
+
+    case 'feature-status': {
+      // Update status on a Feature Requests task (uses NOTION_FEATURE_REQUESTS_DB_ID)
+      const [taskId, status] = args;
+      if (!taskId || !status) { console.error('Usage: notion-sync.cjs feature-status AB-00001 "In Progress"'); process.exit(1); }
+      const featureDbId = process.env.NOTION_FEATURE_REQUESTS_DB_ID;
+      if (!featureDbId) { console.error('[notion-sync] Missing NOTION_FEATURE_REQUESTS_DB_ID env var.'); process.exit(1); }
+      const { token } = getEnv();
+      const res = await fetch(`${NOTION_BASE}/databases/${featureDbId}/query`, {
+        method: 'POST',
+        headers: headers(token),
+        body: JSON.stringify({
+          filter: { property: 'Task ID', title: { contains: taskId } },
+        }),
+      });
+      if (!res.ok) throw new Error(`Notion query failed (${res.status})`);
+      const data = await res.json();
+      const page = data.results?.[0];
+      if (!page) { console.error(`Task not found: ${taskId}`); process.exit(1); }
+      await setStatus(page.id, status);
+      console.log(`[notion-sync] ${taskId} → Status: ${status}`);
+      break;
+    }
+
     default:
       console.log(`
 notion-sync.cjs — Notion ↔ MedVolunteer sync
@@ -279,7 +381,10 @@ Commands:
   deploy  DEV-001 <preview-url>     Set deploy preview URL
   branch                            Auto-detect branch → set In Progress
   hook                              PostToolUse stdin mode (Claude Code hook)
-  list-ready [--max 3]              List Ready tasks, Priority-triaged, as JSON
+  list-ready [--max 3]              List Ready tasks (Dev Tasks DB), Priority-triaged, as JSON
+  bugs-clear                        Exit 0 if no bugs in Ready/In Progress/Code Review, else exit 1
+  list-ready-features [--max 3]     List Ready tasks (Feature Requests DB), as JSON
+  feature-status AB-00001 "In Progress"  Update status in Feature Requests DB
 
 Status values: Backlog | Ready | In Progress | Code Review | Testing | Done
       `.trim());
