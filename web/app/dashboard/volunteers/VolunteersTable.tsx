@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Search, ChevronUp, ChevronDown, ArrowRight, ChevronRight } from 'lucide-react'
+import { Search, ChevronDown, ArrowRight, ChevronRight } from 'lucide-react'
 import type { VolunteerRow } from './page'
 import type { VolunteerStatus, PipelinePhase, Category } from '@/types/database'
 import { useAdminT } from '@/lib/admin-lang'
@@ -38,7 +38,7 @@ function initials(first: string, last: string) {
   return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase()
 }
 
-type SortKey = 'name' | 'category' | 'status' | 'hours_this_month'
+type SortKey = 'name' | 'status' | 'hours_this_month' | 'pipeline_phase' | 'flag_severity' | 'tag_count' | 'location' | 'date_added'
 type SortDir = 'asc' | 'desc'
 
 const PALETTE = [
@@ -50,6 +50,33 @@ const PALETTE = [
   { bg: '#fefce8', text: '#a16207', ring: '#fef08a' },
   { bg: '#fff1f2', text: '#be123c', ring: '#fecdd3' },
   { bg: '#f8fafc', text: '#475569', ring: '#cbd5e1' },
+]
+
+const STATUS_ORDER: Record<VolunteerStatus, number> = {
+  volunteer: 0, prospect: 1, applicant: 2, inactive: 3,
+}
+
+const FLAG_SEVERITY_NUM: Record<'critical' | 'warning' | 'info', number> = {
+  critical: 0, warning: 1, info: 2,
+}
+
+function maxFlagSeverity(flags: VolunteerRow['active_flags']): number {
+  if (flags.length === 0) return 3
+  return Math.min(...flags.map(f => FLAG_SEVERITY_NUM[f.severity]))
+}
+
+type SortOption = { key: SortKey; dir: SortDir; label: string }
+
+const SORT_OPTIONS: SortOption[] = [
+  { key: 'name',             dir: 'asc',  label: 'Name A→Z' },
+  { key: 'name',             dir: 'desc', label: 'Name Z→A' },
+  { key: 'status',           dir: 'asc',  label: 'Status' },
+  { key: 'pipeline_phase',   dir: 'asc',  label: 'Pipeline phase' },
+  { key: 'flag_severity',    dir: 'asc',  label: 'Flag severity ↓' },
+  { key: 'tag_count',        dir: 'desc', label: 'Tag count ↓' },
+  { key: 'location',         dir: 'asc',  label: 'Location A→Z' },
+  { key: 'hours_this_month', dir: 'desc', label: 'Hours this month ↓' },
+  { key: 'date_added',       dir: 'desc', label: 'Date added ↓' },
 ]
 
 export default function VolunteersTable({
@@ -87,33 +114,44 @@ export default function VolunteersTable({
         v.email.toLowerCase().includes(q)
       )
     }
-    if (category) rows = rows.filter(v => v.volunteer_categories.includes(category as any))
+    if (category) rows = rows.filter(v => v.volunteer_categories.includes(category))
     if (status)   rows = rows.filter(v => v.status === status)
     if (location) rows = rows.filter(v => v.locations.some(l => l.toLowerCase().includes(location.toLowerCase())))
     rows.sort((a, b) => {
       let cmp = 0
-      if (sort.key === 'name')             cmp = `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
-      if (sort.key === 'category')         cmp = a.category.localeCompare(b.category)
-      if (sort.key === 'status')           cmp = a.status.localeCompare(b.status)
-      if (sort.key === 'hours_this_month') cmp = a.hours_this_month - b.hours_this_month
+      switch (sort.key) {
+        case 'name':
+          cmp = `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)
+          break
+        case 'status':
+          cmp = (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99)
+          break
+        case 'hours_this_month':
+          cmp = a.hours_this_month - b.hours_this_month
+          break
+        case 'pipeline_phase':
+          cmp = (PHASE_STEP[a.pipeline_phase] ?? 0) - (PHASE_STEP[b.pipeline_phase] ?? 0)
+          break
+        case 'flag_severity':
+          cmp = maxFlagSeverity(a.active_flags) - maxFlagSeverity(b.active_flags)
+          break
+        case 'tag_count':
+          cmp = a.tags.length - b.tags.length
+          break
+        case 'location': {
+          const aLoc = a.locations[0] ?? '\uffff'
+          const bLoc = b.locations[0] ?? '\uffff'
+          cmp = aLoc.localeCompare(bLoc)
+          break
+        }
+        case 'date_added':
+          cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          break
+      }
       return sort.dir === 'asc' ? cmp : -cmp
     })
     return rows
   }, [volunteers, search, category, status, location, sort])
-
-  function toggleSort(key: SortKey) {
-    setSort(prev => prev.key === key
-      ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-      : { key, dir: 'asc' }
-    )
-  }
-
-  function SortIcon({ col }: { col: SortKey }) {
-    if (sort.key !== col) return <ChevronUp style={{ width: '11px', height: '11px', color: '#d1d5db' }} />
-    return sort.dir === 'asc'
-      ? <ChevronUp   style={{ width: '11px', height: '11px', color: 'var(--teal)' }} />
-      : <ChevronDown style={{ width: '11px', height: '11px', color: 'var(--teal)' }} />
-  }
 
   const selectStyle: React.CSSProperties = {
     padding: '7px 10px', borderRadius: '8px',
@@ -213,6 +251,12 @@ export default function VolunteersTable({
           </div>
         )}
 
+        {/* Sort */}
+        <SortDropdown
+          sort={sort}
+          onChange={(key, dir) => setSort({ key, dir })}
+        />
+
         {/* Clear filters */}
         {hasFilters && (
           <button
@@ -250,14 +294,15 @@ export default function VolunteersTable({
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '940px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--surface-border-sub)' }}>
-                <ThFirst onClick={() => toggleSort('name')} label={t('col_name')} sortIcon={<SortIcon col="name" />} active={sort.key === 'name'} />
-                <Th onClick={() => toggleSort('category')} label={t('col_category')} sortIcon={<SortIcon col="category" />} active={sort.key === 'category'} />
-                <Th onClick={() => toggleSort('status')} label={t('col_status')} sortIcon={<SortIcon col="status" />} active={sort.key === 'status'} />
+                {/* TODO: remove in Task 2 — column-header sort replaced by SortDropdown */}
+                <ThFirst label={t('col_name')} />
+                <Th label={t('col_category')} />
+                <Th label={t('col_status')} />
                 <Th label={t('col_pipeline')} />
                 <Th label={t('col_tags')} />
                 <Th label={t('col_flags')} />
                 <Th label={t('col_locations')} />
-                <Th onClick={() => toggleSort('hours_this_month')} label={t('col_hours')} sortIcon={<SortIcon col="hours_this_month" />} active={sort.key === 'hours_this_month'} />
+                <Th label={t('col_hours')} />
                 <th style={{ padding: '10px 16px', width: '36px' }} />
               </tr>
             </thead>
@@ -481,6 +526,43 @@ export default function VolunteersTable({
         </div>
 
       </>)}
+    </div>
+  )
+}
+
+function SortDropdown({
+  sort,
+  onChange,
+}: {
+  sort: { key: SortKey; dir: SortDir }
+  onChange: (key: SortKey, dir: SortDir) => void
+}) {
+  const value = `${sort.key}__${sort.dir}`
+  return (
+    <div style={{ position: 'relative' }}>
+      <select
+        value={value}
+        onChange={e => {
+          const [k, d] = e.target.value.split('__')
+          onChange(k as SortKey, d as SortDir)
+        }}
+        style={{
+          padding: '7px 10px', borderRadius: '8px',
+          border: '1px solid var(--surface-border)',
+          fontSize: '13px', color: 'var(--text-secondary)',
+          background: 'white', cursor: 'pointer',
+          appearance: 'none', WebkitAppearance: 'none',
+          paddingRight: '28px',
+          outline: 'none',
+        }}
+      >
+        {SORT_OPTIONS.map(opt => (
+          <option key={`${opt.key}__${opt.dir}`} value={`${opt.key}__${opt.dir}`}>
+            Sort: {opt.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', width: '11px', height: '11px', color: '#9098b1', pointerEvents: 'none' }} />
     </div>
   )
 }
