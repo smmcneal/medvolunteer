@@ -44,7 +44,7 @@
 }
 
 input, select, textarea, button {
-  font-family: inherit;
+  font-family: var(--font-body);
 }
 
 body {
