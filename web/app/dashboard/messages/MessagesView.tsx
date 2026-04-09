@@ -528,6 +528,26 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
               )}
             </div>
 
+            {/* Template selector */}
+            {templates.length > 0 && (
+              <div style={{ marginBottom: '18px' }}>
+                <label style={labelStyle}>{t('templates')}</label>
+                <select
+                  value=""
+                  onChange={e => {
+                    const tmpl = templates.find(t => t.id === e.target.value)
+                    if (tmpl) useTemplateInCompose(tmpl)
+                  }}
+                  style={fieldStyle}
+                >
+                  <option value="">{t('select_template_placeholder') ?? 'Select a template…'}</option>
+                  {templates.map(tmpl => (
+                    <option key={tmpl.id} value={tmpl.id}>{tmpl.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Subject */}
             <div style={{ marginBottom: '14px' }}>
               <label style={labelStyle}>{t('subject')}</label>
