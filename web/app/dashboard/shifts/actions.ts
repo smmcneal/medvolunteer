@@ -12,6 +12,7 @@ export async function createShift(data: {
   start_time: string
   end_time: string
   required_count: number
+  required_categories?: string[]
   notes: string
   volunteer_ids?: string[]
 }): Promise<{ shiftId: string }> {
@@ -70,6 +71,7 @@ export async function createRecurringShifts(data: {
   start_time: string
   end_time: string
   required_count: number
+  required_categories?: string[]
   notes: string
 }, frequency: 'weekly' | 'biweekly' | 'monthly', endDate: string | null) {
   const admin = createAdminClient()
@@ -172,6 +174,7 @@ export async function updateShift(id: string, data: {
   start_time?: string
   end_time?: string
   required_count?: number
+  required_categories?: string[]
   notes?: string
 }) {
   const admin = createAdminClient()

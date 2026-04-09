@@ -172,6 +172,7 @@ export interface Shift {
   end_time: string
   required_count: number
   role_requirements: unknown[]
+  required_categories: string[]
   notes: string | null
   recurrence_rule: string | null
   recurrence_group_id: string | null

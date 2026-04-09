@@ -67,7 +67,7 @@ export default async function ShiftsPage() {
 
   const { data: volunteer } = await admin
     .from('volunteers')
-    .select('id, org_id, status, pipeline_phase')
+    .select('id, org_id, status, pipeline_phase, volunteer_categories')
     .eq('user_id', user.id)
     .single()
 
@@ -134,7 +134,7 @@ export default async function ShiftsPage() {
     const now = new Date().toISOString()
     const { data: upcomingShifts } = await admin
       .from('shifts')
-      .select('id, name, start_time, end_time, location_id, notes, required_count, locations(id, name, lat, lng, geofence_radius_meters)')
+      .select('id, name, start_time, end_time, location_id, notes, required_count, required_categories, locations(id, name, lat, lng, geofence_radius_meters)')
       .eq('org_id', volunteer.org_id)
       .gt('start_time', now)
       .order('start_time', { ascending: true })
@@ -157,11 +157,17 @@ export default async function ShiftsPage() {
 
       const assignedShiftIds = new Set(enriched.map(a => a.shift_id))
 
+      const volunteerCategories: string[] = (volunteer as any).volunteer_categories ?? []
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       availableShifts = (allShifts as any[])
         .filter(s => {
           const taken = countByShift[s.id] ?? 0
-          return taken < s.required_count && !assignedShiftIds.has(s.id)
+          if (taken >= s.required_count || assignedShiftIds.has(s.id)) return false
+          // Category filter: if shift restricts to categories, volunteer must match one
+          const requiredCats: string[] = s.required_categories ?? []
+          if (requiredCats.length > 0 && !volunteerCategories.some((c: string) => requiredCats.includes(c))) return false
+          return true
         })
         .map(s => ({
           id: s.id,

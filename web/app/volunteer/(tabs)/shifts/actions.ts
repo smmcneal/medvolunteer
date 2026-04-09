@@ -89,7 +89,7 @@ export async function volunteerSignUpForShift(shiftId: string): Promise<void> {
 
   const { data: volunteer } = await admin
     .from('volunteers')
-    .select('id, status, pipeline_phase, org_id')
+    .select('id, status, pipeline_phase, org_id, volunteer_categories')
     .eq('user_id', user.id)
     .single()
 
@@ -100,12 +100,18 @@ export async function volunteerSignUpForShift(shiftId: string): Promise<void> {
 
   const { data: shift } = await admin
     .from('shifts')
-    .select('id, start_time, required_count, org_id')
+    .select('id, start_time, required_count, org_id, required_categories')
     .eq('id', shiftId)
     .eq('org_id', volunteer.org_id)
     .single()
 
   if (!shift) throw new Error('Shift not found')
+
+  const requiredCats: string[] = (shift as any).required_categories ?? []
+  const volunteerCats: string[] = (volunteer as any).volunteer_categories ?? []
+  if (requiredCats.length > 0 && !volunteerCats.some((c: string) => requiredCats.includes(c))) {
+    throw new Error('You are not eligible to sign up for this shift')
+  }
   if (new Date(shift.start_time) <= new Date()) throw new Error('Cannot sign up for a shift that has already started')
 
   const { data: existing } = await admin
@@ -144,7 +150,7 @@ export async function volunteerMoveShift(
   if (!user) throw new Error('Not authenticated')
 
   const admin = createAdminClient()
-  const { data: volunteer } = await admin.from('volunteers').select('id, org_id, status, pipeline_phase').eq('user_id', user.id).single()
+  const { data: volunteer } = await admin.from('volunteers').select('id, org_id, status, pipeline_phase, volunteer_categories').eq('user_id', user.id).single()
   if (!volunteer) throw new Error('Volunteer not found')
   if (volunteer.status !== 'volunteer') throw new Error('Only active volunteers can change shifts')
 
@@ -156,9 +162,16 @@ export async function volunteerMoveShift(
   if (new Date() >= shiftStart) throw new Error('Cannot move a shift that has already started')
 
   // Verify new shift exists, belongs to org, is in the future, and has space
-  const { data: newShift } = await admin.from('shifts').select('id, start_time, required_count, org_id').eq('id', newShiftId).eq('org_id', volunteer.org_id).single()
+  const { data: newShift } = await admin.from('shifts').select('id, start_time, required_count, org_id, required_categories').eq('id', newShiftId).eq('org_id', volunteer.org_id).single()
   if (!newShift) throw new Error('Shift not found')
   if (new Date(newShift.start_time) <= new Date()) throw new Error('Cannot move to a shift that has already started')
+
+  const newRequiredCats: string[] = (newShift as any).required_categories ?? []
+  const volunteerCats: string[] = (volunteer as any).volunteer_categories ?? []
+  if (newRequiredCats.length > 0 && !volunteerCats.some((c: string) => newRequiredCats.includes(c))) {
+    throw new Error('You are not eligible for that shift')
+  }
+
   const { count } = await admin.from('shift_assignments').select('id', { count: 'exact', head: true }).eq('shift_id', newShiftId).neq('status', 'cancelled')
   if ((count ?? 0) >= newShift.required_count) throw new Error('That shift is now full')
 
