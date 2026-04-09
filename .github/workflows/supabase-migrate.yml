@@ -23,24 +23,29 @@ on:
         type: boolean
 
 jobs:
-  # Always runs so the workflow never reports "No jobs were run" (which GitHub
-  # marks as a failure). Outputs whether migration files were touched so the
-  # migrate job can decide whether to proceed.
+  # Runs on every push to prevent "No jobs were run" (which GitHub marks as a
+  # workflow failure). Uses git diff to check whether migration files changed.
   check:
     runs-on: ubuntu-latest
     outputs:
-      should_migrate: ${{ steps.check.outputs.should_migrate }}
+      should_migrate: ${{ steps.diff.outputs.should_migrate }}
     steps:
-      - name: Check for migration file changes
-        id: check
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect migration changes
+        id: diff
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || \
-             echo '${{ toJson(github.event.commits) }}' | grep -q 'supabase/migrations/'; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_migrate=true" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch — will run migrations."
+          elif git diff --name-only HEAD~1 HEAD | grep -q '^supabase/migrations/'; then
             echo "should_migrate=true" >> "$GITHUB_OUTPUT"
             echo "Migration files changed — will apply."
           else
             echo "should_migrate=false" >> "$GITHUB_OUTPUT"
-            echo "No migration files changed — skipping migrate job."
+            echo "No migration files changed — skipping."
           fi
 
   migrate:
