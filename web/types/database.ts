@@ -318,6 +318,7 @@ export interface Message {
   recipient_type: MessageRecipientType
   recipient_filter: Record<string, unknown>
   sent_at: string | null
+  scheduled_send_at: string | null
   status: string
   created_at: string
 }

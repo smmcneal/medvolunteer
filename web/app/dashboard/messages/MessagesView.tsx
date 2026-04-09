@@ -65,6 +65,10 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
+  // Send Later state
+  const [sendLater, setSendLater] = useState(false)
+  const [scheduledAt, setScheduledAt] = useState('')
+
   // Template state
   const [showTemplates, setShowTemplates] = useState(false)
   const [savingTemplate, setSavingTemplate] = useState(false)
@@ -124,28 +128,37 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
 
   function handleSend() {
     if (!subject.trim() || !body.trim()) return
+    if (sendLater && !scheduledAt) return
     setError(null)
     setSuccessMsg(null)
     startTransition(async () => {
       try {
+        const scheduledIso = sendLater && scheduledAt ? new Date(scheduledAt).toISOString() : null
         await sendMessage({
           subject: subject.trim(),
           body: body.trim(),
           channel,
           recipient_type: recipientType === 'group' ? 'group' : recipientType,
           recipient_volunteer_ids: recipientIds,
+          scheduled_send_at: scheduledIso,
         })
-        setSuccessMsg(`Sent to ${recipientIds.length} volunteer${recipientIds.length !== 1 ? 's' : ''}`)
+        if (scheduledIso) {
+          setSuccessMsg(`Scheduled for ${new Date(scheduledIso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · ${recipientIds.length} recipient${recipientIds.length !== 1 ? 's' : ''}`)
+        } else {
+          setSuccessMsg(`Sent to ${recipientIds.length} volunteer${recipientIds.length !== 1 ? 's' : ''}`)
+        }
         setSubject('')
         setBody('')
         setSelectedVolunteerIds(new Set())
+        setSendLater(false)
+        setScheduledAt('')
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to send message')
       }
     })
   }
 
-  const canSend = !!(subject.trim() && body.trim() && recipientIds.length > 0 && !isPending)
+  const canSend = !!(subject.trim() && body.trim() && recipientIds.length > 0 && !isPending && (!sendLater || scheduledAt))
 
   return (
     <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
@@ -240,8 +253,10 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
                   }}>
                     {msg.subject || '(No subject)'}
                   </p>
-                  <span style={{ fontSize: '10px', color: 'var(--text-faint)', flexShrink: 0, marginTop: '2px' }}>
-                    {timeAgo(msg.sent_at ?? msg.created_at ?? '')}
+                  <span style={{ fontSize: '10px', color: msg.status === 'scheduled' ? '#7c3aed' : 'var(--text-faint)', flexShrink: 0, marginTop: '2px' }}>
+                    {msg.status === 'scheduled' && msg.scheduled_send_at
+                      ? new Date(msg.scheduled_send_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                      : timeAgo(msg.sent_at ?? msg.created_at ?? '')}
                   </span>
                 </div>
 
@@ -253,9 +268,10 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
                     background: ch.color + '18', color: ch.color,
                     letterSpacing: '0.02em',
                   }}>{ch.icon} {ch.label}</span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {msg.recipient_count} · {deliveryPct}%
-                  </span>
+                  {msg.status === 'scheduled'
+                    ? <span style={{ padding: '1px 7px', borderRadius: '99px', fontSize: '10px', fontWeight: 700, background: '#f5f3ff', color: '#7c3aed' }}>⏰ {t('scheduled_badge')}</span>
+                    : <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{msg.recipient_count} · {deliveryPct}%</span>
+                  }
                 </div>
               </div>
             )
@@ -535,6 +551,33 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
               />
             </div>
 
+            {/* Send Later toggle */}
+            <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '9px', background: 'var(--surface-bg)', border: '1px solid var(--surface-border)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '9px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={sendLater}
+                  onChange={e => { setSendLater(e.target.checked); if (!e.target.checked) setScheduledAt('') }}
+                  style={{ accentColor: 'var(--navy)', width: '15px', height: '15px', cursor: 'pointer', flexShrink: 0 }}
+                />
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{t('send_later')}</span>
+              </label>
+              {sendLater && (
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                  onChange={e => setScheduledAt(e.target.value)}
+                  style={{
+                    marginTop: '10px', width: '100%', padding: '8px 10px',
+                    border: '1px solid var(--surface-border)', borderRadius: '7px',
+                    fontSize: '13px', color: 'var(--text-primary)',
+                    fontFamily: 'inherit', background: 'white', boxSizing: 'border-box',
+                  }}
+                />
+              )}
+            </div>
+
             {/* Send + Save as Template */}
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
               <button
@@ -555,7 +598,9 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
                 <Send style={{ width: '13px', height: '13px' }} />
                 {isPending
                   ? t('sending_msg')
-                  : `${t('send')} ${CHANNEL_CONFIG[channel].icon} ${recipientIds.length}`}
+                  : sendLater
+                    ? `${t('send_later')} ${CHANNEL_CONFIG[channel].icon} ${recipientIds.length}`
+                    : `${t('send')} ${CHANNEL_CONFIG[channel].icon} ${recipientIds.length}`}
               </button>
               <button
                 onClick={() => { setSavingTemplate(true); setTemplateName(''); setTemplateError(null) }}

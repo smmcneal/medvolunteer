@@ -97,6 +97,40 @@ export async function GET(request: Request) {
     }
   }
 
+  // ── Dispatch scheduled messages ────────────────────────────────
+  const now = new Date().toISOString()
+  const { data: scheduledMsgs } = await supabase
+    .from('messages')
+    .select('id, subject, body, channel')
+    .eq('status', 'scheduled')
+    .lte('scheduled_send_at', now)
+
+  for (const msg of scheduledMsgs ?? []) {
+    if (msg.channel !== 'email') {
+      // Mark non-email channels as sent (SMS/push not yet wired)
+      await supabase.from('messages').update({ status: 'sent', sent_at: now }).eq('id', msg.id)
+      sent.push(`scheduled → ${msg.channel} (${msg.id})`)
+      continue
+    }
+
+    const { data: recipients } = await supabase
+      .from('message_recipients')
+      .select('volunteer_id, volunteers(email)')
+      .eq('message_id', msg.id)
+
+    for (const rec of recipients ?? []) {
+      const email = (rec as any).volunteers?.email
+      if (!email) continue
+      await sendEmail({ to: email, subject: msg.subject ?? '(no subject)', body: msg.body })
+      sent.push(`scheduled → ${email}`)
+    }
+
+    await supabase
+      .from('messages')
+      .update({ status: 'sent', sent_at: now })
+      .eq('id', msg.id)
+  }
+
   return NextResponse.json({ ok: true, sent: sent.length, details: sent })
 }
 

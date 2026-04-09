@@ -25,7 +25,7 @@ async function fetchData() {
     supabase
       .from('messages')
       .select('*')
-      .order('sent_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(100),
     supabase
       .from('message_recipients')

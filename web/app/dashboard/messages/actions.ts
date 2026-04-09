@@ -33,6 +33,7 @@ export async function sendMessage(data: {
   channel: 'email' | 'sms' | 'push'
   recipient_type: 'individual' | 'group' | 'all'
   recipient_volunteer_ids: string[]
+  scheduled_send_at?: string | null
 }) {
   const supabase = await createClient()
 
@@ -46,6 +47,8 @@ export async function sendMessage(data: {
     .single()
   if (!org) throw new Error('No organization found')
 
+  const isScheduled = !!data.scheduled_send_at
+
   // Insert the message
   const { data: message, error: msgErr } = await supabase
     .from('messages')
@@ -56,8 +59,9 @@ export async function sendMessage(data: {
       body: data.body,
       channel: data.channel,
       recipient_type: data.recipient_type,
-      sent_at: new Date().toISOString(),
-      status: 'sent',
+      sent_at: isScheduled ? null : new Date().toISOString(),
+      scheduled_send_at: isScheduled ? data.scheduled_send_at : null,
+      status: isScheduled ? 'scheduled' : 'sent',
     })
     .select('id')
     .single()
