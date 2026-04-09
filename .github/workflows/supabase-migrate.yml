@@ -1,9 +1,93 @@
 name: Supabase Migrations
+
+# Applies pending Supabase migrations when migration files are merged to main.
+# Also runs on manual dispatch for emergency applies.
+#
+# Required secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_ID,
+#   SUPABASE_DB_PASSWORD, NOTION_TOKEN (optional), NOTION_DEV_TASKS_DB_ID (optional)
+
 on:
   push:
     branches: [main]
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run only (show pending migrations, do not apply)'
+        required: false
+        default: 'false'
+        type: boolean
+
 jobs:
   migrate:
     runs-on: ubuntu-latest
+
     steps:
-      - run: echo "hello"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for migration changes
+        id: guard
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "SHOULD_MIGRATE=true" >> "$GITHUB_ENV"
+          elif git diff --name-only HEAD~1 HEAD | grep -q '^supabase/migrations/'; then
+            echo "SHOULD_MIGRATE=true" >> "$GITHUB_ENV"
+            echo "Migration files changed - will apply."
+          else
+            echo "SHOULD_MIGRATE=false" >> "$GITHUB_ENV"
+            echo "No migration files changed - skipping."
+          fi
+
+      - name: Setup Supabase CLI
+        if: env.SHOULD_MIGRATE == 'true'
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: List pending migrations (dry run)
+        if: env.SHOULD_MIGRATE == 'true' && github.event.inputs.dry_run == 'true'
+        run: |
+          supabase db push --dry-run --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Apply migrations
+        if: env.SHOULD_MIGRATE == 'true' && github.event.inputs.dry_run != 'true'
+        run: |
+          supabase db push --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Setup Node.js
+        if: env.SHOULD_MIGRATE == 'true' && github.event.inputs.dry_run != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Notify Notion
+        if: env.SHOULD_MIGRATE == 'true' && github.event.inputs.dry_run != 'true'
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
+        run: |
+          TASK_ID=$(git log --oneline -10 | grep -oE 'DEV-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
+          if [ -n "$TASK_ID" ] && [ -n "$NOTION_TOKEN" ]; then
+            node scripts/notion-sync.cjs status "$TASK_ID" "Testing"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Migration Result" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: main" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Time: $(date -u)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${SHOULD_MIGRATE}" != "true" ]; then
+            echo "- Mode: Skipped (no migration files changed)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            echo "- Mode: Dry run" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Mode: Applied to production" >> "$GITHUB_STEP_SUMMARY"
+          fi
