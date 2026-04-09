@@ -28,7 +28,6 @@ jobs:
   # when supabase/migrations/** files actually changed.
   migrate:
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
       - uses: actions/checkout@v4
