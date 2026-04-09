@@ -13,8 +13,6 @@ name: Supabase Migrations
 on:
   push:
     branches: [main]
-    paths:
-      - 'supabase/migrations/**'
 
   workflow_dispatch:
     inputs:
@@ -27,6 +25,12 @@ on:
 jobs:
   migrate:
     runs-on: ubuntu-latest
+    # Skip (not fail) when no migration files changed on a push.
+    # GitHub marks jobs with a false `if` as "skipped" (green) rather than
+    # "No jobs were run" (red) which path filters on the trigger produce.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(toJson(github.event.commits), 'supabase/migrations/')
     environment: production   # Requires manual approval in GitHub → Settings → Environments
 
     steps:
