@@ -416,26 +416,26 @@ PHASE 8.5 — Public Pages & Entry Points
         Mobile-first (full-height, safe-area insets, 480px max)
 
 PHASE 9 — Pre-Deployment Prep
-  [ ] Generate VAPID key pair:
+  [x] Generate VAPID key pair:
         npx web-push generate-vapid-keys
       Copy public key → NEXT_PUBLIC_VAPID_PUBLIC_KEY
       Copy both keys → Settings → Integrations → Web Push
-  [ ] Create production PWA icons:
+  [x] Create production PWA icons:
         /public/icons/icon-192.png  (192×192)
         /public/icons/icon-512.png  (512×512)
         /public/icons/badge-72.png  (72×72, monochrome)
       All must match the SVG design (navy bg, teal cross)
-  [ ] Add /public/robots.txt:
+  [x] Add /public/robots.txt:
         Disallow: /dashboard (keep admin private)
         Disallow: /volunteer/login
         Allow: /
-  [ ] Create web/server.js — Phusion Passenger entry
+  [x] Create web/server.js — Phusion Passenger entry
       point (required for SiteGround Node.js app host)
-  [ ] Audit all env vars; create .env.production.example
+  [x] Audit all env vars; create .env.production.example
       with every NEXT_PUBLIC_* and secret key listed
-  [ ] next.config.js — confirm output is 'standalone'
+  [x] next.config.js — confirm output is 'standalone'
       so Node.js app is self-contained for upload
-  [ ] TypeScript clean build: npm run build with zero
+  [x] TypeScript clean build: npm run build with zero
       type errors or warnings
   [ ] Create production Supabase project:
         supabase db push (run all migrations)
