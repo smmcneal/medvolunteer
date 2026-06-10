@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
 // ─── Org Profile ──────────────────────────────────────────────────────────────
@@ -9,6 +10,7 @@ export async function updateOrgProfile(data: {
   name: string
   logo_url: string | null
 }) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
@@ -18,6 +20,7 @@ export async function updateOrgProfile(data: {
 }
 
 export async function updateOrgSettings(settings: Record<string, unknown>) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id, settings').limit(1).single()
   if (!org) throw new Error('No organization found')
@@ -38,6 +41,7 @@ export async function createLocation(data: {
   lng: number | null
   geofence_radius_meters: number
 }) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
@@ -54,6 +58,7 @@ export async function updateLocation(id: string, data: {
   geofence_radius_meters?: number
   is_active?: boolean
 }) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('locations').update(data).eq('id', id)
   if (error) throw new Error(error.message)
@@ -61,6 +66,7 @@ export async function updateLocation(id: string, data: {
 }
 
 export async function deleteLocation(id: string) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('locations').delete().eq('id', id)
   if (error) throw new Error(error.message)
@@ -72,6 +78,7 @@ export async function deleteLocation(id: string) {
 export async function addHoliday(data: { name: string; date: string; is_recurring: boolean }) {
   if (!data.name.trim()) throw new Error('Name cannot be empty')
   if (!data.date) throw new Error('Date cannot be empty')
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
@@ -84,6 +91,7 @@ export async function addHoliday(data: { name: string; date: string; is_recurrin
 }
 
 export async function deleteHoliday(holidayId: string) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('org_holidays').delete().eq('id', holidayId)
   if (error) throw new Error(error.message)
@@ -93,6 +101,7 @@ export async function deleteHoliday(holidayId: string) {
 
 export async function bulkAddHolidays(holidays: { name: string; date: string; is_recurring: boolean }[]) {
   if (holidays.length === 0) return
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
@@ -119,6 +128,7 @@ export async function saveFormAutomationRule(input: {
   if (!input.fieldKey.trim() || !input.fieldValue.trim() || !input.actionValue.trim()) {
     throw new Error('All fields are required')
   }
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
@@ -135,6 +145,7 @@ export async function saveFormAutomationRule(input: {
 }
 
 export async function deleteFormAutomationRule(ruleId: string) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('form_automation_rules').delete().eq('id', ruleId)
   if (error) throw new Error(error.message)
@@ -152,6 +163,7 @@ export async function saveAutoMessageRule(input: {
 }) {
   if (!input.name.trim()) throw new Error('Name is required')
   if (!input.templateId) throw new Error('Template is required')
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
@@ -170,6 +182,7 @@ export async function saveAutoMessageRule(input: {
 }
 
 export async function deleteAutoMessageRule(ruleId: string) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('auto_message_rules').delete().eq('id', ruleId)
   if (error) throw new Error(error.message)
@@ -177,6 +190,7 @@ export async function deleteAutoMessageRule(ruleId: string) {
 }
 
 export async function toggleAutoMessageRule(ruleId: string, isActive: boolean) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('auto_message_rules').update({ is_active: isActive }).eq('id', ruleId)
   if (error) throw new Error(error.message)
@@ -192,6 +206,7 @@ export async function addCategoryRequirement(data: {
   is_blocking?: boolean
 }) {
   if (!data.title.trim()) throw new Error('Title cannot be empty')
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
@@ -208,6 +223,7 @@ export async function addCategoryRequirement(data: {
 }
 
 export async function deleteCategoryRequirement(reqId: string) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('category_requirements').delete().eq('id', reqId)
   if (error) throw new Error(error.message)
@@ -220,6 +236,7 @@ export async function assignCategoryCoordinator(
   category: string,
   coordinatorVolunteerId: string,
 ) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin
     .from('org_category_coordinators')
@@ -229,6 +246,7 @@ export async function assignCategoryCoordinator(
 }
 
 export async function removeCategoryCoordinator(category: string) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin
     .from('org_category_coordinators')
@@ -246,6 +264,7 @@ export async function saveDocumentAutomationRule(data: {
   assigned_to: string | null
 }) {
   if (!data.trigger_document_type.trim() || !data.alert_message.trim()) throw new Error('Document type and message are required')
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) throw new Error('No organization found')
@@ -261,6 +280,7 @@ export async function saveDocumentAutomationRule(data: {
 }
 
 export async function deleteDocumentAutomationRule(ruleId: string) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('document_automation_rules').delete().eq('id', ruleId)
   if (error) throw new Error(error.message)
@@ -278,6 +298,7 @@ export async function addCategory(
   description: string,
 ): Promise<{ error?: string }> {
   if (!name.trim()) return { error: 'Category name is required.' }
+  await requireAdmin()
   const admin = createAdminClient()
   const slug = slugify(name.trim())
   const { error } = await admin.from('categories').insert({
@@ -295,6 +316,7 @@ export async function updateCategoryName(
   name: string,
 ): Promise<{ error?: string }> {
   if (!name.trim()) return { error: 'Category name is required.' }
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('categories').update({ name: name.trim() }).eq('id', id)
   if (error) return { error: error.message }
@@ -306,6 +328,7 @@ export async function updateCategoryDescription(
   id: string,
   description: string,
 ): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('categories').update({ description: description.trim() || null }).eq('id', id)
   if (error) return { error: error.message }
@@ -314,6 +337,7 @@ export async function updateCategoryDescription(
 }
 
 export async function archiveCategory(id: string): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('categories').update({ is_archived: true }).eq('id', id)
   if (error) return { error: error.message }
@@ -322,6 +346,7 @@ export async function archiveCategory(id: string): Promise<{ error?: string }> {
 }
 
 export async function restoreCategory(id: string): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('categories').update({ is_archived: false }).eq('id', id)
   if (error) return { error: error.message }
@@ -332,6 +357,7 @@ export async function restoreCategory(id: string): Promise<{ error?: string }> {
 // ─── Category Descriptions ────────────────────────────────────────────────────
 
 export async function updateCategoryDescriptions(descriptions: Record<string, string>) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id, settings').limit(1).single()
   if (!org) throw new Error('No organization found')

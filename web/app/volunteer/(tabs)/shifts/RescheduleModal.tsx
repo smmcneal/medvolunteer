@@ -1,21 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { volunteerMoveShift } from './actions'
+import { volunteerMoveShift, getRescheduleOptions, type RescheduleOption } from './actions'
 import { useT } from '@/lib/volunteer-lang'
 
-interface ShiftOption {
-  id: string
-  name: string
-  start_time: string
-  end_time: string
-  location_name: string | null
-  spots_left: number | null
-}
+type ShiftOption = RescheduleOption
 
 interface Props {
-  orgId: string
+  /** Kept for call-site compatibility; org scoping now happens server-side. */
+  orgId?: string
   assignmentId: string
   shiftName: string
   currentShiftId: string
@@ -33,7 +26,7 @@ function formatShiftTime(startIso: string, endIso: string): string {
 }
 
 export default function RescheduleModal({
-  orgId, assignmentId, shiftName, currentShiftId, onClose, onMoved,
+  assignmentId, shiftName, currentShiftId, onClose, onMoved,
 }: Props) {
   const t = useT()
   const [options, setOptions] = useState<ShiftOption[]>([])
@@ -43,47 +36,16 @@ export default function RescheduleModal({
 
   useEffect(() => {
     async function fetchOptions() {
-      const supabase = createClient()
-      const now = new Date().toISOString()
-
-      const { data, error: err } = await supabase
-        .from('shifts')
-        .select(`
-          id, name, start_time, end_time, required_count,
-          location:locations(name),
-          shift_assignments(count)
-        `)
-        .eq('org_id', orgId)
-        .eq('name', shiftName)
-        .eq('is_published', true)
-        .gte('start_time', now)
-        .neq('id', currentShiftId)
-        .order('start_time', { ascending: true })
-        .limit(10)
-
-      if (err || !data) { setLoading(false); return }
-
-      const opts: ShiftOption[] = data
-        .map((s: any) => {
-          const assigned = s.shift_assignments?.[0]?.count ?? 0
-          const spotsLeft = s.required_count != null ? Math.max(s.required_count - assigned, 0) : null
-          if (spotsLeft !== null && spotsLeft <= 0) return null
-          return {
-            id: s.id,
-            name: s.name,
-            start_time: s.start_time,
-            end_time: s.end_time,
-            location_name: s.location?.name ?? null,
-            spots_left: spotsLeft,
-          }
-        })
-        .filter(Boolean) as ShiftOption[]
-
-      setOptions(opts)
+      try {
+        const opts = await getRescheduleOptions(shiftName, currentShiftId)
+        setOptions(opts)
+      } catch {
+        // leave options empty — the modal shows its "no options" state
+      }
       setLoading(false)
     }
     fetchOptions()
-  }, [orgId, shiftName, currentShiftId])
+  }, [shiftName, currentShiftId])
 
   async function handleMove(newShiftId: string) {
     setMoving(newShiftId)
@@ -91,8 +53,8 @@ export default function RescheduleModal({
     try {
       const { newAssignmentId } = await volunteerMoveShift(assignmentId, newShiftId)
       onMoved(currentShiftId, assignmentId, newShiftId, newAssignmentId)
-    } catch (err: any) {
-      setError(err.message ?? 'Could not move shift. Please try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not move shift. Please try again.')
       setMoving(null)
     }
   }

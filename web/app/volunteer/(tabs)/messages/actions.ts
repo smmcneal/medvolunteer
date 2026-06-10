@@ -1,24 +1,23 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { requireVolunteer } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
 export async function markMessageRead(recipientId: string): Promise<void> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+  const { volunteerId } = await requireVolunteer()
+  const admin = createAdminClient()
 
-  // Verify ownership via join before updating
-  const { data: recipient } = await supabase
+  // Verify ownership before updating
+  const { data: recipient } = await admin
     .from('message_recipients')
-    .select('id, volunteers(user_id)')
+    .select('id, volunteer_id')
     .eq('id', recipientId)
     .single()
 
-  const owner = (recipient?.volunteers as unknown as { user_id: string } | null)?.user_id
-  if (!recipient || owner !== user.id) throw new Error('Not found or access denied')
+  if (!recipient || recipient.volunteer_id !== volunteerId) throw new Error('Not found or access denied')
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('message_recipients')
     .update({ read_at: new Date().toISOString() })
     .eq('id', recipientId)

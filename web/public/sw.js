@@ -1,7 +1,7 @@
-// MedVolunteer Service Worker v2
+// MedVolunteer Service Worker v3
 // Caching strategies, offline fallback, push notifications.
 
-const CACHE_NAME = 'medvolunteer-v2'
+const CACHE_NAME = 'medvolunteer-v3'
 const OFFLINE_URL = '/volunteer/offline'
 
 // Static assets that are safe to cache-first
@@ -41,6 +41,11 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests and Supabase / API calls
   if (request.method !== 'GET') return
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) return
+
+  // Never cache the admin dashboard — the SW scope is the whole origin, and
+  // cached admin pages would leave volunteer PII in Cache Storage on shared
+  // devices long after logout.
+  if (url.pathname.startsWith('/dashboard')) return
 
   // Static assets: cache-first (long-lived, hashed filenames)
   if (STATIC_ORIGINS.some((prefix) => url.pathname.startsWith(prefix))) {

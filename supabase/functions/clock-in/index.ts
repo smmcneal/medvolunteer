@@ -6,46 +6,66 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // Identify the caller from their JWT — the volunteer is derived from the
+    // session, never trusted from the request body. (verify_jwt accepts the
+    // public anon key, so the body-supplied volunteer_id of the old version
+    // let anyone forge time entries.)
+    const authClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } }
+    )
+    const { data: { user } } = await authClient.auth.getUser()
+    if (!user) return json({ error: 'Unauthorized' }, 401)
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    const { volunteer_id, location_id, shift_id, method = 'manual' } = await req.json()
+    const { data: volunteer } = await supabase
+      .from('volunteers')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!volunteer) return json({ error: 'Volunteer not found' }, 404)
 
-    if (!volunteer_id || !location_id) {
-      return new Response(
-        JSON.stringify({ error: 'volunteer_id and location_id are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    const { location_id, shift_id, method = 'manual' } = await req.json()
+
+    if (!location_id) {
+      return json({ error: 'location_id is required' }, 400)
     }
 
     // Check for existing open time entry
     const { data: existing } = await supabase
       .from('time_entries')
       .select('id')
-      .eq('volunteer_id', volunteer_id)
+      .eq('volunteer_id', volunteer.id)
       .is('clock_out', null)
-      .single()
+      .maybeSingle()
 
     if (existing) {
-      return new Response(
-        JSON.stringify({ error: 'Already clocked in', time_entry_id: existing.id }),
-        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return json({ error: 'Already clocked in', time_entry_id: existing.id }, 409)
     }
 
     // Create time entry
     const { data: entry, error } = await supabase
       .from('time_entries')
       .insert({
-        volunteer_id,
+        volunteer_id: volunteer.id,
         location_id,
         shift_id: shift_id || null,
         method,
@@ -56,14 +76,8 @@ serve(async (req) => {
 
     if (error) throw error
 
-    return new Response(
-      JSON.stringify({ success: true, time_entry: entry }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json({ success: true, time_entry: entry })
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json({ error: err.message }, 500)
   }
 })

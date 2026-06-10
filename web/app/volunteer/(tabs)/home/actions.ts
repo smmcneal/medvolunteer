@@ -1,30 +1,15 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireVolunteer } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
-async function getVolunteerId() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
-
-  const admin = createAdminClient()
-  const { data: volunteer } = await admin
-    .from('volunteers')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!volunteer) throw new Error('Volunteer not found')
-  return { supabase: admin, volunteerId: volunteer.id as string }
-}
-
 export async function homeClockIn(): Promise<{ entryId: string }> {
-  const { supabase, volunteerId } = await getVolunteerId()
+  const { volunteerId } = await requireVolunteer()
+  const admin = createAdminClient()
 
   // Guard: don't double-clock-in
-  const { data: existing } = await supabase
+  const { data: existing } = await admin
     .from('time_entries')
     .select('id')
     .eq('volunteer_id', volunteerId)
@@ -33,7 +18,7 @@ export async function homeClockIn(): Promise<{ entryId: string }> {
 
   if (existing) return { entryId: existing.id }
 
-  const { data, error } = await supabase
+  const { data, error } = await admin
     .from('time_entries')
     .insert({
       volunteer_id: volunteerId,
@@ -52,9 +37,10 @@ export async function homeClockIn(): Promise<{ entryId: string }> {
 }
 
 export async function homeDropShift(assignmentId: string): Promise<void> {
-  const { supabase, volunteerId } = await getVolunteerId()
+  const { volunteerId } = await requireVolunteer()
+  const admin = createAdminClient()
 
-  const { data: assignment } = await supabase
+  const { data: assignment } = await admin
     .from('shift_assignments')
     .select('id, volunteer_id, status, shifts(start_time)')
     .eq('id', assignmentId)
@@ -66,7 +52,7 @@ export async function homeDropShift(assignmentId: string): Promise<void> {
   const shiftStart = new Date((assignment.shifts as unknown as { start_time: string }).start_time)
   if (new Date() >= shiftStart) throw new Error('Cannot drop a shift that has already started')
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('shift_assignments')
     .update({ status: 'cancelled' })
     .eq('id', assignmentId)
@@ -78,12 +64,29 @@ export async function homeDropShift(assignmentId: string): Promise<void> {
 }
 
 export async function homeClockOut(entryId: string): Promise<void> {
-  const { supabase } = await getVolunteerId()
+  const { volunteerId } = await requireVolunteer()
+  const admin = createAdminClient()
 
-  const { error } = await supabase
+  // Ownership check — the entry must belong to the calling volunteer
+  const { data: entry } = await admin
     .from('time_entries')
-    .update({ clock_out: new Date().toISOString() })
+    .select('id, volunteer_id, clock_out')
     .eq('id', entryId)
+    .single()
+
+  if (!entry || entry.volunteer_id !== volunteerId) throw new Error('Entry not found or access denied')
+  if (entry.clock_out) throw new Error('Already clocked out')
+
+  // Match the shifts-tab clock-out: respect the org's hour-approval setting
+  const { data: orgData } = await admin.from('organizations').select('settings').limit(1).single()
+  const requireApproval = !!(orgData?.settings as Record<string, unknown>)?.require_hour_approval
+  const approvalStatus = requireApproval ? 'pending' : 'auto_approved'
+
+  const { error } = await admin
+    .from('time_entries')
+    .update({ clock_out: new Date().toISOString(), approval_status: approvalStatus })
+    .eq('id', entryId)
+    .is('clock_out', null)
 
   if (error) throw new Error(error.message)
   revalidatePath('/volunteer/home')

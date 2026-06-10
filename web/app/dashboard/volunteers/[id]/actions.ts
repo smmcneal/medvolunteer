@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import type { PipelinePhase, VolunteerStatus } from '@/types/database'
 
@@ -34,6 +35,7 @@ export async function updateVolunteerInfo(
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) return { error: 'Enter a valid email address.' }
 
   const cats = data.volunteer_categories?.length ? data.volunteer_categories : [data.category]
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin
     .from('volunteers')
@@ -59,6 +61,7 @@ export async function updatePipelinePhase(
   volunteerId: string,
   phase: PipelinePhase,
 ): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const status = PHASE_STATUS_MAP[phase]
 
@@ -84,6 +87,7 @@ export async function addNote(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('volunteer_notes').insert({
     volunteer_id: volunteerId,
@@ -102,6 +106,7 @@ export async function applyTag(
   volunteerId: string,
   tagId: string,
 ): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('volunteer_tags').insert({
     volunteer_id: volunteerId,
@@ -118,6 +123,7 @@ export async function removeTag(
   volunteerId: string,
   tagId: string,
 ): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin
     .from('volunteer_tags')
@@ -136,6 +142,7 @@ export async function raiseFlag(
   flagId: string,
   notes?: string,
 ): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('volunteer_flags').insert({
     volunteer_id: volunteerId,
@@ -151,6 +158,7 @@ export async function resolveFlag(flagAssignmentId: string, volunteerId: string)
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin
     .from('volunteer_flags')
@@ -163,6 +171,7 @@ export async function resolveFlag(flagAssignmentId: string, volunteerId: string)
 }
 
 export async function unresolveFlag(flagAssignmentId: string, volunteerId: string): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin
     .from('volunteer_flags')
@@ -179,6 +188,7 @@ export async function updateVolunteerLocations(
   volunteerId: string,
   locationIds: string[],
 ): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
 
   // Replace all assignments atomically: delete then re-insert
@@ -213,6 +223,7 @@ export async function uploadVolunteerDocument(
   if (!file || !volunteerId) return { error: 'Missing file or volunteer ID.' }
   if (file.size > 52_428_800) return { error: 'File must be under 50 MB.' }
 
+  await requireAdmin()
   const admin = createAdminClient()
 
   // Ensure the bucket exists (creates it on first use if the migration hasn't been applied yet)
@@ -302,6 +313,7 @@ export async function deleteVolunteerUpload(
   storagePath: string,
   volunteerId: string,
 ): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
 
   await admin.storage.from('volunteer-documents').remove([storagePath])
@@ -320,6 +332,7 @@ export async function getUploadSignedUrl(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated.' }
 
+  await requireAdmin()
   const admin = createAdminClient()
   const { data, error } = await admin.storage
     .from('volunteer-documents')
@@ -342,6 +355,7 @@ export async function toggleChecklistItem(
   field: ChecklistField,
   value: boolean,
 ): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin
     .from('volunteers')
@@ -358,6 +372,7 @@ export async function toggleChecklistItem(
 export async function clockIn(
   volunteerId: string,
 ): Promise<{ error?: string; entryId?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
 
   // Prevent duplicate open entries
@@ -389,6 +404,7 @@ export async function sendJotformRequest(
   formId: string,
 ): Promise<{ error?: string }> {
   if (!formId.trim()) return { error: 'Form ID is required' }
+  await requireAdmin()
   const admin = createAdminClient()
 
   const { data: vol } = await admin
@@ -444,6 +460,7 @@ export async function clockOut(
   entryId: string,
   volunteerId: string,
 ): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin
     .from('time_entries')

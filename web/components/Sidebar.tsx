@@ -35,6 +35,13 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
+    // Clear SW-cached pages so admin data doesn't linger on shared devices
+    if ('caches' in window) {
+      try {
+        const keys = await caches.keys()
+        await Promise.all(keys.map(k => caches.delete(k)))
+      } catch { /* cache cleanup is best-effort */ }
+    }
     router.push('/login')
     router.refresh()
   }

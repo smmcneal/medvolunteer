@@ -1,7 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import type { VolunteerCategory, VolunteerStatus } from '@/types/database'
 
@@ -18,12 +18,14 @@ export interface CreateVolunteerInput {
 
 export async function createVolunteer(
   input: CreateVolunteerInput
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; tempPassword?: string }> {
   // Verify the requesting user is an authenticated admin
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
-
+  let user
+  try {
+    user = await requireAdmin()
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Admin access required' }
+  }
   const admin = createAdminClient()
 
   // 1. Resolve org_id — try the admin's own volunteer row first,
@@ -31,7 +33,7 @@ export async function createVolunteer(
   //    (Admin accounts may not have a volunteer row themselves.)
   let org_id: string | null = null
 
-  const { data: adminVolunteer } = await supabase
+  const { data: adminVolunteer } = await admin
     .from('volunteers')
     .select('org_id')
     .eq('user_id', user.id)
@@ -52,6 +54,7 @@ export async function createVolunteer(
 
   // 2. Create (or invite) the Auth user
   let newUserId: string
+  let tempPassword: string | undefined
 
   if (input.send_invite) {
     // Generate the invite link (creates the auth user without sending email via Supabase)
@@ -67,7 +70,8 @@ export async function createVolunteer(
 
     if (linkError) {
       if (linkError.message.toLowerCase().includes('already registered')) {
-        const { data: existingUsers } = await admin.auth.admin.listUsers()
+        // perPage must cover the full user base — the default page size is 50
+        const { data: existingUsers } = await admin.auth.admin.listUsers({ page: 1, perPage: 10000 })
         const existing = existingUsers?.users.find(u => u.email === input.email)
         if (!existing) return { error: 'Email already registered but user not found' }
         newUserId = existing.id
@@ -104,8 +108,9 @@ export async function createVolunteer(
       }
     }
   } else {
-    // Create user with a random temporary password (admin will share it)
-    const tempPassword = crypto.randomUUID().replace(/-/g, '').slice(0, 16) + 'Aa1!'
+    // Create user with a random temporary password. Returned to the caller so
+    // the admin can share it — it is never persisted or shown again.
+    tempPassword = crypto.randomUUID().replace(/-/g, '').slice(0, 16) + 'Aa1!'
     const { data: createData, error: createError } = await admin.auth.admin.createUser({
       email: input.email,
       password: tempPassword,
@@ -114,7 +119,8 @@ export async function createVolunteer(
     })
     if (createError) {
       if (createError.message.toLowerCase().includes('already registered')) {
-        const { data: existingUsers } = await admin.auth.admin.listUsers()
+        tempPassword = undefined // existing user keeps their password
+        const { data: existingUsers } = await admin.auth.admin.listUsers({ page: 1, perPage: 10000 })
         const existing = existingUsers?.users.find(u => u.email === input.email)
         if (!existing) return { error: 'Email already registered but user not found' }
         newUserId = existing.id
@@ -175,5 +181,5 @@ export async function createVolunteer(
   }
 
   revalidatePath('/dashboard/volunteers')
-  return {}
+  return { tempPassword }
 }

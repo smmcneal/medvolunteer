@@ -19,7 +19,12 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
 
   const code  = searchParams.get('code')
-  const next  = searchParams.get('next') ?? '/volunteer/home'
+  // Only allow same-origin relative paths — anything else ("//evil.com",
+  // "https://…", "@host") could turn this into an open redirect.
+  const rawNext = searchParams.get('next') ?? '/volunteer/home'
+  const next = rawNext.startsWith('/') && !rawNext.startsWith('//')
+    ? rawNext
+    : '/volunteer/home'
   const error = searchParams.get('error')
   const errorDescription = searchParams.get('error_description')
 

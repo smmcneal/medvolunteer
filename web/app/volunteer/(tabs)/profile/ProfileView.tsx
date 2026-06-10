@@ -172,6 +172,13 @@ export default function ProfileView({ volunteer, credentials, credentialUploads 
         setSignOutError(error.message)
         return
       }
+      // Clear SW-cached pages so personal data doesn't linger on shared devices
+      if ('caches' in window) {
+        try {
+          const keys = await caches.keys()
+          await Promise.all(keys.map(k => caches.delete(k)))
+        } catch { /* cache cleanup is best-effort */ }
+      }
       router.replace('/volunteer/login')
     })
   }

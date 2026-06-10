@@ -107,6 +107,13 @@ insert into org_flags (id, org_id, name, description, severity, color) values
   ('b0000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000001', 'Onboarding Stalled', 'Has not progressed in 30+ days',        'info',     '#6b7280')
 on conflict (id) do nothing;
 
+-- ─── Admin role ───────────────────────────────────────────────────────────────
+-- The dashboard admin must be in admin_users (the migration bootstrap runs
+-- before seed creates this auth user, so insert explicitly here).
+insert into admin_users (user_id) values
+  ('c0000000-0000-0000-0000-000000000001')
+on conflict (user_id) do nothing;
+
 -- ─── Test volunteers ──────────────────────────────────────────────────────────
 -- Alice, Ben, Cora have auth accounts; the rest are admin-created (no portal login)
 insert into volunteers (id, org_id, user_id, first_name, last_name, email, phone, category, status, pipeline_phase) values

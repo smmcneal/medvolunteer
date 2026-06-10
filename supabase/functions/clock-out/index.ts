@@ -6,31 +6,47 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // The volunteer is derived from the caller's JWT, never from the body.
+    const authClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } }
+    )
+    const { data: { user } } = await authClient.auth.getUser()
+    if (!user) return json({ error: 'Unauthorized' }, 401)
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    const { volunteer_id, time_entry_id, notes } = await req.json()
+    const { data: volunteer } = await supabase
+      .from('volunteers')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!volunteer) return json({ error: 'Volunteer not found' }, 404)
 
-    if (!volunteer_id) {
-      return new Response(
-        JSON.stringify({ error: 'volunteer_id is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    const { time_entry_id, notes } = await req.json()
 
     // Find open entry — use provided ID or find the open one
     let query = supabase
       .from('time_entries')
       .update({ clock_out: new Date().toISOString(), notes })
-      .eq('volunteer_id', volunteer_id)
+      .eq('volunteer_id', volunteer.id)
       .is('clock_out', null)
       .select()
       .single()
@@ -40,7 +56,8 @@ serve(async (req) => {
         .from('time_entries')
         .update({ clock_out: new Date().toISOString(), notes })
         .eq('id', time_entry_id)
-        .eq('volunteer_id', volunteer_id)
+        .eq('volunteer_id', volunteer.id)
+        .is('clock_out', null)
         .select()
         .single()
     }
@@ -48,20 +65,11 @@ serve(async (req) => {
     const { data: entry, error } = await query
 
     if (error || !entry) {
-      return new Response(
-        JSON.stringify({ error: 'No open time entry found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return json({ error: 'No open time entry found' }, 404)
     }
 
-    return new Response(
-      JSON.stringify({ success: true, time_entry: entry }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json({ success: true, time_entry: entry })
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json({ error: err.message }, 500)
   }
 })

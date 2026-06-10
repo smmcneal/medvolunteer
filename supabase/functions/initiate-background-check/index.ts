@@ -6,24 +6,45 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // Only admins may initiate background checks. verify_jwt accepts the
+    // public anon key, so the caller's identity must be checked explicitly.
+    const authClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } }
+    )
+    const { data: { user } } = await authClient.auth.getUser()
+    if (!user) return json({ error: 'Unauthorized' }, 401)
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
+    const { data: adminRow } = await supabase
+      .from('admin_users')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!adminRow) return json({ error: 'Admin access required' }, 403)
+
     const { volunteer_id } = await req.json()
 
     if (!volunteer_id) {
-      return new Response(
-        JSON.stringify({ error: 'volunteer_id is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return json({ error: 'volunteer_id is required' }, 400)
     }
 
     const CHECKR_API_KEY = Deno.env.get('CHECKR_API_KEY')
@@ -43,22 +64,13 @@ serve(async (req) => {
 
       if (error) throw error
 
-      return new Response(
-        JSON.stringify({ success: true, stub: true, background_check: data }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return json({ success: true, stub: true, background_check: data })
     }
 
     // TODO: Real Checkr API call when key is configured
     // POST https://api.checkr.com/v1/candidates + POST /v1/invitations
-    return new Response(
-      JSON.stringify({ error: 'Checkr integration not yet configured' }),
-      { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json({ error: 'Checkr integration not yet configured' }, 501)
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json({ error: err.message }, 500)
   }
 })

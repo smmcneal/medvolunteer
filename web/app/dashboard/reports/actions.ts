@@ -1,20 +1,23 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
 export async function approveHoursEntry(
   entryId: string,
 ): Promise<{ error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
+  let userId: string
+  try {
+    userId = (await requireAdmin()).id
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Admin access required.' }
+  }
 
   const admin = createAdminClient()
   const { error } = await admin
     .from('time_entries')
-    .update({ approval_status: 'approved', approved_by: user.id, approved_at: new Date().toISOString() })
+    .update({ approval_status: 'approved', approved_by: userId, approved_at: new Date().toISOString() })
     .eq('id', entryId)
 
   if (error) return { error: error.message }
@@ -25,6 +28,12 @@ export async function approveHoursEntry(
 export async function rejectHoursEntry(
   entryId: string,
 ): Promise<{ error?: string }> {
+  try {
+    await requireAdmin()
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Admin access required.' }
+  }
+
   const admin = createAdminClient()
   const { error } = await admin
     .from('time_entries')
@@ -41,9 +50,11 @@ export async function bulkMarkInactive(
 ): Promise<{ error?: string }> {
   if (!volunteerIds.length) return {}
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
+  try {
+    await requireAdmin()
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Admin access required.' }
+  }
 
   const admin = createAdminClient()
 

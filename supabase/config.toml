@@ -429,7 +429,9 @@ entrypoint = "./functions/initiate-background-check/index.ts"
 
 [functions.background-check-webhook]
 enabled = true
-verify_jwt = true
+# Checkr can't send a Supabase JWT — authenticity is verified in the function
+# via the X-Checkr-Signature HMAC (CHECKR_WEBHOOK_SECRET) instead.
+verify_jwt = false
 import_map = "./functions/background-check-webhook/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx

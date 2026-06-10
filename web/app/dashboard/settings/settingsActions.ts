@@ -1,11 +1,13 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
 // ─── Tags ─────────────────────────────────────────────────────────────────────
 
 export async function createTag(name: string, color: string): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) return { error: 'Organization not found.' }
@@ -17,6 +19,7 @@ export async function createTag(name: string, color: string): Promise<{ error?: 
 }
 
 export async function deleteTag(id: string): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('org_tags').delete().eq('id', id)
   if (error) return { error: error.message }
@@ -33,6 +36,7 @@ export async function createFlag(
   severity: 'info' | 'warning' | 'critical',
   color: string,
 ): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { data: org } = await admin.from('organizations').select('id').limit(1).single()
   if (!org) return { error: 'Organization not found.' }
@@ -50,6 +54,7 @@ export async function createFlag(
 }
 
 export async function deleteFlag(id: string): Promise<{ error?: string }> {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('org_flags').delete().eq('id', id)
   if (error) return { error: error.message }

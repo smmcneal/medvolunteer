@@ -15,7 +15,7 @@ const TEAL = '#00897B'
 
 export default function ApplyForm() {
   const [form, setForm] = useState({
-    first_name: '', last_name: '', email: '', phone: '', category: '', message: '',
+    first_name: '', last_name: '', email: '', phone: '', category: '', message: '', website: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
@@ -80,6 +80,18 @@ export default function ApplyForm() {
               {error}
             </div>
           )}
+
+          {/* Honeypot — invisible to humans, bots that fill it are dropped server-side */}
+          <input
+            type="text"
+            name="website"
+            value={form.website}
+            onChange={set('website')}
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0 }}
+          />
 
           {/* Name row */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>

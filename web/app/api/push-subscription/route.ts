@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -16,18 +17,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: volunteer } = await supabase
+    // RLS denies direct table access — resolve the volunteer and write with
+    // the admin client after the auth check above.
+    const admin = createAdminClient()
+    const { data: volunteer } = await admin
       .from('volunteers')
       .select('id')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
     if (!volunteer) {
       return NextResponse.json({ error: 'Volunteer not found' }, { status: 404 })
     }
 
     // Upsert — if the same endpoint re-subscribes (e.g. SW reinstalled), update keys
-    const { error } = await supabase
+    const { error } = await admin
       .from('push_subscriptions')
       .upsert(
         {

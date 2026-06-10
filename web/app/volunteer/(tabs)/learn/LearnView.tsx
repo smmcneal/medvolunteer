@@ -2,8 +2,8 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { completeLesson } from './actions'
-import type { ModuleWithLessons, LessonWithQuestions, QuizQuestionRow } from './page'
+import { completeLesson, gradeQuiz } from './actions'
+import type { ModuleWithLessons, LessonWithQuestions } from './page'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -363,13 +363,23 @@ function LessonPlayer({ lesson, onClose }: { lesson: LessonWithQuestions; onClos
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [completed, setCompleted] = useState(lesson.completion !== null)
-  const startTime = useRef(Date.now())
+  const startTime = useRef<number | null>(null)
+  useEffect(() => {
+    if (startTime.current === null) startTime.current = Date.now()
+  }, [])
 
-  function markDone(score?: number) {
-    const elapsed = Math.round((Date.now() - startTime.current) / 1000)
+  function markDone() {
+    const elapsed = startTime.current === null ? 0 : Math.round((Date.now() - startTime.current) / 1000)
     startTransition(async () => {
-      await completeLesson(lesson.id, score, elapsed)
+      await completeLesson(lesson.id, elapsed)
       setCompleted(true)
+      router.refresh()
+    })
+  }
+
+  function handleGraded() {
+    setCompleted(true)
+    startTransition(() => {
       router.refresh()
     })
   }
@@ -452,7 +462,7 @@ function LessonPlayer({ lesson, onClose }: { lesson: LessonWithQuestions; onClos
           <TextLesson lesson={lesson} completed={completed} onComplete={markDone} isPending={isPending} />
         )}
         {lesson.type === 'quiz' && (
-          <QuizPlayer lesson={lesson} completed={completed} onComplete={markDone} isPending={isPending} />
+          <QuizPlayer lesson={lesson} completed={completed} onGraded={handleGraded} />
         )}
       </div>
     </div>
@@ -600,19 +610,26 @@ function TextLesson({
 function QuizPlayer({
   lesson,
   completed,
-  onComplete,
-  isPending,
+  onGraded,
 }: {
   lesson: LessonWithQuestions
   completed: boolean
-  onComplete: (score: number) => void
-  isPending: boolean
+  onGraded: () => void
 }) {
   const questions = lesson.questions
+  const startTime = useRef<number | null>(null)
+  useEffect(() => {
+    if (startTime.current === null) startTime.current = Date.now()
+  }, [])
   const [currentIdx, setCurrentIdx] = useState(0)
   const [answers, setAnswers] = useState<(number | null)[]>(questions.map(() => null))
   const [submitted, setSubmitted] = useState(completed)
+  const [grading, setGrading] = useState(false)
+  const [gradeError, setGradeError] = useState<string | null>(null)
   const [score, setScore] = useState<number | null>(lesson.completion?.score ?? null)
+  // Correct answers are only known after server-side grading — on a revisit
+  // of an already-completed quiz we show the score without per-question review.
+  const [correctIndexes, setCorrectIndexes] = useState<Record<string, number> | null>(null)
 
   if (questions.length === 0) {
     return (
@@ -638,14 +655,27 @@ function QuizPlayer({
   function handleNext() {
     if (!isLast) {
       setCurrentIdx(i => i + 1)
-    } else {
-      // Calculate score
-      const correct = answers.filter((a, i) => a === questions[i].correct_answer_index).length
-      const pct = Math.round((correct / questions.length) * 100)
-      setScore(pct)
-      setSubmitted(true)
-      onComplete(pct)
+      return
     }
+    // Submit answers for server-side grading
+    setGrading(true)
+    setGradeError(null)
+    const elapsed = startTime.current === null ? 0 : Math.round((Date.now() - startTime.current) / 1000)
+    gradeQuiz(
+      lesson.id,
+      questions.map((q, i) => ({ questionId: q.id, answerIndex: answers[i] })),
+      elapsed,
+    )
+      .then(result => {
+        setScore(result.score)
+        setCorrectIndexes(result.correctIndexes)
+        setSubmitted(true)
+        onGraded()
+      })
+      .catch(e => {
+        setGradeError(e instanceof Error ? e.message : 'Could not submit quiz')
+      })
+      .finally(() => setGrading(false))
   }
 
   if (submitted && score !== null) {
@@ -672,36 +702,41 @@ function QuizPlayer({
           {passed ? 'Great work!' : 'Keep studying'}
         </div>
         <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '32px' }}>
-          {answers.filter((a, i) => a === questions[i].correct_answer_index).length} of {questions.length} correct
+          {Math.round((score / 100) * questions.length)} of {questions.length} correct
         </div>
 
-        {/* Review answers */}
-        <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {questions.map((q, i) => {
-            const chosen = answers[i]
-            const isCorrect = chosen === q.correct_answer_index
-            return (
-              <div key={q.id} style={{
-                background: isCorrect ? '#f0fdf4' : '#fef2f2',
-                border: `1px solid ${isCorrect ? '#bbf7d0' : '#fecaca'}`,
-                borderRadius: '10px',
-                padding: '12px',
-              }}>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
-                  {i + 1}. {q.question}
-                </div>
-                {!isCorrect && chosen !== null && (
-                  <div style={{ fontSize: '12px', color: '#dc2626', marginBottom: '2px' }}>
-                    ✗ You answered: {q.options[chosen]}
+        {/* Review answers — only available right after grading */}
+        {correctIndexes && (
+          <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {questions.map((q, i) => {
+              const chosen = answers[i]
+              const correctIdx = correctIndexes[q.id]
+              const isCorrect = chosen === correctIdx
+              return (
+                <div key={q.id} style={{
+                  background: isCorrect ? '#f0fdf4' : '#fef2f2',
+                  border: `1px solid ${isCorrect ? '#bbf7d0' : '#fecaca'}`,
+                  borderRadius: '10px',
+                  padding: '12px',
+                }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
+                    {i + 1}. {q.question}
                   </div>
-                )}
-                <div style={{ fontSize: '12px', color: '#16a34a' }}>
-                  ✓ Correct: {q.options[q.correct_answer_index]}
+                  {!isCorrect && chosen !== null && (
+                    <div style={{ fontSize: '12px', color: '#dc2626', marginBottom: '2px' }}>
+                      ✗ You answered: {q.options[chosen]}
+                    </div>
+                  )}
+                  {correctIdx !== undefined && (
+                    <div style={{ fontSize: '12px', color: '#16a34a' }}>
+                      ✓ Correct: {q.options[correctIdx]}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     )
   }
@@ -782,6 +817,21 @@ function QuizPlayer({
         })}
       </div>
 
+      {/* Grading error */}
+      {gradeError && (
+        <div style={{
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: '10px',
+          padding: '12px 14px',
+          fontSize: '13px',
+          color: '#dc2626',
+          marginBottom: '16px',
+        }}>
+          {gradeError}
+        </div>
+      )}
+
       {/* Nav buttons */}
       <div style={{ display: 'flex', gap: '10px' }}>
         {currentIdx > 0 && (
@@ -805,21 +855,21 @@ function QuizPlayer({
         )}
         <button
           onClick={handleNext}
-          disabled={selectedAnswer === null || isPending}
+          disabled={selectedAnswer === null || grading}
           style={{
             flex: 2,
             padding: '14px',
-            background: selectedAnswer === null || isPending ? '#e5e7eb' : '#1B2A4A',
-            color: selectedAnswer === null || isPending ? '#9ca3af' : 'white',
+            background: selectedAnswer === null || grading ? '#e5e7eb' : '#1B2A4A',
+            color: selectedAnswer === null || grading ? '#9ca3af' : 'white',
             border: 'none',
             borderRadius: '12px',
             fontSize: '15px',
             fontWeight: 700,
-            cursor: selectedAnswer === null || isPending ? 'default' : 'pointer',
+            cursor: selectedAnswer === null || grading ? 'default' : 'pointer',
             fontFamily: 'inherit',
           }}
         >
-          {isPending ? 'Saving…' : isLast ? 'Submit Quiz' : 'Next →'}
+          {grading ? 'Grading…' : isLast ? 'Submit Quiz' : 'Next →'}
         </button>
       </div>
     </div>

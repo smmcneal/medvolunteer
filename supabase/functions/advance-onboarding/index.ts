@@ -17,6 +17,35 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
+    // Only admins (or service-role callers) may advance onboarding stages.
+    const authHeader = req.headers.get('Authorization') ?? ''
+    const isServiceRole = authHeader === `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+    if (!isServiceRole) {
+      const authClient = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } }
+      )
+      const { data: { user } } = await authClient.auth.getUser()
+      if (!user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      const { data: adminRow } = await supabase
+        .from('admin_users')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (!adminRow) {
+        return new Response(
+          JSON.stringify({ error: 'Admin access required' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     const { volunteer_id, stage_id, completed_by, notes, metadata } = await req.json()
 
     if (!volunteer_id || !stage_id) {
@@ -63,11 +92,12 @@ serve(async (req) => {
       const completedIds = new Set(completedProgress?.map(p => p.stage_id) || [])
       const allDone = requiredStages?.every(s => completedIds.has(s.id))
 
-      // If all required stages complete, activate the volunteer
-      if (allDone && volunteer.status === 'onboarding') {
+      // If all required stages complete, activate the volunteer.
+      // (Status enum was renamed in 20260314: onboarding→prospect, active→volunteer.)
+      if (allDone && volunteer.status === 'prospect') {
         await supabase
           .from('volunteers')
-          .update({ status: 'active' })
+          .update({ status: 'volunteer' })
           .eq('id', volunteer_id)
       }
     }

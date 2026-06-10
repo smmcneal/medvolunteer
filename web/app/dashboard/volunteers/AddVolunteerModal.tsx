@@ -47,6 +47,7 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [tempPassword, setTempPassword] = useState<string | null>(null)
   const firstFieldRef = useRef<HTMLInputElement>(null)
 
   // Form state
@@ -99,8 +100,11 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
         setError(result.error)
       } else {
         setSuccess(true)
+        setTempPassword(result.tempPassword ?? null)
         router.refresh()
-        setTimeout(onClose, 1200)
+        // Keep the panel open when there's a temp password to copy —
+        // it is never shown again after this.
+        if (!result.tempPassword) setTimeout(onClose, 1200)
       }
     })
   }
@@ -189,6 +193,17 @@ export default function AddVolunteerModal({ locations, categories, onClose }: Pr
                 <p style={{ fontSize: '12px', color: '#166534', margin: 0 }}>
                   {sendInvite ? t('invite_sent') : t('account_created')}
                 </p>
+                {tempPassword && (
+                  <p style={{ fontSize: '12px', color: '#166534', margin: '6px 0 0' }}>
+                    Temporary password (share it now — it won&apos;t be shown again):{' '}
+                    <code style={{
+                      background: '#dcfce7', padding: '2px 6px', borderRadius: '4px',
+                      fontWeight: 700, userSelect: 'all',
+                    }}>
+                      {tempPassword}
+                    </code>
+                  </p>
+                )}
               </div>
             </div>
           )}

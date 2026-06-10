@@ -26,11 +26,12 @@ export type LessonWithQuestions = {
   completion: { completed_at: string; score: number | null } | null
 }
 
+// Correct answers deliberately never reach the client — grading happens
+// server-side in gradeQuiz (see ./actions.ts).
 export type QuizQuestionRow = {
   id: string
   question: string
   options: string[]
-  correct_answer_index: number
   order_index: number
 }
 
@@ -80,7 +81,7 @@ export default async function LearnPage() {
 
     admin
       .from('quiz_questions')
-      .select('id, lesson_id, question, options, correct_answer_index, order_index')
+      .select('id, lesson_id, question, options, order_index')
       .order('order_index', { ascending: true }),
 
     admin

@@ -1,3 +1,9 @@
+⚠️ HISTORICAL DOCUMENT (original build prompt, March 2026).
+Live project state lives in .mex/ROUTER.md; architecture/conventions in CLAUDE.md.
+Known drift: deployment is Vercel (not SiteGround — Phases 9–10 superseded);
+volunteer_status enum renamed (active→volunteer, onboarding→prospect);
+admin role is now an explicit admin_users table; RLS is deny-by-default.
+
 I'm building a medical volunteer management platform. It has three parts:
 1. A Progressive Web App (Next.js, volunteer-facing, mobile-first, installable)
 2. A web admin dashboard (Next.js 14, App Router, TypeScript, Tailwind)

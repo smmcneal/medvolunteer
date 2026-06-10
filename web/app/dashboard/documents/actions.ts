@@ -1,15 +1,8 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin, getAuthUser, getAdminUser } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
-
-async function requireDashboardUser() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated.')
-  return user
-}
 
 const BUCKET = 'org-documents'
 
@@ -19,7 +12,7 @@ async function uploadDocument(
   formData: FormData,
   volunteerVisible: boolean,
 ): Promise<{ error?: string }> {
-  try { await requireDashboardUser() } catch { return { error: 'Not authenticated.' } }
+  try { await requireAdmin() } catch { return { error: 'Admin access required.' } }
 
   const file = formData.get('file') as File | null
   if (!file) return { error: 'No file provided.' }
@@ -91,7 +84,7 @@ export async function deleteOrgDocument(
   id: string,
   storagePath: string | null,
 ): Promise<{ error?: string }> {
-  try { await requireDashboardUser() } catch { return { error: 'Not authenticated.' } }
+  try { await requireAdmin() } catch { return { error: 'Admin access required.' } }
 
   const admin = createAdminClient()
 
@@ -113,7 +106,7 @@ export async function toggleDocumentVisibility(
   id: string,
   visible: boolean,
 ): Promise<{ error?: string }> {
-  try { await requireDashboardUser() } catch { return { error: 'Not authenticated.' } }
+  try { await requireAdmin() } catch { return { error: 'Admin access required.' } }
 
   const admin = createAdminClient()
   const { error } = await admin
@@ -134,9 +127,25 @@ export async function toggleDocumentVisibility(
 export async function getOrgDocumentSignedUrl(
   storagePath: string,
 ): Promise<{ url?: string; error?: string }> {
-  try { await requireDashboardUser() } catch { return { error: 'Not authenticated.' } }
+  // Volunteers may open volunteer-visible docs; everything else is admin-only.
+  const user = await getAuthUser()
+  if (!user) return { error: 'Not authenticated.' }
 
   const admin = createAdminClient()
+
+  const { data: doc } = await admin
+    .from('org_documents')
+    .select('id, volunteer_visible')
+    .eq('storage_path', storagePath)
+    .maybeSingle()
+
+  if (!doc) return { error: 'Document not found.' }
+
+  if (!doc.volunteer_visible) {
+    const adminUser = await getAdminUser()
+    if (!adminUser) return { error: 'Admin access required.' }
+  }
+
   const { data, error } = await admin.storage
     .from(BUCKET)
     .createSignedUrl(storagePath, 3600) // 1-hour expiry

@@ -3,3 +3,6 @@
 .mex/
 .superpowers/
 .worktrees/
+node_modules/
+.claude/settings.local.json
+Heather_Notion_Setup_Guide.docx

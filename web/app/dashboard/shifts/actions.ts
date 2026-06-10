@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 
@@ -17,6 +18,7 @@ export async function createShift(data: {
   volunteer_ids?: string[]
 }): Promise<{ shiftId: string }> {
   // Use admin client so org lookup is never blocked by RLS
+  await requireAdmin()
   const admin = createAdminClient()
 
   const { data: org } = await admin
@@ -74,6 +76,7 @@ export async function createRecurringShifts(data: {
   required_categories?: string[]
   notes: string
 }, frequency: 'weekly' | 'biweekly' | 'monthly', endDate: string | null) {
+  await requireAdmin()
   const admin = createAdminClient()
 
   const { data: org } = await admin
@@ -129,6 +132,7 @@ export async function bulkUpdateRecurringShifts(
   fromShiftId: string,
   data: { name?: string; location_id?: string | null; required_count?: number; notes?: string },
 ) {
+  await requireAdmin()
   const admin = createAdminClient()
 
   const { data: refShift } = await admin
@@ -149,6 +153,7 @@ export async function bulkUpdateRecurringShifts(
 }
 
 export async function bulkDeleteRecurringShifts(groupId: string, fromShiftId: string) {
+  await requireAdmin()
   const admin = createAdminClient()
 
   const { data: refShift } = await admin
@@ -177,6 +182,7 @@ export async function updateShift(id: string, data: {
   required_categories?: string[]
   notes?: string
 }) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('shifts').update(data).eq('id', id)
   if (error) throw new Error(error.message)
@@ -184,6 +190,7 @@ export async function updateShift(id: string, data: {
 }
 
 export async function deleteShift(id: string) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('shifts').delete().eq('id', id)
   if (error) throw new Error(error.message)
@@ -198,6 +205,7 @@ export async function assignVolunteer(
   role = '',
   mentor_id?: string,
 ) {
+  await requireAdmin()
   const admin = createAdminClient()
 
   // Enforce mentor requirement for training-phase volunteers
@@ -246,6 +254,7 @@ export async function assignTraineeWithMentor(
   mentor_id: string,
   role = '',
 ) {
+  await requireAdmin()
   const admin = createAdminClient()
 
   // Ensure mentor is on the shift — upsert to handle the unique(shift_id, volunteer_id) constraint
@@ -302,6 +311,7 @@ export async function assignTraineeWithMentor(
 }
 
 export async function removeAssignment(id: string) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin.from('shift_assignments').update({ status: 'cancelled' }).eq('id', id)
   if (error) throw new Error(error.message)
@@ -312,6 +322,7 @@ export async function removeAssignment(id: string) {
 // ─── Clock in / out ───────────────────────────────────────────────────────────
 
 export async function manualClockIn(volunteer_id: string, shift_id: string, location_id: string | null) {
+  await requireAdmin()
   const admin = createAdminClient()
 
   // Check if already clocked in
@@ -337,6 +348,7 @@ export async function manualClockIn(volunteer_id: string, shift_id: string, loca
 }
 
 export async function manualClockOut(time_entry_id: string) {
+  await requireAdmin()
   const admin = createAdminClient()
   const { error } = await admin
     .from('time_entries')

@@ -1,6 +1,7 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
 // ─── Modules ──────────────────────────────────────────────────────────────────
@@ -11,7 +12,8 @@ export async function createModule(data: {
   is_required: boolean
   required_for_categories: string[]
 }) {
-  const supabase = await createClient()
+  await requireAdmin()
+  const supabase = createAdminClient()
 
   const { data: org } = await supabase
     .from('organizations')
@@ -47,21 +49,24 @@ export async function updateModule(id: string, data: {
   is_required?: boolean
   required_for_categories?: string[]
 }) {
-  const supabase = await createClient()
+  await requireAdmin()
+  const supabase = createAdminClient()
   const { error } = await supabase.from('learning_modules').update(data).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/learning')
 }
 
 export async function deleteModule(id: string) {
-  const supabase = await createClient()
+  await requireAdmin()
+  const supabase = createAdminClient()
   const { error } = await supabase.from('learning_modules').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/learning')
 }
 
 export async function reorderModules(ids: string[]) {
-  const supabase = await createClient()
+  await requireAdmin()
+  const supabase = createAdminClient()
   await Promise.all(
     ids.map((id, index) =>
       supabase.from('learning_modules').update({ order_index: index }).eq('id', id)
@@ -79,7 +84,8 @@ export async function createLesson(data: {
   content_url: string | null
   duration_minutes: number | null
 }) {
-  const supabase = await createClient()
+  await requireAdmin()
+  const supabase = createAdminClient()
 
   const { data: maxOrder } = await supabase
     .from('lessons')
@@ -103,21 +109,24 @@ export async function updateLesson(id: string, data: {
   content_url?: string | null
   duration_minutes?: number | null
 }) {
-  const supabase = await createClient()
+  await requireAdmin()
+  const supabase = createAdminClient()
   const { error } = await supabase.from('lessons').update(data).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/learning')
 }
 
 export async function deleteLesson(id: string) {
-  const supabase = await createClient()
+  await requireAdmin()
+  const supabase = createAdminClient()
   const { error } = await supabase.from('lessons').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/learning')
 }
 
 export async function reorderLessons(ids: string[]) {
-  const supabase = await createClient()
+  await requireAdmin()
+  const supabase = createAdminClient()
   await Promise.all(
     ids.map((id, index) =>
       supabase.from('lessons').update({ order_index: index }).eq('id', id)
@@ -134,7 +143,8 @@ export async function createQuizQuestion(data: {
   options: string[]
   correct_answer_index: number
 }) {
-  const supabase = await createClient()
+  await requireAdmin()
+  const supabase = createAdminClient()
   const { error } = await supabase.from('quiz_questions').insert(data)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/learning')
@@ -145,14 +155,16 @@ export async function updateQuizQuestion(id: string, data: {
   options?: string[]
   correct_answer_index?: number
 }) {
-  const supabase = await createClient()
+  await requireAdmin()
+  const supabase = createAdminClient()
   const { error } = await supabase.from('quiz_questions').update(data).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/learning')
 }
 
 export async function deleteQuizQuestion(id: string) {
-  const supabase = await createClient()
+  await requireAdmin()
+  const supabase = createAdminClient()
   const { error } = await supabase.from('quiz_questions').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/dashboard/learning')

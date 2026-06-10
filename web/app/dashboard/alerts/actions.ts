@@ -1,9 +1,11 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
 export async function markAlertRead(alertId: string) {
+  await requireAdmin()
   const supabase = createAdminClient()
   const { error } = await supabase
     .from('internal_alerts')
@@ -14,6 +16,7 @@ export async function markAlertRead(alertId: string) {
 }
 
 export async function markAllAlertsRead() {
+  await requireAdmin()
   const supabase = createAdminClient()
   const { error } = await supabase
     .from('internal_alerts')

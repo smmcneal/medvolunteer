@@ -94,7 +94,7 @@ async function fetchDashboardData() {
 
     supabase
       .from('shifts')
-      .select('id, name, start_time, end_time, required_count, location:locations(name), shift_assignments(id)')
+      .select('id, name, start_time, end_time, required_count, location:locations(name), shift_assignments(id, status)')
       .gte('start_time', shiftsRangeStart.toISOString())
       .lte('start_time', shiftsRangeEnd.toISOString())
       .order('start_time', { ascending: true }),
@@ -125,10 +125,11 @@ async function fetchDashboardData() {
   const openShifts: OpenShift[] = ((openShiftsRes.data ?? []) as unknown as {
     id: string; name: string; start_time: string; end_time: string
     required_count: number; location: { name: string } | null
-    shift_assignments: unknown[]
+    shift_assignments: { status: string }[]
   }[])
     .map(s => {
-      const assigned = s.shift_assignments?.length ?? 0
+      // Soft-deleted (cancelled) assignments don't fill a slot
+      const assigned = (s.shift_assignments ?? []).filter(a => a.status !== 'cancelled').length
       return {
         id: s.id,
         name: s.name,

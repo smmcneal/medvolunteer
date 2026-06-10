@@ -9,6 +9,8 @@ name: Supabase Migrations
 on:
   push:
     branches: [main]
+    paths:
+      - 'supabase/migrations/**'
 
   workflow_dispatch:
     inputs:
@@ -18,35 +20,31 @@ on:
         default: 'false'
         type: boolean
 
+# Never run two `db push` invocations concurrently
+concurrency:
+  group: supabase-migrate
+  cancel-in-progress: false
+
 jobs:
   migrate:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
 
-      - name: Check for migration changes
+      # Triggering is handled by the `paths:` filter above (a HEAD~1 diff here
+      # would miss migrations buried in multi-commit pushes). This guard only
+      # checks that the deploy secrets exist.
+      - name: Check secrets
         id: guard
         env:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
         run: |
-          # Skip entirely if secrets are not configured yet
           if [ -z "$SUPABASE_PROJECT_ID" ]; then
             echo "SUPABASE_PROJECT_ID secret not set — skipping migrations."
             echo "SHOULD_MIGRATE=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "SHOULD_MIGRATE=true" >> "$GITHUB_ENV"
-          elif git diff --name-only HEAD~1 HEAD | grep -q '^supabase/migrations/'; then
-            echo "SHOULD_MIGRATE=true" >> "$GITHUB_ENV"
-            echo "Migration files changed - will apply."
           else
-            echo "SHOULD_MIGRATE=false" >> "$GITHUB_ENV"
-            echo "No migration files changed - skipping."
+            echo "SHOULD_MIGRATE=true" >> "$GITHUB_ENV"
           fi
 
       - name: Setup Supabase CLI
@@ -96,7 +94,7 @@ jobs:
           echo "- Branch: main" >> "$GITHUB_STEP_SUMMARY"
           echo "- Time: $(date -u)" >> "$GITHUB_STEP_SUMMARY"
           if [ "${SHOULD_MIGRATE}" != "true" ]; then
-            echo "- Mode: Skipped (no migration files changed)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Mode: Skipped (Supabase secrets not configured)" >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             echo "- Mode: Dry run" >> "$GITHUB_STEP_SUMMARY"
           else

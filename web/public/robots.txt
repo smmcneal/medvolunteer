@@ -2,5 +2,8 @@ User-agent: *
 Disallow: /dashboard
 Disallow: /dashboard/
 Disallow: /volunteer/login
+Disallow: /volunteer/set-password
+Disallow: /volunteer/forgot-password
+Disallow: /login
 Disallow: /api/
 Allow: /

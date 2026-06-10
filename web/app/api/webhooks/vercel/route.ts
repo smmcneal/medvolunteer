@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { headers } from 'next/headers';
 
 /**
@@ -70,11 +70,16 @@ export async function POST(request: Request) {
   const headersList = await headers();
   const signature = headersList.get('x-vercel-signature');
 
-  if (signature) {
-    const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
-    if (signature !== expected) {
-      return Response.json({ error: 'Invalid signature' }, { status: 401 });
-    }
+  // A missing signature is a rejection, not a bypass.
+  if (!signature) {
+    return Response.json({ error: 'Missing signature' }, { status: 401 });
+  }
+
+  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+  const sigBuf = Buffer.from(signature);
+  const expectedBuf = Buffer.from(expected);
+  if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+    return Response.json({ error: 'Invalid signature' }, { status: 401 });
   }
 
   // ── 2. Parse payload ─────────────────────────────────────────────────────

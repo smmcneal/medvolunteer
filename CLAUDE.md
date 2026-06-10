@@ -61,7 +61,7 @@ supabase/     Migrations, seed data, edge functions
 scripts/      notion-sync.cjs — Notion API helper used by hooks/CI
               build-heather-guide.cjs — generates Heather_Notion_Setup_Guide.docx
 .mex/         Project memory submodule (patterns, context, drift detection)
-.github/      supabase-migrate.yml — auto-applies migrations on merge to main (runs check job on every push; migrate job only when supabase/migrations/** changed)
+.github/      supabase-migrate.yml — auto-applies migrations on merge to main (push paths filter: supabase/migrations/**; single migrate job, concurrency-guarded)
               notion-pr-sync.yml — PR events → Notion Dev Tasks status
               auto-build-features.yml — nightly (3am UTC) Claude Code agent that reads "Ready" tasks from Notion Feature Requests DB and opens PRs. Skips if bug backlog is not clear. Branch names follow feat/DEV-###-slug. Requires ANTHROPIC_API_KEY, NOTION_FEATURE_REQUESTS_DB_ID, GH_PAT secrets.
 ```
@@ -72,23 +72,35 @@ Three distinct user zones, each protected by its own layout:
 
 | Zone | Root | Layout guard |
 |------|------|-------------|
-| Admin | `/dashboard` | `web/app/dashboard/layout.tsx` → redirect to `/login` |
+| Admin | `/dashboard` | `web/app/dashboard/layout.tsx` → `getAdminUser()`; not logged in → `/login`, logged in but not admin → `/volunteer/home` |
 | Volunteer PWA | `/volunteer/(tabs)` | `web/app/volunteer/layout.tsx` → redirect to `/volunteer/login` |
 | Public | `/apply`, `/auth/callback`, `/login` | None |
 
-No `middleware.ts` — auth is enforced exclusively via **server-side layout checks** (`createClient()` → `getUser()` → `redirect()`).
+No `middleware.ts` — page access is enforced via **server-side layout checks**. But layout guards do NOT protect server actions (they're independently invokable POST endpoints), which is why every action carries its own guard (below).
+
+### Auth Guards (web/lib/auth.ts)
+
+Admin = membership in the `admin_users` table (explicit role, service-role-only RLS).
+
+| Helper | Behavior | Use in |
+|--------|----------|--------|
+| `requireAdmin()` | throws unless caller is an admin; returns the auth user | **every** dashboard server action, first line |
+| `getAdminUser()` | returns user or null (redirect-friendly) | layouts |
+| `requireVolunteer()` | throws unless caller has a volunteers row; returns `{ user, volunteerId }` | **every** volunteer server action |
+
+**Non-negotiable**: a server action without one of these guards is a publicly invokable endpoint. Never rely on the page being "behind the layout".
 
 ### Supabase Client Rules
 
-Three clients — use the right one or RLS will block you:
+Three clients:
 
 | Client | File | When to use |
 |--------|------|-------------|
-| `createAdminClient()` | `web/lib/supabase/admin.ts` | All server actions, any write that must bypass RLS |
-| `createClient()` | `web/lib/supabase/server.ts` | Server components reading the current user's own data |
-| `createBrowserClient()` | `web/lib/supabase/client.ts` | Client components only |
+| `createAdminClient()` | `web/lib/supabase/admin.ts` | All database reads/writes in server code, after an auth guard |
+| `createClient()` | `web/lib/supabase/server.ts` | Auth only — `getUser()`, cookie/session handling |
+| `createBrowserClient()` | `web/lib/supabase/client.ts` | Client components, auth only (`signOut`, `signInWithPassword`) |
 
-**Non-negotiable**: All dashboard/admin mutations use `createAdminClient()`. Using `createClient()` in a server action will be silently blocked by RLS. This was a recurring bug — if a write fails with no obvious error, this is the first thing to check.
+**RLS is deny-by-default on every table** (no anon/authenticated policies). Querying tables with `createClient()` or the browser client returns empty results — all data access goes through `createAdminClient()` after `requireAdmin()`/`requireVolunteer()`. Volunteer-facing actions must scope queries by the caller's `volunteerId` and verify ownership before writes.
 
 ### Server Actions Pattern
 
@@ -97,9 +109,11 @@ Every `actions.ts` is `'use server'`. The standard shape:
 ```ts
 'use server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/auth'   // or requireVolunteer
 import { revalidatePath } from 'next/cache'
 
 export async function doThing(input) {
+  await requireAdmin()
   const admin = createAdminClient()
   // ... query
   if (error) throw new Error(error.message)
@@ -114,7 +128,7 @@ Errors are thrown (caught by the client `run()` wrapper in ShiftsView / similar)
 | Route | Purpose |
 |-------|---------|
 | `GET /api/dev/login` | Dev-only auto-login (403 in production) |
-| `GET /api/cron/send-auto-messages` | Vercel Cron — daily midnight UTC, runs auto-message rules. Must include `Authorization: Bearer <CRON_SECRET>` header |
+| `GET /api/cron/send-auto-messages` | Vercel Cron — hourly; dispatches scheduled messages every run, daily auto-message rules only on the midnight UTC run. Must include `Authorization: Bearer <CRON_SECRET>` header (fails closed if `CRON_SECRET` unset) |
 | `POST /api/webhooks/vercel` | Vercel deploy events → Notion Dev Tasks status + preview URL. HMAC-verified via `VERCEL_WEBHOOK_SECRET` |
 | `POST /api/push-subscription` | PWA push notification subscription management |
 
@@ -171,6 +185,10 @@ async function run(fn: () => Promise<void>) {
 
 **Volunteer status flow**: `applicant` → `prospect` → `volunteer` → `inactive`. Gate feature access on `status === 'volunteer'`, not on `pipeline_phase`. The canonical phase→status mapping is `PHASE_STATUS_MAP` in `web/app/dashboard/volunteers/[id]/actions.ts` — don't duplicate this logic elsewhere.
 
+**Hour approval status flow**: `auto_approved` (default on clock-out when no manual review needed) | `pending` (requires admin review) → `approved` | `rejected`. Admin approves/rejects in `/dashboard/reports`. The `approved_by` and `approved_at` fields are set on approval only.
+
+**Message status flow**: immediate sends go `draft` → (email dispatch via `web/lib/email.ts`) → `sent` (or `failed` when every email bounces); scheduled sends go `scheduled` (has `scheduled_send_at`, `sent_at` null) → `sent` when the hourly cron dispatches them. Never set `sent_at` at insert time. `messages.sender_id` references `auth.users` (admins have no volunteers row).
+
 **Single-org setup**: `org_id` is always resolved as `select('id').from('organizations').limit(1).single()`.
 
 ### Notion Automation Pipeline
@@ -215,6 +233,6 @@ Update `.mex/ROUTER.md` project state and any `.mex/` files that are now out of 
 
 ## Navigation
 
-At the start of every session, read `.mex/ROUTER.md` before doing anything else. It contains current project state, the routing table for which context files to load, and the full behavioural contract (CONTEXT → BUILD → VERIFY → DEBUG → GROW). `.mex/AGENTS.md` is an unfilled template — skip it.
+At the start of every session, read `.mex/ROUTER.md` before doing anything else. It contains current project state, the routing table for which context files to load, and the full behavioural contract (CONTEXT → BUILD → VERIFY → DEBUG → GROW). ROUTER.md references `AGENTS.md` at the top — **skip that step**, `.mex/AGENTS.md` is an unfilled template.
 
 **`.mex/` file status**: Only `ROUTER.md` is populated. All `.mex/context/` files (`architecture.md`, `conventions.md`, `decisions.md`, `setup.md`, `stack.md`) and `patterns/INDEX.md` are unpopulated templates — skip them until filled.

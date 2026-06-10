@@ -6,8 +6,9 @@ import { createServerClient } from '@supabase/ssr'
  * Usage:
  *   GET /api/dev/login?role=admin      → signs in as DEV_ADMIN_EMAIL
  *   GET /api/dev/login?role=volunteer  → signs in as DEV_VOLUNTEER_EMAIL
- *   GET /api/dev/login?email=x&password=y → signs in with explicit creds
  *
+ * Credentials come exclusively from env vars — never from the query string,
+ * so passwords don't end up in request logs or browser history.
  * After sign-in, redirects to ?redirect (default: /)
  * Blocked entirely in production.
  */
@@ -18,10 +19,11 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
   const role = searchParams.get('role')
-  const redirectTo = searchParams.get('redirect') ?? '/'
+  const rawRedirect = searchParams.get('redirect') ?? '/'
+  const redirectTo = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/'
 
-  let email: string | null = searchParams.get('email')
-  let password: string | null = searchParams.get('password')
+  let email: string | null = null
+  let password: string | null = null
 
   if (role === 'admin') {
     email = process.env.DEV_ADMIN_EMAIL ?? null
@@ -33,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   if (!email || !password) {
     return NextResponse.json(
-      { error: 'Provide ?role=admin|volunteer or ?email=&password=' },
+      { error: 'Provide ?role=admin|volunteer (credentials come from DEV_* env vars)' },
       { status: 400 }
     )
   }
