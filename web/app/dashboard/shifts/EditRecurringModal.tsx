@@ -39,8 +39,8 @@ export default function EditRecurringModal({ shift, updateData, onClose, onDone 
           await bulkUpdateRecurringShifts(shift.recurrence_group_id!, shift.id, updateData)
         }
         onDone()
-      } catch (e: any) {
-        setError(e.message)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Something went wrong')
       }
     })
   }

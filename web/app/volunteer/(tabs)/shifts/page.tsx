@@ -157,7 +157,7 @@ export default async function ShiftsPage() {
 
       const assignedShiftIds = new Set(enriched.map(a => a.shift_id))
 
-      const volunteerCategories: string[] = (volunteer as any).volunteer_categories ?? []
+      const volunteerCategories: string[] = (volunteer as { volunteer_categories?: string[] }).volunteer_categories ?? []
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       availableShifts = (allShifts as any[])

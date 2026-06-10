@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import type { Volunteer } from '@/types/database'
@@ -19,6 +19,27 @@ function isInStandaloneMode(): boolean {
   if (typeof window === 'undefined') return false
   return window.matchMedia('(display-mode: standalone)').matches ||
     (window.navigator as { standalone?: boolean }).standalone === true
+}
+
+// The iOS install hint is derived from browser state (user agent, display
+// mode, sessionStorage) via useSyncExternalStore — server snapshot is false,
+// the client recomputes after hydration, and dismissBanner() notifies to
+// re-render. Avoids setState-in-effect without a hydration mismatch.
+const installUiListeners = new Set<() => void>()
+
+function subscribeInstallUi(callback: () => void) {
+  installUiListeners.add(callback)
+  return () => { installUiListeners.delete(callback) }
+}
+
+function notifyInstallUi() {
+  installUiListeners.forEach(cb => cb())
+}
+
+function readShowIOSHint(): boolean {
+  return isIOSSafari() &&
+    !isInStandaloneMode() &&
+    !sessionStorage.getItem('install-dismissed')
 }
 
 const TAB_DEFS = [
@@ -44,7 +65,7 @@ function VolunteerShellInner({ volunteer, children }: Omit<Props, 'initialLang'>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const deferredPrompt = useRef<any>(null)
   const [showInstallBanner, setShowInstallBanner] = useState(false)
-  const [showIOSHint, setShowIOSHint] = useState(false)
+  const showIOSHint = useSyncExternalStore(subscribeInstallUi, readShowIOSHint, () => false)
 
   // Register the service worker and handle install prompts once on mount
   useEffect(() => {
@@ -61,11 +82,9 @@ function VolunteerShellInner({ volunteer, children }: Omit<Props, 'initialLang'>
     // Check if user previously dismissed
     if (sessionStorage.getItem('install-dismissed')) return
 
-    if (isIOSSafari()) {
-      // iOS Safari: show manual instructions
-      setShowIOSHint(true)
-    } else {
-      // Chrome / Edge / Android: listen for beforeinstallprompt
+    // iOS Safari shows manual instructions (showIOSHint above); everywhere
+    // else listen for beforeinstallprompt (Chrome / Edge / Android).
+    if (!isIOSSafari()) {
       const handler = (e: Event) => {
         e.preventDefault()
         deferredPrompt.current = e
@@ -88,7 +107,7 @@ function VolunteerShellInner({ volunteer, children }: Omit<Props, 'initialLang'>
   function dismissBanner() {
     sessionStorage.setItem('install-dismissed', '1')
     setShowInstallBanner(false)
-    setShowIOSHint(false)
+    notifyInstallUi() // recomputes showIOSHint → false
   }
 
   return (

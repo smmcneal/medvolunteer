@@ -342,7 +342,7 @@ export default function ReportsView({
   const [inactiveSuccessCount, setInactiveSuccessCount] = useState<number | null>(null)
 
   const inactiveDays = inactiveThreshold === 'custom' ? parseInt(inactiveCustomDays, 10) || 0 : inactiveThreshold
-  const inactiveCutoff = inactiveDays > 0 ? new Date(Date.now() - inactiveDays * 86400000).toISOString() : null
+  const inactiveCutoff = inactiveDays > 0 ? new Date(new Date().getTime() - inactiveDays * 86400000).toISOString() : null
 
   const inactiveVols = useMemo(() => {
     if (!inactiveCutoff) return []

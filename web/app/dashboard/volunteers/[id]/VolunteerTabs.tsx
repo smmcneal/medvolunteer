@@ -447,7 +447,7 @@ export default function VolunteerTabs({
                 {credentials.map(c => {
                   const isExpired = c.expiration_date && new Date(c.expiration_date) < new Date()
                   const daysLeft = c.expiration_date
-                    ? Math.ceil((new Date(c.expiration_date).getTime() - Date.now()) / 86400000)
+                    ? Math.ceil((new Date(c.expiration_date).getTime() - new Date().getTime()) / 86400000)
                     : null
                   return (
                     <div key={c.id} style={{

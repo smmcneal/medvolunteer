@@ -52,9 +52,8 @@ export default function InfoTab({
   const [editLocationIds, setEditLocationIds] = useState<string[]>([])
 
   function makeForm(vol: VolunteerDetail): EditState {
-    const cats: string[] = (vol as any).volunteer_categories?.length
-      ? (vol as any).volunteer_categories as string[]
-      : [vol.category]
+    const volCats = (vol as { volunteer_categories?: string[] }).volunteer_categories
+    const cats: string[] = volCats?.length ? volCats : [vol.category]
     return {
       first_name:           vol.first_name,
       last_name:            vol.last_name,
@@ -302,11 +301,11 @@ export default function InfoTab({
           {/* Categories — full width */}
           <div style={{ gridColumn: '1 / -1', padding: '14px 16px', background: '#fafafa', borderRadius: '8px', border: '1px solid #f3f4f6' }}>
             <p style={{ fontSize: '11px', fontWeight: 500, color: '#9ca3af', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {((v as any).volunteer_categories?.length ?? 0) > 1 ? t('categories') : t('category')}
+              {((v as { volunteer_categories?: string[] }).volunteer_categories?.length ?? 0) > 1 ? t('categories') : t('category')}
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {((v as any).volunteer_categories?.length
-                ? (v as any).volunteer_categories as string[]
+              {((v as { volunteer_categories?: string[] }).volunteer_categories?.length
+                ? (v as { volunteer_categories?: string[] }).volunteer_categories!
                 : [v.category]
               ).map((cat: string) => (
                 <span key={cat} style={{ fontSize: '13px', fontWeight: 500, padding: '3px 10px', borderRadius: '6px', background: '#1B2A4A1a', color: '#1B2A4A', border: '1px solid #1B2A4A33' }}>

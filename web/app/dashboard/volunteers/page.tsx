@@ -113,11 +113,13 @@ async function fetchVolunteers(filters: {
 
   const rows: VolunteerRow[] = volunteers
     .map(v => {
-      const locations = (v.volunteer_locations ?? [])
-        .map((vl: any) => (vl.location as { name: string } | null)?.name)
+      // PostgREST types these to-one joins as arrays on the untyped client,
+      // but the runtime values are single objects — cast the rows once
+      const locations = ((v.volunteer_locations ?? []) as unknown as { location: { name: string } | null }[])
+        .map(vl => vl.location?.name)
         .filter(Boolean) as string[]
-      const tags = (v.volunteer_tags ?? [])
-        .map((vt: any) => vt.tag as { id: string; name: string; color: string } | null)
+      const tags = ((v.volunteer_tags ?? []) as unknown as { tag: { id: string; name: string; color: string } | null }[])
+        .map(vt => vt.tag)
         .filter(Boolean) as { id: string; name: string; color: string }[]
       const { total, completed } = progressMap[v.id] ?? { total: 0, completed: 0 }
       return {
@@ -128,7 +130,9 @@ async function fetchVolunteers(filters: {
         phone: v.phone,
         photo_url: v.photo_url,
         category: v.category,
-        volunteer_categories: (v as any).volunteer_categories?.length ? (v as any).volunteer_categories : [v.category],
+        volunteer_categories: (v as { volunteer_categories?: string[] }).volunteer_categories?.length
+          ? (v as { volunteer_categories?: string[] }).volunteer_categories!
+          : [v.category],
         status: v.status,
         pipeline_phase: v.pipeline_phase,
         created_at: v.created_at,

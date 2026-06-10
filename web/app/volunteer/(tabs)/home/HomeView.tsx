@@ -360,7 +360,7 @@ function ClockCard({ initialEntry }: { initialEntry: { id: string; clock_in: str
 
   function elapsed() {
     if (!entry) return null
-    const mins = Math.floor((Date.now() - new Date(entry.clock_in).getTime()) / 60000)
+    const mins = Math.floor((new Date().getTime() - new Date(entry.clock_in).getTime()) / 60000)
     const h = Math.floor(mins / 60)
     const m = mins % 60
     return h > 0 ? `${h}h ${m}m` : `${m}m`

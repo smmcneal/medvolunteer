@@ -103,20 +103,38 @@ async function fetchShiftsData() {
     }
   }
 
-  const shifts: ShiftWithRoster[] = (shiftsRes.data ?? []).map(s => ({
+  // Shape of one row from the shifts select above (the hand-maintained DB
+  // types don't cover joined selects, so cast the whole row once)
+  type ShiftRow = {
+    id: string
+    name: string
+    location_id: string | null
+    start_time: string
+    end_time: string
+    required_count: number
+    required_categories: string[] | null
+    notes: string | null
+    recurrence_rule: string | null
+    recurrence_group_id: string | null
+    recurrence_end_date: string | null
+    location: { id: string; name: string } | null
+    shift_assignments: AssignmentWithVolunteer[] | null
+  }
+
+  const shifts: ShiftWithRoster[] = ((shiftsRes.data ?? []) as unknown as ShiftRow[]).map(s => ({
     id: s.id,
     name: s.name,
     location_id: s.location_id,
-    location_name: (s.location as unknown as { name: string } | null)?.name ?? null,
+    location_name: s.location?.name ?? null,
     start_time: s.start_time,
     end_time: s.end_time,
     required_count: s.required_count,
-    required_categories: (s as any).required_categories ?? [],
+    required_categories: s.required_categories ?? [],
     notes: s.notes,
-    recurrence_rule: (s as any).recurrence_rule ?? null,
-    recurrence_group_id: (s as any).recurrence_group_id ?? null,
-    recurrence_end_date: (s as any).recurrence_end_date ?? null,
-    assignments: ((s.shift_assignments ?? []) as unknown as AssignmentWithVolunteer[])
+    recurrence_rule: s.recurrence_rule ?? null,
+    recurrence_group_id: s.recurrence_group_id ?? null,
+    recurrence_end_date: s.recurrence_end_date ?? null,
+    assignments: (s.shift_assignments ?? [])
       .filter(a => a.status !== 'cancelled')
       .map(a => ({
         ...a,

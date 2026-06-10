@@ -75,9 +75,10 @@ async function fetchVolunteer(id: string) {
       .filter(Boolean),
   }
 
-  // Tags
-  const appliedTags = (volTagsRes.data ?? [])
-    .map((vt: any) => vt.tag as OrgTag | null)
+  // Tags (PostgREST types the to-one join as an array on the untyped client,
+  // but the runtime value is a single object — cast the rows once)
+  const appliedTags = ((volTagsRes.data ?? []) as unknown as { tag: OrgTag | null }[])
+    .map(vt => vt.tag)
     .filter(Boolean) as OrgTag[]
 
   // Flags split into active / resolved

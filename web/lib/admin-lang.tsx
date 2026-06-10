@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useSyncExternalStore } from 'react'
 
 export type AdminLang = 'en' | 'es'
 
@@ -867,18 +867,28 @@ export const AdminLangContext = createContext<AdminLang>('en')
 export const AdminSetLangContext = createContext<(l: AdminLang) => void>(() => {})
 
 // ── Provider ──────────────────────────────────────────────────────────────────
-export function AdminLangProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<AdminLang>('en')
+// The language lives in localStorage; React reads it through
+// useSyncExternalStore so there is no setState-in-effect and no
+// localStorage-in-useState-initializer hydration mismatch: the server
+// snapshot is always 'en', and React re-renders with the stored value
+// right after hydration.
+const langListeners = new Set<() => void>()
 
-  // Read from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem('admin-lang')
-    if (stored === 'es') setLangState('es')
-  }, [])
+function subscribeToLang(callback: () => void) {
+  langListeners.add(callback)
+  return () => { langListeners.delete(callback) }
+}
+
+function readStoredLang(): AdminLang {
+  return localStorage.getItem('admin-lang') === 'es' ? 'es' : 'en'
+}
+
+export function AdminLangProvider({ children }: { children: React.ReactNode }) {
+  const lang = useSyncExternalStore<AdminLang>(subscribeToLang, readStoredLang, () => 'en')
 
   function setLang(l: AdminLang) {
-    setLangState(l)
     localStorage.setItem('admin-lang', l)
+    langListeners.forEach(cb => cb())
   }
 
   return (

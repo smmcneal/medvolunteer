@@ -403,7 +403,7 @@ export default function ShiftsView({
               { key: 'day',      label: t('day_view'),   icon: null },
               { key: 'list',     label: t('list_view'),  icon: <List style={{ width: '13px', height: '13px' }} /> },
             ] as const).map(({ key, label, icon }) => (
-              <button key={key} onClick={() => setView(key as any)} className="shift-view-toggle-btn" style={{
+              <button key={key} onClick={() => setView(key)} className="shift-view-toggle-btn" style={{
                 padding: '7px 12px', border: 'none', cursor: 'pointer',
                 background: view === key ? NAVY : 'transparent',
                 color: view === key ? 'white' : 'var(--text-muted)',

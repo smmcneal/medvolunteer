@@ -457,7 +457,7 @@ function UpcomingCard({
 
   const clockInTime = a.openEntry ? new Date(a.openEntry.clock_in) : null
   const elapsed = clockInTime
-    ? Math.round((Date.now() - clockInTime.getTime()) / 60000)
+    ? Math.round((new Date().getTime() - clockInTime.getTime()) / 60000)
     : null
 
   return (

@@ -117,7 +117,7 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
     setMobilePanel('main')
   }
 
-  function useTemplateInCompose(tmpl: MessageTemplate) {
+  function applyTemplateToCompose(tmpl: MessageTemplate) {
     setSubject(tmpl.subject)
     setBody(tmpl.body)
     setChannel(tmpl.channel)
@@ -325,7 +325,7 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
                   </div>
                   <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
                     <button
-                      onClick={() => useTemplateInCompose(tmpl)}
+                      onClick={() => applyTemplateToCompose(tmpl)}
                       style={{
                         padding: '3px 9px', borderRadius: '6px', border: 'none',
                         background: 'var(--navy)', color: 'white',
@@ -536,7 +536,7 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
                   value=""
                   onChange={e => {
                     const tmpl = templates.find(t => t.id === e.target.value)
-                    if (tmpl) useTemplateInCompose(tmpl)
+                    if (tmpl) applyTemplateToCompose(tmpl)
                   }}
                   style={fieldStyle}
                 >
@@ -586,7 +586,7 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
                 <input
                   type="datetime-local"
                   value={scheduledAt}
-                  min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                  min={new Date(new Date().getTime() + 60000).toISOString().slice(0, 16)}
                   onChange={e => setScheduledAt(e.target.value)}
                   style={{
                     marginTop: '10px', width: '100%', padding: '8px 10px',
