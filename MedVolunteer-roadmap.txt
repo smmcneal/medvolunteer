@@ -445,7 +445,7 @@ PHASE 9 — Pre-Deployment Prep
       type errors or warnings
   [ ] Create production Supabase project:
         supabase db push (run all migrations)
-        supabase functions deploy (all 8 edge functions)
+        supabase functions deploy (all 7 edge functions)
   [ ] Update Supabase Auth → Site URL to production domain
   [ ] Update Supabase Auth → Redirect URLs to include
       both of these (Supabase Dashboard → Auth → URL Configuration):
