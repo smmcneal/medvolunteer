@@ -60,7 +60,6 @@ web/          Next.js 14 app (admin + volunteer UI)
 supabase/     Migrations, seed data, edge functions
 scripts/      notion-sync.cjs — Notion API helper used by hooks/CI
               build-heather-guide.cjs — generates Heather_Notion_Setup_Guide.docx
-.mex/         Project memory submodule (patterns, context, drift detection)
 .github/      supabase-migrate.yml — auto-applies migrations on merge to main (push paths filter: supabase/migrations/**; single migrate job, concurrency-guarded)
               notion-pr-sync.yml — PR events → Notion Dev Tasks status
               auto-build-features.yml — nightly (3am UTC) Claude Code agent that reads "Ready" tasks from Notion Feature Requests DB and opens PRs. Skips if bug backlog is not clear. Branch names follow feat/DEV-###-slug. Requires ANTHROPIC_API_KEY, NOTION_FEATURE_REQUESTS_DB_ID, GH_PAT secrets.
@@ -227,12 +226,8 @@ const [val, setVal] = useState('')
 useEffect(() => { setVal(localStorage.getItem('key') ?? '') }, [])
 ```
 
-## After Every Task
+## Project Roadmap & Task List
 
-Update `.mex/ROUTER.md` project state and any `.mex/` files that are now out of date. If no pattern existed for the task you just completed, create one in `.mex/patterns/`.
+The current source of truth for project state, priorities, and the agent task list is **`ROADMAP.md`** in the repo root — read it at the start of every session before doing anything else. It supersedes Phases 9–10 of `MedVolunteer-roadmap.txt` (the SiteGround deploy plan is obsolete; deployment is on Vercel).
 
-## Navigation
 
-At the start of every session, read `.mex/ROUTER.md` before doing anything else. It contains current project state, the routing table for which context files to load, and the full behavioural contract (CONTEXT → BUILD → VERIFY → DEBUG → GROW). ROUTER.md references `AGENTS.md` at the top — **skip that step**, `.mex/AGENTS.md` is an unfilled template.
-
-**`.mex/` file status**: Only `ROUTER.md` is populated. All `.mex/context/` files (`architecture.md`, `conventions.md`, `decisions.md`, `setup.md`, `stack.md`) and `patterns/INDEX.md` are unpopulated templates — skip them until filled.
