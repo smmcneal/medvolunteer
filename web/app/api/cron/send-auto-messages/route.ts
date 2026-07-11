@@ -2,8 +2,17 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail, renderTemplate } from '@/lib/email'
 
-// Vercel Cron: hourly
-// vercel.json → { "path": "/api/cron/send-auto-messages", "schedule": "0 * * * *" }
+// Vercel Cron: daily at midnight UTC (Hobby plan only allows daily cron jobs —
+// downgraded from hourly 2026-07-11 after discovering this cron schedule had been
+// silently blocking every production deployment since ~2026-04-29).
+// vercel.json → { "path": "/api/cron/send-auto-messages", "schedule": "0 0 * * *" }
+//
+// Consequence: "Send Later" scheduled messages (status='scheduled', scheduled_send_at
+// in the past) now only get dispatched once a day at this run, not near-real-time.
+// A message scheduled for e.g. 2pm UTC won't actually send until the next midnight
+// UTC run — up to a ~24h delay. isDailyRun below is now always true since this is
+// the only run of the day; the check is left in place in case the schedule is ever
+// upgraded back to hourly (e.g. after moving to Vercel Pro).
 
 export async function GET(request: Request) {
   // Fail closed: without a configured secret, "Bearer undefined" must not pass.

@@ -1,15 +1,17 @@
 # Envolv Roadmap & Agent Task List
-*Originally written 2026-07-06. Updated 2026-07-10 (dummy data restored; Supabase + Vercel connectors in place; housekeeping pass).*
+*Originally written 2026-07-06. Updated 2026-07-11 (housekeeping pushed; A4 in progress — found and fixed a production deployment gap).*
 *Supersedes Phases 9–10 of `MedVolunteer-roadmap.txt` (SiteGround plan is obsolete — we deploy on Vercel).*
 *Context docs: `docs/ENVOLV-STATUS-2026-07-06.md` (full status assessment) and `docs/yakima-production-cutover.md` (cutover runbook).*
 
-## Current status (2026-07-10)
+## Current status (2026-07-11)
 
-- **Preview app is live and healthy** on Vercel (`medvolunteer.vercel.app`; project `medvolunteer`, team `medvolreview`). Latest production deploy is READY.
+- **Housekeeping pushed.** `main` is up to date with `origin/main` (tip `5128f44`), pushed via GitHub Desktop after the `engineering:github` connector turned out not to expose push/branch tools. D1's 5 flagged branches were already deleted from origin by the time of the push.
+- **Discovered & fixed: production hadn't deployed since 2026-04-29.** Two compounding issues found while working A4: (1) the Vercel project's Framework Preset had drifted to "NestJS" instead of "Next.js" (fixed — reset to Next.js); (2) `vercel.json`'s cron for `/api/cron/send-auto-messages` was set to hourly (`0 * * * *`), which Vercel's Hobby plan doesn't allow (daily only) — this was silently rejecting every deploy attempt. **Decision (Sean, 2026-07-11): downgrade the cron to daily at midnight UTC** rather than upgrade to Pro. Consequence: "Send Later" scheduled messages can now be delayed up to ~24h instead of near-real-time (see `web/app/api/cron/send-auto-messages/route.ts` and `CLAUDE.md`). First fresh deployment triggered manually from `main` HEAD to confirm the fix.
+- **A4 (Auth + env cutover) in progress:** `NEXT_PUBLIC_SUPABASE_URL`/anon key split into Preview-only (demo project) + Production-only (prod project `vopgctgjxbpytntthoxb`) entries in Vercel; `SUPABASE_SERVICE_ROLE_KEY` handled directly by Sean (not something Claude can view/copy). Supabase Auth Site URL/redirect URL change to `medvolunteer.vercel.app` still pending.
+- **Preview app is live and healthy** on Vercel (`medvolunteer.vercel.app`; project `medvolunteer`, team `medvolreview`).
 - **Dummy data is restored** in the preview Supabase project (`cquvutwulbtgklqrbamd`): `seed-demo.sql` (14 volunteers, shifts, hours, credentials, messages) is now wired into `supabase/config.toml` and loads on `db reset`.
-- **Supabase + Vercel connectors are in place.** This unblocks the Yakima production cutover (Workstream A), which was waiting on Supabase access — A3/A4/A5 can now be driven largely through the connectors.
-- **Housekeeping pass done 2026-07-10** (this update): ROADMAP rewritten as a prioritized list; `.mex/` references removed from `CLAUDE.md` (D2); `MedVolunteer-roadmap.txt` archived (D3). These changes sit in the working tree, **not yet committed or pushed** — this sandbox has no GitHub push credentials. See Workstream D for the push + branch-delete commands to run from your machine.
-- **Before real data goes into prod:** run the pre-cutover DB hardening items from the Supabase advisors — see the section at the bottom.
+- **Notion Feature Requests backlog populated (D4 done, Sean).** Nightly auto-build CI has real "Ready" tasks to pick up.
+- **Before real data goes into prod:** pre-cutover DB hardening is 3 of 4 done — only H2 (leaked-password protection, manual dashboard toggle) remains. See the section at the bottom.
 
 ## For the agent reading this
 
@@ -34,9 +36,9 @@ Detailed commands in `docs/yakima-production-cutover.md`.
 
 - [ ] ⛔ **A1. Decisions from Sean:** ✅ *Decided 2026-07-08* — (1) **fresh** Supabase prod project (preview stays for demos); (2) domain **`yakima.envolv.app`**. *Still needed before A3/A4:* envolv.app DNS host login (to add the CNAME); Resend domain verification for envolv.org; Yakima sign-off contact. *(Supabase access is now covered by the connector.)*
 - [x] **A2. `[sonnet]` Reconcile edge functions.** ✅ 2026-07-08 — real count is **7** (advance-onboarding, background-check-webhook, clock-in, clock-out, initiate-background-check, send-message, send-push). The "8" was stale design intent: `MedVolunteer-roadmap.txt` planned a `docusign-webhook` that was never built (Phase 0 shipped 6, Phase 8 added send-push). E-signature is handled via the `documents.provider` column, not an edge function. Nothing is missing. Minor follow-up for A3: `send-push` lacks a `config.toml` block but deploys fine.
-- [ ] **A3. `[sonnet]` Production Supabase setup** (after A1): create the fresh prod project → apply all migrations → deploy the 7 edge functions → set secrets. Drive via the Supabase connector where possible. Acceptance: all migrations applied, functions responding, **no demo seed run** (dummy data stays in the preview project).
-- [ ] **A3.5 `[sonnet]` Pre-cutover DB hardening** — 3 of 4 items done 2026-07-11 via migration `20260711050700_precutover_hardening.sql`, applied to both the preview project and the prod project (`vopgctgjxbpytntthoxb`, already provisioned ahead of A3). ⛔ One item left — leaked-password protection is an Auth service setting, not scriptable from SQL/the Supabase MCP; needs a manual dashboard toggle. See "Pre-cutover DB hardening" below.
-- [ ] **A4. `[sonnet]` Auth + env cutover:** Supabase Auth Site URL/redirect URLs → `yakima.envolv.app`; Vercel prod env vars repointed; redeploy. Acceptance: magic-link invite works end-to-end on the prod domain.
+- [x] **A3. `[sonnet]` Production Supabase setup** (after A1): ✅ 2026-07-11 — fresh prod project `vopgctgjxbpytntthoxb` ("Envolv Yakima (prod)"), all 27 migrations applied, all 7 edge functions deployed ACTIVE, org renamed to Yakima Free Clinic, demo seed NOT run. Remaining: DB password reset + function secrets (RESEND_API_KEY, VAPID keys, CHECKR_*) per `docs/yakima-production-cutover.md`.
+- [x] **A3.5 `[sonnet]` Pre-cutover DB hardening** — 3 of 4 items done 2026-07-11 via migration `20260711050700_precutover_hardening.sql`, applied to both the preview project and the prod project (`vopgctgjxbpytntthoxb`). ⛔ One item left — leaked-password protection is an Auth service setting, not scriptable from SQL/the Supabase MCP; needs a manual dashboard toggle. See "Pre-cutover DB hardening" below.
+- [ ] **A4. `[sonnet]` Auth + env cutover — in progress 2026-07-11.** Target is `medvolunteer.vercel.app`, not `yakima.envolv.app` (domain deferred per A1). Done so far: found & fixed a production deployment gap (Framework Preset had drifted to NestJS; hourly cron exceeded the Hobby plan's daily-cron limit and was silently blocking every deploy since ~2026-04-29 — downgraded cron to daily at midnight UTC per Sean's decision, see `web/vercel.json` and `CLAUDE.md`); split `NEXT_PUBLIC_SUPABASE_URL`/anon key into Preview-only (demo) + Production-only (prod `vopgctgjxbpytntthoxb`) Vercel env vars; triggered a fresh deploy from `main` HEAD. Still open: `SUPABASE_SERVICE_ROLE_KEY` env var (Sean must copy/paste this directly — Claude cannot view secret keys), Supabase Auth Site URL/redirect URL → `medvolunteer.vercel.app`, CI migration secrets (`SUPABASE_ACCESS_TOKEN`/`SUPABASE_PROJECT_ID`) repointed to prod (needs GitHub repo admin). Acceptance: magic-link invite works end-to-end on the prod domain.
 - [ ] **A5. `[sonnet]` First real data:** Yakima org row, first admin auth user + `volunteers` row (`status='active'`), VAPID keys set in Settings → Web Push.
 - [ ] **A6. Smoke test** — full checklist in the runbook (logins, PWA install, offline page, push, geofence clock-in, cron auth, Lighthouse ≥ 90). Acceptance: every box checked on the production domain.
 - [ ] ⛔ **A7. Client sign-off** with Yakima; deliver credentials securely.
@@ -60,29 +62,10 @@ Repo: `C:/Users/smmcn/Desktop/volunteerhub` (exists; not yet assessed). Plan: `d
 
 ## Workstream D — Pipeline & housekeeping 🔵 P3 (parallel, any time)
 
-- [ ] **D1. Push this housekeeping + delete the merged remote branches.** Must run from a machine with GitHub push credentials (the Cowork sandbox has none). Local `main` has diverged from `origin/main` (upstream added a security/RLS lockdown + a lint pass), so integrate before pushing:
-
-  ```bash
-  # from the repo root:
-  git add CLAUDE.md ROADMAP.md MedVolunteer-roadmap.txt supabase/config.toml
-  git commit -m "docs: roadmap/CLAUDE housekeeping; wire demo seed into config"
-  git fetch origin
-  git rebase origin/main       # resolve conflicts in CLAUDE.md, MedVolunteer-roadmap.txt, supabase/config.toml
-  git push origin main
-
-  # delete the 5 confirmed-merged branches:
-  git push origin --delete \
-    fix/DEV-00007-messages-individual-search-provides-no-results \
-    fix/DEV-00008-category-requirements-don-t-auto-update \
-    fix/DEV-00009-volunteer-signed-up-for-incorrect-category-shift \
-    vercel/install-vercel-speed-insights-8t4nmw \
-    vercel/install-vercel-web-analytics-cb39c4
-  ```
-
-  Leave `vercel/install-vercel-web-analytics-h9gqg7` and `claude/add-claude-documentation-Oaavt` — both are **unmerged** (each has a commit not in `main`).
+- [x] **D1. Push this housekeeping + delete the merged remote branches.** ✅ 2026-07-11 — pushed via GitHub Desktop (`@Volistapp`, added as a collaborator; sandbox still has no git credentials, and the `engineering:github` connector never exposed push/branch tools). `origin/main` tip is `5128f44`. The 5 branches this task originally listed were already gone from origin by the time of the push. `fix/DEV-00010-category-of-shifts-not-filtering-correctly` is still an open PR (#7) — left alone, along with `vercel/install-vercel-web-analytics-h9gqg7` and `claude/add-claude-documentation-Oaavt` (both unmerged).
 - [x] **D2. Fix `CLAUDE.md`** — removed the dead `.mex/` navigation and "After Every Task" sections (the submodule was never initialized) and pointed the file at this ROADMAP. ✅ 2026-07-10
 - [x] **D3. Archive `MedVolunteer-roadmap.txt`** — added a superseded banner and flagged Phases 9–10 as obsolete (SiteGround → Vercel). ✅ 2026-07-10
-- [ ] ⛔ **D4. Populate Notion Feature Requests** with a real backlog and mark items "Ready" — the nightly auto-build CI only picks up "Ready" tasks and has been idle since March. (Sean writes/approves; an agent can draft entries.)
+- [x] **D4. Populate Notion Feature Requests** with a real backlog and mark items "Ready" ✅ 2026-07-11 (Sean) — the nightly auto-build CI now has real tasks to pick up.
 - [ ] ⛔ **D5. Commit or remove the untracked PDFs** in the repo root (business plan, projections, targeting strategy) — they're marked CONFIDENTIAL and likely belong outside the repo. Sean decides.
 
 ## Workstream E — Business (Sean only, not for agents)

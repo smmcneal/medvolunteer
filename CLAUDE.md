@@ -127,7 +127,7 @@ Errors are thrown (caught by the client `run()` wrapper in ShiftsView / similar)
 | Route | Purpose |
 |-------|---------|
 | `GET /api/dev/login` | Dev-only auto-login (403 in production) |
-| `GET /api/cron/send-auto-messages` | Vercel Cron — hourly; dispatches scheduled messages every run, daily auto-message rules only on the midnight UTC run. Must include `Authorization: Bearer <CRON_SECRET>` header (fails closed if `CRON_SECRET` unset) |
+| `GET /api/cron/send-auto-messages` | Vercel Cron — **daily at midnight UTC** (downgraded from hourly 2026-07-11; the Hobby plan only allows daily cron, and the hourly schedule had been silently blocking every production deploy since ~2026-04-29). Dispatches scheduled ("Send Later") messages and daily auto-message rules on this single run — scheduled messages can now be delayed up to ~24h instead of near-real-time. Must include `Authorization: Bearer <CRON_SECRET>` header (fails closed if `CRON_SECRET` unset) |
 | `POST /api/webhooks/vercel` | Vercel deploy events → Notion Dev Tasks status + preview URL. HMAC-verified via `VERCEL_WEBHOOK_SECRET` |
 | `POST /api/push-subscription` | PWA push notification subscription management |
 
