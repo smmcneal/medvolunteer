@@ -4,6 +4,20 @@
 -- Safe to re-run (ON CONFLICT DO NOTHING throughout).
 -- All timestamps use now() arithmetic — always current.
 -- =============================================
+--
+-- ⚠️  EMAIL ADDRESSES: do NOT use @example.com here.
+--
+-- This seed lands in a HOSTED Supabase project (the demo/preview project) that
+-- is wired to a live Resend key. @example.com is IANA-reserved and refuses all
+-- mail, so a single "message all volunteers" click on the demo would produce 14
+-- hard bounces — against the same sending domain (envolv.org) that Yakima's real
+-- volunteer invites depend on. Enough bounces and production invites start
+-- landing in spam, with no obvious cause.
+--
+-- These are smmcneal+<name>@gmail.com plus-aliases: every one delivers to a real
+-- inbox Sean controls, nothing bounces, and an invite email can be shown
+-- actually arriving during a demo. Keep it that way.
+-- =============================================
 
 -- =============================================
 -- VOLUNTEERS (14 total)
@@ -11,24 +25,24 @@
 
 INSERT INTO volunteers (id, org_id, first_name, last_name, email, phone, category, status, created_at, updated_at) VALUES
   -- Active medical professionals
-  ('00000000-0000-0000-0000-000000000101', '00000000-0000-0000-0000-000000000001', 'Sarah',   'Chen',       'sarah.chen@example.com',    '555-0101', 'medical_professional', 'volunteer',  now() - interval '8 months',  now() - interval '1 month'),
-  ('00000000-0000-0000-0000-000000000102', '00000000-0000-0000-0000-000000000001', 'Marcus',  'Williams',   'marcus.w@example.com',       '555-0102', 'medical_professional', 'volunteer',  now() - interval '6 months',  now() - interval '2 weeks'),
-  ('00000000-0000-0000-0000-000000000103', '00000000-0000-0000-0000-000000000001', 'Priya',   'Patel',      'priya.patel@example.com',    '555-0103', 'medical_professional', 'volunteer',  now() - interval '1 year',    now() - interval '3 weeks'),
-  ('00000000-0000-0000-0000-000000000104', '00000000-0000-0000-0000-000000000001', 'James',   'Okafor',     'james.o@example.com',        '555-0104', 'medical_professional', 'volunteer',  now() - interval '4 months',  now() - interval '1 week'),
-  ('00000000-0000-0000-0000-000000000105', '00000000-0000-0000-0000-000000000001', 'Elena',   'Rodriguez',  'elena.r@example.com',        '555-0105', 'medical_professional', 'volunteer',  now() - interval '9 months',  now() - interval '4 days'),
+  ('00000000-0000-0000-0000-000000000101', '00000000-0000-0000-0000-000000000001', 'Sarah',   'Chen',       'smmcneal+sarah.chen@gmail.com',   '555-0101', 'medical_professional', 'volunteer',  now() - interval '8 months',  now() - interval '1 month'),
+  ('00000000-0000-0000-0000-000000000102', '00000000-0000-0000-0000-000000000001', 'Marcus',  'Williams',   'smmcneal+marcus.w@gmail.com',     '555-0102', 'medical_professional', 'volunteer',  now() - interval '6 months',  now() - interval '2 weeks'),
+  ('00000000-0000-0000-0000-000000000103', '00000000-0000-0000-0000-000000000001', 'Priya',   'Patel',      'smmcneal+priya.patel@gmail.com',  '555-0103', 'medical_professional', 'volunteer',  now() - interval '1 year',    now() - interval '3 weeks'),
+  ('00000000-0000-0000-0000-000000000104', '00000000-0000-0000-0000-000000000001', 'James',   'Okafor',     'smmcneal+james.o@gmail.com',      '555-0104', 'medical_professional', 'volunteer',  now() - interval '4 months',  now() - interval '1 week'),
+  ('00000000-0000-0000-0000-000000000105', '00000000-0000-0000-0000-000000000001', 'Elena',   'Rodriguez',  'smmcneal+elena.r@gmail.com',      '555-0105', 'medical_professional', 'volunteer',  now() - interval '9 months',  now() - interval '4 days'),
   -- Active support staff
-  ('00000000-0000-0000-0000-000000000106', '00000000-0000-0000-0000-000000000001', 'David',   'Kim',        'david.kim@example.com',      '555-0106', 'support_staff',        'volunteer',  now() - interval '5 months',  now() - interval '10 days'),
-  ('00000000-0000-0000-0000-000000000107', '00000000-0000-0000-0000-000000000001', 'Aisha',   'Johnson',    'aisha.j@example.com',        '555-0107', 'support_staff',        'volunteer',  now() - interval '7 months',  now() - interval '2 weeks'),
-  ('00000000-0000-0000-0000-000000000108', '00000000-0000-0000-0000-000000000001', 'Robert',  'Martinez',   'robert.m@example.com',       '555-0108', 'support_staff',        'volunteer',  now() - interval '3 months',  now() - interval '5 days'),
+  ('00000000-0000-0000-0000-000000000106', '00000000-0000-0000-0000-000000000001', 'David',   'Kim',        'smmcneal+david.kim@gmail.com',    '555-0106', 'support_staff',        'volunteer',  now() - interval '5 months',  now() - interval '10 days'),
+  ('00000000-0000-0000-0000-000000000107', '00000000-0000-0000-0000-000000000001', 'Aisha',   'Johnson',    'smmcneal+aisha.j@gmail.com',      '555-0107', 'support_staff',        'volunteer',  now() - interval '7 months',  now() - interval '2 weeks'),
+  ('00000000-0000-0000-0000-000000000108', '00000000-0000-0000-0000-000000000001', 'Robert',  'Martinez',   'smmcneal+robert.m@gmail.com',     '555-0108', 'support_staff',        'volunteer',  now() - interval '3 months',  now() - interval '5 days'),
   -- Active trainees
-  ('00000000-0000-0000-0000-000000000109', '00000000-0000-0000-0000-000000000001', 'Lily',    'Thompson',   'lily.t@example.com',         '555-0109', 'trainee',              'volunteer',  now() - interval '2 months',  now() - interval '3 days'),
-  ('00000000-0000-0000-0000-000000000110', '00000000-0000-0000-0000-000000000001', 'Noah',    'Garcia',     'noah.g@example.com',         '555-0110', 'trainee',              'volunteer',  now() - interval '6 weeks',   now() - interval '1 week'),
+  ('00000000-0000-0000-0000-000000000109', '00000000-0000-0000-0000-000000000001', 'Lily',    'Thompson',   'smmcneal+lily.t@gmail.com',       '555-0109', 'trainee',              'volunteer',  now() - interval '2 months',  now() - interval '3 days'),
+  ('00000000-0000-0000-0000-000000000110', '00000000-0000-0000-0000-000000000001', 'Noah',    'Garcia',     'smmcneal+noah.g@gmail.com',       '555-0110', 'trainee',              'volunteer',  now() - interval '6 weeks',   now() - interval '1 week'),
   -- Onboarding (prospect)
-  ('00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000001', 'Fatima',  'Hassan',     'fatima.h@example.com',       '555-0111', 'medical_professional', 'prospect',   now() - interval '3 weeks',   now() - interval '2 days'),
-  ('00000000-0000-0000-0000-000000000112', '00000000-0000-0000-0000-000000000001', 'Carlos',  'Nguyen',     'carlos.n@example.com',       '555-0112', 'support_staff',        'prospect',   now() - interval '2 weeks',   now() - interval '1 day'),
+  ('00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000001', 'Fatima',  'Hassan',     'smmcneal+fatima.h@gmail.com',     '555-0111', 'medical_professional', 'prospect',   now() - interval '3 weeks',   now() - interval '2 days'),
+  ('00000000-0000-0000-0000-000000000112', '00000000-0000-0000-0000-000000000001', 'Carlos',  'Nguyen',     'smmcneal+carlos.n@gmail.com',     '555-0112', 'support_staff',        'prospect',   now() - interval '2 weeks',   now() - interval '1 day'),
   -- Applicants
-  ('00000000-0000-0000-0000-000000000113', '00000000-0000-0000-0000-000000000001', 'Zoe',     'Andersen',   'zoe.a@example.com',          '555-0113', 'medical_professional', 'applicant',  now() - interval '5 days',    now() - interval '5 days'),
-  ('00000000-0000-0000-0000-000000000114', '00000000-0000-0000-0000-000000000001', 'Tyler',   'Brooks',     'tyler.b@example.com',        '555-0114', 'trainee',              'applicant',  now() - interval '3 days',    now() - interval '3 days')
+  ('00000000-0000-0000-0000-000000000113', '00000000-0000-0000-0000-000000000001', 'Zoe',     'Andersen',   'smmcneal+zoe.a@gmail.com',        '555-0113', 'medical_professional', 'applicant',  now() - interval '5 days',    now() - interval '5 days'),
+  ('00000000-0000-0000-0000-000000000114', '00000000-0000-0000-0000-000000000001', 'Tyler',   'Brooks',     'smmcneal+tyler.b@gmail.com',      '555-0114', 'trainee',              'applicant',  now() - interval '3 days',    now() - interval '3 days')
 ON CONFLICT (id) DO NOTHING;
 
 -- =============================================
