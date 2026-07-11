@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Heart, ArrowRight } from 'lucide-react'
 
@@ -21,15 +22,27 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      setError(error.message)
+
+    try {
+      // createClient() throws synchronously when the NEXT_PUBLIC_SUPABASE_*
+      // env vars are missing from the build. Without this try/catch the throw
+      // escapes handleLogin, setLoading(false) never runs, and the button
+      // spins on "Signing in…" forever with no visible error.
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+      if (error) {
+        setError(error.message)
+        return
+      }
+
+      router.push('/dashboard')
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.')
+    } finally {
       setLoading(false)
-      return
     }
-    router.push('/dashboard')
-    router.refresh()
   }
 
   return (
@@ -370,9 +383,12 @@ export default function LoginPage() {
 
               {/* Forgot password link */}
               <div style={{ textAlign: 'right', marginBottom: '28px' }}>
-                <span style={{ fontSize: '12px', color: TEAL, cursor: 'pointer', fontWeight: 500 }}>
+                <Link
+                  href="/forgot-password"
+                  style={{ fontSize: '12px', color: TEAL, cursor: 'pointer', fontWeight: 500, textDecoration: 'none' }}
+                >
                   Forgot password?
-                </span>
+                </Link>
               </div>
 
               {/* Error */}

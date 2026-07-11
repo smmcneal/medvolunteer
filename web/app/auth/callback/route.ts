@@ -28,11 +28,18 @@ export async function GET(request: Request) {
   const error = searchParams.get('error')
   const errorDescription = searchParams.get('error_description')
 
+  // Send failures back to the login page the user actually came from. Admin
+  // recovery links target /set-password or /dashboard; bouncing those to
+  // /volunteer/login would strand an admin in the volunteer app.
+  const isAdminFlow =
+    next.startsWith('/dashboard') || next.startsWith('/set-password')
+  const loginPath = isAdminFlow ? '/login' : '/volunteer/login'
+
   // Supabase can return an error param directly (e.g. expired link)
   if (error) {
     const msg = errorDescription ?? error
     return NextResponse.redirect(
-      `${origin}/volunteer/login?error=${encodeURIComponent(msg)}`
+      `${origin}${loginPath}?error=${encodeURIComponent(msg)}`
     )
   }
 
@@ -54,10 +61,10 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.redirect(
-      `${origin}/volunteer/login?error=${encodeURIComponent(exchangeError.message)}`
+      `${origin}${loginPath}?error=${encodeURIComponent(exchangeError.message)}`
     )
   }
 
   // No code — redirect to login with a generic error
-  return NextResponse.redirect(`${origin}/volunteer/login?error=missing_code`)
+  return NextResponse.redirect(`${origin}${loginPath}?error=missing_code`)
 }
