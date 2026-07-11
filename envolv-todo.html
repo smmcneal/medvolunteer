@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Envolv — Roadmap & Todo</title>
+<style>
+  :root{
+    color-scheme: light;
+    --bg:#eef2f6; --card:#ffffff; --ink:#0f2740; --muted:#5b6b7b; --line:#e2e8f0;
+    --teal:#0d9488; --teal-soft:#e6fbf7;
+    --p0:#dc2626; --p1:#d97706; --p2:#16a34a; --p3:#2563eb; --pe:#64748b; --ph:#7c3aed;
+    --blocker:#f59e0b; --blocker-bg:#fffbeb; --done:#0f9d58;
+    --shadow:0 1px 2px rgba(15,39,64,.06), 0 4px 16px rgba(15,39,64,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.45;-webkit-font-smoothing:antialiased}
+  a{color:var(--teal)}
+  .wrap{max-width:920px;margin:0 auto;padding:22px 18px 80px}
+
+  /* Header */
+  header.top{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#0f2740,#123152);
+    color:#fff;border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:14px}
+  .top h1{margin:0;font-size:19px;letter-spacing:.2px;display:flex;align-items:center;gap:9px}
+  .dot{width:11px;height:11px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 4px rgba(13,148,136,.25)}
+  .top .sub{margin:3px 0 0;font-size:12.5px;color:#b9c8d8}
+  .progwrap{margin-top:12px;display:flex;align-items:center;gap:12px}
+  .bar{flex:1;height:9px;background:rgba(255,255,255,.16);border-radius:6px;overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#14b8a6,#5eead4);
+    border-radius:6px;transition:width .35s ease}
+  .pcount{font-size:12.5px;color:#dbe6f0;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+  /* Status callout */
+  details.status{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:10px 14px;margin-bottom:14px;box-shadow:var(--shadow)}
+  details.status>summary{cursor:pointer;font-weight:600;font-size:13.5px;color:var(--ink);list-style:none}
+  details.status>summary::-webkit-details-marker{display:none}
+  details.status>summary::before{content:"▸";color:var(--teal);margin-right:8px;display:inline-block;transition:transform .2s}
+  details.status[open]>summary::before{transform:rotate(90deg)}
+  .status ul{margin:10px 0 4px;padding-left:20px}
+  .status li{font-size:13px;color:#33475b;margin:5px 0}
+  .status b{color:var(--ink)}
+
+  /* Controls */
+  .controls{position:sticky;top:120px;z-index:10;background:var(--bg);padding:8px 0 10px;margin-bottom:6px}
+  .search{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;
+    background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
+  .search:focus{outline:2px solid var(--teal-soft);border-color:var(--teal)}
+  .chiprow{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;align-items:center}
+  .chip{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:999px;
+    padding:5px 11px;font-size:12.5px;cursor:pointer;user-select:none;transition:all .12s}
+  .chip:hover{border-color:#c7d2dd}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip.tgl.on{background:var(--blocker);border-color:var(--blocker);color:#3d2a00}
+  .chip.tgl2.on{background:var(--teal);border-color:var(--teal);color:#fff}
+  .sep{flex:1}
+  .btnlink{background:none;border:none;color:var(--muted);font-size:12.5px;cursor:pointer;text-decoration:underline}
+  .btnlink:hover{color:var(--p0)}
+
+  /* Sections */
+  section.ws{background:var(--card);border:1px solid var(--line);border-radius:14px;margin:12px 0;
+    box-shadow:var(--shadow);overflow:hidden}
+  .wshead{display:flex;align-items:center;gap:10px;padding:13px 16px;cursor:pointer;border-left:5px solid var(--pe)}
+  .wshead .car{color:var(--muted);transition:transform .2s;font-size:12px}
+  section.ws.collapsed .wshead .car{transform:rotate(-90deg)}
+  .wshead h2{margin:0;font-size:15px;flex:1;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .prio{font-size:10.5px;font-weight:800;letter-spacing:.4px;color:#fff;padding:2px 7px;border-radius:5px}
+  .wscount{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .wsintro{font-size:12.5px;color:var(--muted);padding:0 16px 4px 21px;margin-top:-4px}
+  .tasks{padding:4px 12px 12px}
+  section.ws.collapsed .tasks,section.ws.collapsed .wsintro{display:none}
+
+  /* Task */
+  .task{display:flex;gap:11px;padding:11px 8px;border-top:1px solid var(--line);align-items:flex-start}
+  .task:first-child{border-top:none}
+  .task input[type=checkbox]{appearance:none;-webkit-appearance:none;margin:2px 0 0;width:19px;height:19px;
+    border:2px solid #cbd5e1;border-radius:6px;cursor:pointer;flex:none;position:relative;transition:all .12s}
+  .task input:checked{background:var(--done);border-color:var(--done)}
+  .task input:checked::after{content:"✓";color:#fff;font-size:13px;position:absolute;top:-1px;left:3px;font-weight:700}
+  .body{flex:1;min-width:0}
+  .r1{display:flex;flex-wrap:wrap;gap:7px;align-items:baseline}
+  .idb{font-size:11px;font-weight:800;color:#fff;background:var(--pe);border-radius:5px;padding:1px 6px;letter-spacing:.3px}
+  .ttl{font-weight:650;font-size:14px}
+  .tag{font-size:10.5px;font-weight:700;letter-spacing:.3px;padding:1px 7px;border-radius:999px;text-transform:uppercase}
+  .tag.blk{background:var(--blocker-bg);color:#92610a;border:1px solid #f5d58a}
+  .tag.mdl{background:#eef2ff;color:#4338ca;border:1px solid #d7dcff}
+  .tag.done{background:#e7f7ee;color:#0b7a43;border:1px solid #bde9cf}
+  .detail{font-size:12.8px;color:#42566a;margin-top:3px}
+  .task.isdone .ttl{text-decoration:line-through;color:var(--muted)}
+  .task.isdone .detail{color:#9aa8b5}
+  .task.blk-row{background:var(--blocker-bg);border-radius:8px}
+  pre.cmd{position:relative;background:#0f2740;color:#d6f5ee;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11.6px;line-height:1.5;padding:11px 12px;border-radius:9px;overflow:auto;margin:9px 0 2px;white-space:pre}
+  .copy{position:absolute;top:7px;right:7px;background:#1c405f;color:#cfe8ff;border:none;border-radius:6px;
+    padding:3px 9px;font-size:11px;cursor:pointer}
+  .copy:hover{background:#295a82}
+  .note{font-size:12.5px;color:var(--muted);font-style:italic;padding:10px 8px 2px;border-top:1px dashed var(--line)}
+  .empty{display:none;text-align:center;color:var(--muted);font-size:13px;padding:26px}
+  footer{margin-top:18px;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.6}
+  @media(max-width:560px){.controls{top:0;position:static}.wsintro{padding-left:16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1><span class="dot"></span> Envolv — Roadmap &amp; Todo</h1>
+    <p class="sub">Mirrors <b>ROADMAP.md</b> · updated 2026-07-11 · three deliverables: Yakima cutover → envolv.app site → multi-tenant platform</p>
+    <div class="progwrap">
+      <div class="bar"><i id="barfill"></i></div>
+      <span class="pcount" id="pcount">0 / 0 done</span>
+    </div>
+  </header>
+
+  <details class="status" open>
+    <summary>Current status &amp; what changed</summary>
+    <ul>
+      <li><b>Prod Supabase live (2026-07-11)</b> — fresh project <code>vopgctgjxbpytntthoxb</code> "Envolv Yakima (prod)": <b>28</b> migrations applied (27 + <code>precutover_hardening</code>; schema = preview), 7 edge functions ACTIVE, clean Yakima org. Re-verified 2026-07-11: 39 tables, org + 5 categories + 5 onboarding stages + learning modules seeded — but <b><code>auth.users</code> and <code>admin_users</code> are EMPTY</b>, so nobody can log in even once the env vars land (see A5). Remaining: DB password reset + function secrets, then the env/domain flip (A4). Domain <code>yakima.envolv.app</code> deferred.</li>
+      <li><b>Preview app live &amp; healthy</b> on Vercel (<code>medvolunteer.vercel.app</code>, team <code>medvolreview</code>) — latest prod deploy READY.</li>
+      <li><b>Dummy data restored</b> in the preview Supabase project — <code>seed-demo.sql</code> wired into <code>config.toml</code>, loads on <code>db reset</code>.</li>
+      <li><b>Supabase + Vercel connectors in place</b> → the Yakima cutover (Workstream A) is unblocked.</li>
+      <li><b>Housekeeping pushed (2026-07-11)</b> — <code>main</code> is up to date with <code>origin/main</code> (tip <code>5128f44</code>, pushed via GitHub Desktop). The 5 previously-merged branches from D1 were already gone from origin by the time of the push; only the unmerged branches remain (<code>fix/DEV-00010-...</code> — open PR #7, <code>vercel/install-vercel-web-analytics-h9gqg7</code>, <code>claude/add-claude-documentation-Oaavt</code>).</li>
+      <li><b>Pre-cutover DB hardening — 3 of 4 done (2026-07-11):</b> search_path pinned, anon/authenticated grants revoked, volunteer-facing RLS confirmed intact. Only the leaked-password toggle remains (⛔ manual dashboard setting — see H2).</li>
+      <li><b>✅ Found, fixed &amp; confirmed: production hadn't deployed since 2026-04-29 (2026-07-11).</b> Two compounding causes: the Vercel project's Framework Preset had drifted to "NestJS" instead of "Next.js" (fixed), and <code>vercel.json</code>'s hourly cron for <code>/api/cron/send-auto-messages</code> exceeded the Hobby plan's daily-cron limit, silently blocking deploy creation itself (the GitHub webhook was fine all along). <b>Decision (Sean):</b> downgrade the cron to daily at midnight UTC rather than upgrade to Pro — "Send Later" messages can now be delayed up to ~24h instead of near-real-time. Fix committed (<code>774424e</code>) and pushed; the push auto-triggered a Production build that finished <b>Ready</b> — current <code>main</code> is live again.</li>
+      <li><b>🔴 Admin login is DOWN on medvolunteer.vercel.app (found 2026-07-11).</b> Sign-in hangs forever on "Signing in…". The production build shipped <b>without</b> <code>NEXT_PUBLIC_SUPABASE_URL</code>/<code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> — confirmed by pulling all 8 JS chunks from the live <code>/login</code> page: zero <code>*.supabase.co</code> URLs, zero anon keys, only the <code>@supabase/ssr</code> "URL and API key are required" guard. Those vars inline at <b>build time</b>, so the browser client got <code>undefined</code>, <code>createClient()</code> threw synchronously inside <code>handleLogin</code>, and with no try/catch the spinner never cleared. Neither Supabase project logged a single auth request — the request never left the browser. <b>Ordering trap:</b> A4 records these vars as already set, and that may be true — but the last Production build ran 07:17 UTC and <b>env changes never apply retroactively to an existing build</b>. Check Vercel first: if the vars are there, the fix is a <b>redeploy</b>, not re-entering them. Code fixes done (A4.5); deploy is what's outstanding.</li>
+      <li><b>A4 (Auth + env cutover) in progress (2026-07-11):</b> <code>NEXT_PUBLIC_SUPABASE_URL</code>/anon key <i>reportedly</i> split into Preview-only (demo) + Production-only (prod) Vercel env vars — <b>but the shipped bundle contains neither, so re-verify, and redeploy regardless.</b> Supabase Auth Site URL/redirect URL → <code>medvolunteer.vercel.app</code> saved and confirmed on the prod project. Still open (⛔ Sean): <code>SUPABASE_SERVICE_ROLE_KEY</code> (Sean must paste this directly — Claude can't view secret keys), and CI migration secrets repointed to prod (needs GitHub repo admin). Magic-link end-to-end test still blocked on the service role key.</li>
+      <li><b>⚠️ Cowork sandbox caveat (2026-07-11):</b> the Linux bash mount desyncs from the Windows filesystem — partial file reads (a 31-line file read back as 4 lines, cut mid-word) and stale <code>stat</code> data that makes <code>git</code> report a genuinely modified file as <code>CLEAN</code>. <b>Never run git/npm/tsc through the sandbox for this repo</b> — a <code>git add -A</code> could stage a partial file. Claude's Read/Write/Edit tools hit Windows directly and are accurate; build and commit on Windows.</li>
+    </ul>
+  </details>
+
+  <div class="controls">
+    <input class="search" id="search" type="search" placeholder="Search tasks…  (e.g. RLS, DNS, Yakima, rename)">
+    <div class="chiprow" id="wschips"></div>
+    <div class="chiprow">
+      <span class="chip prio-chip on" data-prio="all">All priorities</span>
+      <span class="chip prio-chip" data-prio="P0">P0</span>
+      <span class="chip prio-chip" data-prio="P1">P1</span>
+      <span class="chip prio-chip" data-prio="P2">P2</span>
+      <span class="chip prio-chip" data-prio="P3">P3</span>
+      <span class="chip tgl" id="blkToggle">⛔ Blockers only</span>
+      <span class="chip tgl2" id="hideDone">Hide done</span>
+      <span class="sep"></span>
+      <button class="btnlink" id="resetBtn">Reset checks</button>
+    </div>
+  </div>
+
+  <div id="board"></div>
+  <div class="empty" id="empty">No tasks match those filters.</div>
+
+  <footer>
+    Personal tracker — checking a box here saves to this browser only and does <b>not</b> change the repo.<br>
+    Source of truth is <b>ROADMAP.md</b> in the project root. ⛔ = needs Sean (credentials, DNS, client, or a decision).
+  </footer>
+</div>
+
+<script>
+const WS = {
+  A:{name:"Yakima production cutover", prio:"P0", color:"var(--p0)", emoji:"🔴",
+     intro:"First client. Get the clinic live on its own prod project + domain."},
+  B:{name:"envolv.app marketing site", prio:"P1", color:"var(--p1)", emoji:"🟡",
+     intro:"One-page landing + demo capture on the owned domains."},
+  C:{name:"Envolv multi-tenant platform", prio:"P2", color:"var(--p2)", emoji:"🟢",
+     intro:"The real SaaS product (volunteerhub repo); this repo becomes its medical vertical."},
+  D:{name:"Pipeline & housekeeping", prio:"P3", color:"var(--p3)", emoji:"🔵",
+     intro:"Repo hygiene — run in parallel any time."},
+  E:{name:"Business (Sean only)", prio:"—", color:"var(--pe)", emoji:"🧭",
+     intro:"Not for agents."},
+  H:{name:"Pre-cutover DB hardening", prio:"P0", color:"var(--ph)", emoji:"🛡️",
+     intro:"From the Supabase advisors — fold into a migration so it carries into prod. Gates A3."}
+};
+
+const TASKS = [
+  // A
+  {id:"A1", ws:"A", title:"Decisions from Sean", blocker:true, done:false,
+   detail:"Fresh Supabase prod project (preview stays for demos) — DONE 2026-07-11 (see A3). Domain yakima.envolv.app DEFERRED by Sean 2026-07-11: not resolving envolv.app DNS yet — it's the future umbrella site with Yakima as one client under it. Still needed: Resend domain verification for envolv.org, Yakima sign-off contact (playbook in docs/yakima-signoff.md). envolv.app DNS/CNAME intentionally on hold."},
+  {id:"A2", ws:"A", title:"Reconcile edge functions", model:"sonnet", done:true,
+   detail:"Real count is 7 (advance-onboarding, background-check-webhook, clock-in, clock-out, initiate-background-check, send-message, send-push). The planned docusign-webhook was never built; e-signature uses documents.provider. send-push lacks a config.toml block but deploys fine."},
+  {id:"A3", ws:"A", title:"Production Supabase setup", model:"sonnet", done:true,
+   detail:"DONE 2026-07-11 via the Supabase connector: fresh prod project 'Envolv Yakima (prod)' (ref vopgctgjxbpytntthoxb, us-west-1, Volist org, $0/mo). All 28 migrations applied (27 + precutover_hardening) — schema byte-identical to the preview (39 tables/300 cols) — and migration history reconciled so CI db push is a no-op. Org renamed to 'Yakima Free Clinic', demo shifts/locations deleted, seed-demo NOT run. All 7 edge functions deployed ACTIVE (background-check-webhook verify_jwt=false; rest true). Remaining: reset DB password + set function secrets (RESEND_API_KEY, VAPID keys, CHECKR_* — the connector can't set secrets) — see docs/yakima-production-cutover.md."},
+  {id:"A3.5", ws:"A", title:"Pre-cutover DB hardening", model:"sonnet", done:true,
+   detail:"3 of 4 done 2026-07-11 via migration 20260711050726_precutover_hardening, applied to BOTH the preview and prod projects: search_path pinned (H1), anon/authenticated grants revoked (H3), volunteer-facing RLS confirmed intact (H4). Only H2 remains — leaked-password protection is an Auth service setting, not a DB object, so it needs a manual dashboard toggle (⛔ Sean). Tracked separately as H2."},
+  {id:"A4", ws:"A", title:"Auth + env cutover", model:"sonnet", blocker:true, done:false,
+   detail:"IN PROGRESS 2026-07-11. Along the way, found, fixed & confirmed why production hadn't deployed since 2026-04-29: Vercel Framework Preset had drifted to NestJS instead of Next.js (fixed), and vercel.json's hourly cron for /api/cron/send-auto-messages exceeded the Hobby plan's daily-cron limit, silently blocking deploy creation itself (Sean decided: downgrade cron to daily at midnight UTC rather than upgrade to Pro — Send Later messages can now lag up to ~24h). Fix committed (774424e), pushed, and auto-triggered a Production build that finished Ready. Split NEXT_PUBLIC_SUPABASE_URL/anon key into Preview-only (demo project) + Production-only (prod vopgctgjxbpytntthoxb) Vercel env vars. Supabase Auth Site URL (https://medvolunteer.vercel.app) and redirect URL (https://medvolunteer.vercel.app/**) saved and confirmed on the prod project. Still open, both need Sean directly: SUPABASE_SERVICE_ROLE_KEY (Claude can't view secret keys), CI migration secrets (SUPABASE_ACCESS_TOKEN/SUPABASE_PROJECT_ID) repointed to prod (needs GitHub repo admin). Acceptance: magic-link invite works end-to-end — not yet verified, blocked on the service role key."},
+  {id:"A4.5", ws:"A", title:"Fix admin login hang + wire admin password reset", model:"sonnet", blocker:true, done:true,
+   detail:"CODE DONE 2026-07-11 — ⛔ awaiting deploy + env vars (A4). Two independent bugs, both surfaced by the first successful deploy since Apr 29. (1) LOGIN HANG: client.ts used `!` non-null assertions, so a missing NEXT_PUBLIC_SUPABASE_* was invisible to TypeScript; at runtime createClient() threw synchronously inside handleLogin and, with no try/catch, setLoading(false) never ran → infinite spinner with no error. Fixed: client.ts now checks explicitly and throws a named error naming the missing var; handleLogin wrapped in try/catch/finally. (2) FORGOT PASSWORD NEVER WORKED: it was a decorative <span> on /login — no href, no onClick — and there was no admin reset route in the app at all (only /volunteer/forgot-password). Fixed: added app/forgot-password/page.tsx + app/set-password/page.tsx, made the link a real <Link>, and fixed auth/callback/route.ts which sent EVERY recovery error to /volunteer/login (stranding admins in the volunteer app). Acceptance: wrong password shows 'Invalid login credentials' not a hanging spinner; Forgot password → email → /set-password → /dashboard."},
+  {id:"A5", ws:"A", title:"First real data", model:"sonnet", blocker:true, done:false,
+   detail:"Yakima org row is ALREADY seeded in prod. What's actually missing: the first admin users — as of 2026-07-11 prod auth.users and admin_users are both EMPTY, so nobody can log in even once A4's env vars land. NOTE — this task previously said 'first admin auth user + volunteers row (status=active)', which was wrong on both counts: per CLAUDE.md an admin is a row in admin_users and has NO volunteers row, and the volunteers.status enum is applicant → prospect → volunteer → inactive (there is no 'active'). Create auth users via Supabase Dashboard → Authentication → Invite user so each person sets their own password, then insert their user_id into admin_users (SQL in docs/yakima-cutover-checklist.md). The three admins on the old preview project: heatherismith52@gmail.com, ginginoverbay@gmail.com, emailsean@duck.com. Also still needed: VAPID keys in Settings → Web Push."},
+  {id:"A6", ws:"A", title:"Smoke test on prod", done:false,
+   detail:"Runbook checklist: logins, PWA install, offline page, push, geofence clock-in, cron auth, Lighthouse ≥ 90 — all on the production domain."},
+  {id:"A7", ws:"A", title:"Client sign-off", blocker:true, done:false,
+   detail:"Sign-off with Yakima; deliver credentials securely."},
+  // B
+  {id:"B1", ws:"B", title:"Scaffold the marketing site", model:"opus", done:false,
+   detail:"New Next.js project (envolv-www or a /marketing app in volunteerhub — decide & document). One-page landing: positioning + pricing tiers ($29 / $79 / $199, ~17% annual discount), Resend demo-request capture (noreply@envolv.org). Deploys to a new Vercel project."},
+  {id:"B2", ws:"B", title:"DNS", blocker:true, done:false,
+   detail:"Point envolv.app (+ www, and envolv.org redirect → envolv.app) at the Vercel project."},
+  {id:"B3", ws:"B", title:"Email-capture backend", model:"sonnet", done:false,
+   detail:"Store signups (Supabase table or Resend audience). Closes the 'Email list' stub in the Notion Feature Requests DB."},
+  {id:"B4", ws:"B", title:"SEO basics", model:"sonnet", done:false,
+   detail:"Metadata, OG image, robots.txt, sitemap. Acceptance: Lighthouse SEO ≥ 95."},
+  // C
+  {id:"C1", ws:"C", title:"Assess the volunteerhub repo", model:"opus", done:false,
+   detail:"Actual state vs. the Phase 1 plan (scaffold, [orgSlug] routing, verticals registry, Supabase schema). Output: a gap list."},
+  {id:"C2", ws:"C", title:"Rename VolunteerHub → Envolv", model:"sonnet", done:false,
+   detail:"VolunteerHub is a competitor's trademark. Repo folder, package name, UI strings, plan docs."},
+  {id:"C3", ws:"C", title:"Complete Phase 1 foundation", model:"opus", done:false,
+   detail:"Multi-tenant path routing, vertical configs (medical, animal-shelter, food-bank, nonprofit), OrgProvider, RLS. Acceptance: two seed orgs render branded dashboards; Vitest passes."},
+  {id:"C4", ws:"C", title:"Migration strategy doc + decision", blocker:true, model:"opus", done:false,
+   detail:"How medvolunteer features (shifts, onboarding, LMS, messages, PWA) port to multi-tenant, and whether Yakima stays standalone or migrates to a 'yakima' org slug. Decision needed from Sean before implementation."},
+  {id:"Cnote", ws:"C", type:"note",
+   detail:"⚖️ Founders agreement §3.1 — entering a vertical outside the strategic plan needs unanimous founder consent. Stick to the four planned verticals."},
+  // D
+  {id:"D1", ws:"D", title:"Push housekeeping + delete merged branches", done:true,
+   detail:"DONE 2026-07-11 — pushed via GitHub Desktop (@Volistapp, added as a collaborator; the sandbox still has no git credentials and the engineering:github connector never exposed push/branch tools). origin/main tip is 5128f44. The 5 branches this task originally listed (DEV-00007/8/9, vercel/install-vercel-speed-insights-8t4nmw, vercel/install-vercel-web-analytics-cb39c4) were already deleted from origin by the time of the push — nothing left to clean up. Confirmed fix/DEV-00010-category-of-shifts-not-filtering-correctly is still an open PR (#7), so it was left alone, along with vercel/install-vercel-web-analytics-h9gqg7 and claude/add-claude-documentation-Oaavt (both unmerged)."},
+  {id:"D2", ws:"D", title:"Fix CLAUDE.md", done:true,
+   detail:"Removed the dead .mex/ navigation + 'After Every Task' sections (submodule never initialized) and pointed the file at ROADMAP.md."},
+  {id:"D3", ws:"D", title:"Archive MedVolunteer-roadmap.txt", done:true,
+   detail:"Added a superseded banner and flagged Phases 9–10 as obsolete (SiteGround → Vercel)."},
+  {id:"D4", ws:"D", title:"Populate Notion Feature Requests", done:true,
+   detail:"DONE 2026-07-11 (Sean) — real backlog marked 'Ready'. The nightly auto-build CI, idle since March, now has tasks to pick up."},
+  {id:"D5", ws:"D", title:"Commit or remove the untracked PDFs", blocker:true, done:false,
+   detail:"Business plan, projections, targeting strategy in the repo root — marked CONFIDENTIAL and likely belong outside the repo. Sean decides."},
+  // E
+  {id:"E1", ws:"E", title:"Confirm capital contributions", done:false,
+   detail:"§5.1 — the 30-day window closed ~May 9."},
+  {id:"E2", ws:"E", title:"Customer discovery", done:false,
+   detail:"20+ interviews across 3–4 target verticals."},
+  // H
+  {id:"H1", ws:"H", title:"Set search_path on flagged functions", done:true,
+   detail:"DONE 2026-07-11 — update_updated_at and enforce_shift_capacity pinned to 'public, pg_temp' (both reference unqualified tables, so search_path couldn't be emptied). Verified: function_search_path_mutable no longer appears in get_advisors."},
+  {id:"H2", ws:"H", title:"Enable leaked-password protection", blocker:true, done:false,
+   detail:"⛔ Not scriptable — GoTrue/Auth service setting, not a database object; the Supabase MCP has no auth-config tool. Do manually for both projects: Dashboard → Authentication → Policies → Password Security → 'Leaked password protection' → on. Needed on preview (cquvutwulbtgklqrbamd) and prod (vopgctgjxbpytntthoxb)."},
+  {id:"H3", ws:"H", title:"Revoke anon/authenticated SELECT on admin tables", done:true,
+   detail:"DONE 2026-07-11 — went further than SELECT: revoked ALL privileges (REVOKE ALL ... FROM anon, authenticated) on all 39 exposed tables, plus ALTER DEFAULT PRIVILEGES so future tables don't get default grants. Verified: pg_graphql_anon/_authenticated_table_exposed no longer appear in get_advisors; role_table_grants for anon/authenticated on public is empty."},
+  {id:"H4", ws:"H", title:"Confirm volunteer-facing RLS intact", done:true,
+   detail:"DONE 2026-07-11 — moot: grepped web/ and confirmed the browser client (@/lib/supabase/client) is only ever used for Auth calls (signInWithPassword, signOut, updateUser, getUser), never a client-side .from(...) table query. All data access goes through createAdminClient() after a server-side auth guard, per CLAUDE.md — so revoking anon/authenticated table grants entirely can't break the PWA."}
+];
+
+const LS_KEY = "envolv-todo-v1";
+let state = load();
+let fWs = "all", fPrio = "all", fBlk = false, fHideDone = false, fSearch = "";
+
+function load(){
+  try{ const s = JSON.parse(localStorage.getItem(LS_KEY)); if(s) return s; }catch(e){}
+  const init = {};
+  TASKS.forEach(t=>{ if(t.type!=="note") init[t.id] = !!t.done; });
+  return init;
+}
+function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){} }
+function isDone(id){ return !!state[id]; }
+
+// build workstream filter chips
+const wschips = document.getElementById("wschips");
+wschips.appendChild(mkChip("all","All areas",true));
+Object.keys(WS).forEach(k=> wschips.appendChild(mkChip(k, k+" · "+WS[k].name.split(" ").slice(0,2).join(" "), false)));
+function mkChip(val,label,on){
+  const c=document.createElement("span"); c.className="chip ws-chip"+(on?" on":""); c.dataset.ws=val; c.textContent=label;
+  c.onclick=()=>{ fWs=val; document.querySelectorAll(".ws-chip").forEach(x=>x.classList.toggle("on",x.dataset.ws===val)); render(); };
+  return c;
+}
+document.querySelectorAll(".prio-chip").forEach(c=> c.onclick=()=>{
+  fPrio=c.dataset.prio; document.querySelectorAll(".prio-chip").forEach(x=>x.classList.toggle("on",x===c)); render();
+});
+document.getElementById("blkToggle").onclick = e=>{ fBlk=!fBlk; e.target.classList.toggle("on",fBlk); render(); };
+document.getElementById("hideDone").onclick = e=>{ fHideDone=!fHideDone; e.target.classList.toggle("on",fHideDone); render(); };
+document.getElementById("search").oninput = e=>{ fSearch=e.target.value.trim().toLowerCase(); render(); };
+document.getElementById("resetBtn").onclick = ()=>{
+  if(confirm("Reset all checkmarks to the roadmap defaults?")){ localStorage.removeItem(LS_KEY); state=load(); render(); }
+};
+
+const board = document.getElementById("board");
+
+function passes(t){
+  if(t.type==="note") return fWs==="all"||fWs===t.ws;
+  if(fWs!=="all" && t.ws!==fWs) return false;
+  if(fPrio!=="all" && WS[t.ws].prio!==fPrio) return false;
+  if(fBlk && !t.blocker) return false;
+  if(fHideDone && isDone(t.id)) return false;
+  if(fSearch){ const hay=(t.id+" "+(t.title||"")+" "+(t.detail||"")).toLowerCase(); if(!hay.includes(fSearch)) return false; }
+  return true;
+}
+
+function render(){
+  board.innerHTML="";
+  let shown=0;
+  Object.keys(WS).forEach(k=>{
+    const meta=WS[k];
+    const items=TASKS.filter(t=>t.ws===k);
+    const vis=items.filter(passes);
+    if(!vis.length) return;
+    shown+=vis.filter(t=>t.type!=="note").length;
+    const total=items.filter(t=>t.type!=="note").length;
+    const done=items.filter(t=>t.type!=="note"&&isDone(t.id)).length;
+
+    const sec=document.createElement("section"); sec.className="ws";
+    const head=document.createElement("div"); head.className="wshead"; head.style.borderLeftColor=meta.color;
+    head.innerHTML=`<span class="car">▼</span>
+      <h2><span>${meta.emoji} ${k} — ${meta.name}</span>
+      ${meta.prio!=="—"?`<span class="prio" style="background:${meta.color}">${meta.prio}</span>`:""}</h2>
+      <span class="wscount">${done}/${total} done</span>`;
+    head.onclick=()=>sec.classList.toggle("collapsed");
+    sec.appendChild(head);
+
+    const intro=document.createElement("div"); intro.className="wsintro"; intro.textContent=meta.intro; sec.appendChild(intro);
+
+    const list=document.createElement("div"); list.className="tasks";
+    vis.forEach(t=> list.appendChild(t.type==="note"?mkNote(t):mkTask(t,meta)));
+    sec.appendChild(list);
+    board.appendChild(sec);
+  });
+  document.getElementById("empty").style.display = board.children.length?"none":"block";
+  updateProgress();
+}
+
+function mkNote(t){
+  const d=document.createElement("div"); d.className="note"; d.textContent=t.detail; return d;
+}
+
+function mkTask(t,meta){
+  const row=document.createElement("div"); row.className="task"+(isDone(t.id)?" isdone":"")+(t.blocker?" blk-row":"");
+  const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=isDone(t.id);
+  cb.onchange=()=>{ state[t.id]=cb.checked; save(); render(); };
+  const body=document.createElement("div"); body.className="body";
+  const r1=document.createElement("div"); r1.className="r1";
+  const idb=document.createElement("span"); idb.className="idb"; idb.style.background=meta.color; idb.textContent=t.id;
+  const ttl=document.createElement("span"); ttl.className="ttl"; ttl.textContent=t.title;
+  r1.appendChild(idb); r1.appendChild(ttl);
+  if(t.blocker) r1.appendChild(tag("blk","⛔ Needs Sean"));
+  if(t.model) r1.appendChild(tag("mdl",t.model));
+  if(isDone(t.id)) r1.appendChild(tag("done","✓ done"));
+  body.appendChild(r1);
+  const det=document.createElement("div"); det.className="detail"; det.textContent=t.detail; body.appendChild(det);
+  if(t.cmd){
+    const pre=document.createElement("pre"); pre.className="cmd"; pre.textContent=t.cmd;
+    const btn=document.createElement("button"); btn.className="copy"; btn.textContent="Copy";
+    btn.onclick=()=>{ navigator.clipboard.writeText(t.cmd).then(()=>{btn.textContent="Copied!";setTimeout(()=>btn.textContent="Copy",1400);}); };
+    pre.appendChild(btn); body.appendChild(pre);
+  }
+  row.appendChild(cb); row.appendChild(body);
+  return row;
+}
+function tag(cls,txt){ const s=document.createElement("span"); s.className="tag "+cls; s.textContent=txt; return s; }
+
+function updateProgress(){
+  const all=TASKS.filter(t=>t.type!=="note");
+  const done=all.filter(t=>isDone(t.id)).length;
+  const pct=Math.round(done/all.length*100);
+  document.getElementById("barfill").style.width=pct+"%";
+  document.getElementById("pcount").textContent=`${done} / ${all.length} done · ${pct}%`;
+}
+
+render();
+</script>
+</body>
+</html>
