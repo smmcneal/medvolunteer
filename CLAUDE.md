@@ -26,6 +26,21 @@ The mount serves a **truncated prefix** of each file: byte-accurate from the sta
 
 That matters because **git compares those truncated files against intact `HEAD` blobs and reads the missing tails as deletions.** A sandbox `git diff` showed 898 phantom deletions across 18 files. **A `git add -A && git commit` from the sandbox would commit those truncations for real** — amputating the back half of `ShiftsView.tsx` and others in a commit that looks clean. Treat any sandbox `git status` / `git diff` output for this repo as fiction. (Re-diagnosed 2026-07-12; the earlier "stale stat data" explanation was wrong.)
 
+### ✅ How an agent DOES commit and push: `.claude/*.bat`
+
+The rule above bans git *in the sandbox*. It does not ban git. Two batch files run **native Windows git** against the real, intact working tree:
+
+| Script | Does | Safe? |
+|--------|------|-------|
+| `.claude/git-status.bat` | branch, `status --short`, `diff HEAD --stat`, `fetch`, ahead/behind vs `origin/main`, `ls-remote` auth check, last 5 commits | read-only, changes nothing |
+| `.claude/git-push.bat` | `git add -A` → `git commit -F .claude/commit-msg.txt` → `git push origin main` | **writes and pushes** |
+
+Both redirect everything to `.claude/git-out.log`, ending with a `=== DONE rc=N ===` sentinel. The agent triggers a script by double-clicking it in File Explorer (computer-use), then reads the log back with the Read tool — so results come from a **file**, never from OCR of a console window.
+
+To commit: `Write` the message to `.claude/commit-msg.txt`, then run `git-push.bat`. It aborts (rc=99) if that file is missing, and **does not push** if the commit fails or there was nothing to commit. `git-out.log` and `commit-msg.txt` are gitignored.
+
+Why this is trustworthy where the sandbox isn't: Windows git reads the *real* files. The dry run on 2026-07-12 reported 3 modified files where a sandbox `git diff` had claimed 898 deletions across 18. If you ever need to prove push credentials work before pushing, `git-status.bat` already runs `git ls-remote`.
+
 Supabase (run from repo root, requires Docker):
 ```bash
 npx supabase start         # Start local Supabase stack (port 54321)

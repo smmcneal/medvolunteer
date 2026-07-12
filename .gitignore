@@ -5,4 +5,6 @@
 .worktrees/
 node_modules/
 .claude/settings.local.json
+.claude/git-out.log
+.claude/commit-msg.txt
 Heather_Notion_Setup_Guide.docx
