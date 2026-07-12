@@ -197,6 +197,39 @@ export async function deleteShift(id: string) {
   revalidatePath('/dashboard/shifts')
 }
 
+export async function duplicateShift(id: string): Promise<{ shiftId: string }> {
+  await requireAdmin()
+  const admin = createAdminClient()
+
+  const { data: shift, error: fetchError } = await admin
+    .from('shifts')
+    .select('org_id, name, location_id, start_time, end_time, required_count, required_categories, notes')
+    .eq('id', id)
+    .single()
+  if (fetchError || !shift) throw new Error(fetchError?.message ?? 'Shift not found')
+
+  // Standalone copy — no recurrence linkage, no carried-over assignments
+  const { data: newShift, error } = await admin
+    .from('shifts')
+    .insert({
+      org_id: shift.org_id,
+      name: shift.name,
+      location_id: shift.location_id,
+      start_time: shift.start_time,
+      end_time: shift.end_time,
+      required_count: shift.required_count,
+      required_categories: shift.required_categories,
+      notes: shift.notes,
+    })
+    .select('id')
+    .single()
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/dashboard/shifts')
+  revalidatePath('/volunteer/shifts')
+  return { shiftId: newShift.id }
+}
+
 // ─── Assignments ──────────────────────────────────────────────────────────────
 
 export async function assignVolunteer(
