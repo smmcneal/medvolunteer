@@ -18,6 +18,14 @@ npm run lint      # ESLint (bare eslint, not next lint)
 
 There is no test suite in this project.
 
+### 🛑 Do not run these through the Cowork Linux sandbox
+
+**If you are an agent working through the Cowork sandbox, never run `git` (especially `git add`/`git commit`), `npm run build`, `npm run lint`, or `tsc` against this repo through the Linux bash mount.** Use the Read/Write/Edit file tools — they write to Windows directly and are accurate. Build and commit on Windows.
+
+The mount serves a **truncated prefix** of each file: byte-accurate from the start, then it simply stops. `envolv-todo.html` came back as 34,876 bytes ending mid-word, with no closing `</html>`. This is *not* staleness — the mount reflects edits made seconds earlier, and its line numbering matches Windows exactly. The content is fresh; it's just cut short.
+
+That matters because **git compares those truncated files against intact `HEAD` blobs and reads the missing tails as deletions.** A sandbox `git diff` showed 898 phantom deletions across 18 files. **A `git add -A && git commit` from the sandbox would commit those truncations for real** — amputating the back half of `ShiftsView.tsx` and others in a commit that looks clean. Treat any sandbox `git status` / `git diff` output for this repo as fiction. (Re-diagnosed 2026-07-12; the earlier "stale stat data" explanation was wrong.)
+
 Supabase (run from repo root, requires Docker):
 ```bash
 npx supabase start         # Start local Supabase stack (port 54321)
@@ -52,7 +60,8 @@ Copy `web/.env.example` → `web/.env.local` for local dev. Key split:
 | `NOTION_FEATURE_REQUESTS_DB_ID` | GitHub Secrets only | Feature Requests DB (AB-### tasks). Read by `auto-build-features.yml` **and** `notion-pr-sync.yml` — a PR on a `feat/AB-###` branch cannot sync without it |
 | `CLAUDE_CODE_OAUTH_TOKEN` | GitHub Secrets only | Authenticates the Claude Code CLI in `auto-fix-bugs.yml` / `auto-build-features.yml` against the **Claude subscription quota** — not pay-as-you-go API credit. Mint with `claude setup-token` (valid ~1 year). **Do not also set `ANTHROPIC_API_KEY` in those workflows**: if both are present the API key takes precedence, and with an empty API balance every run dies with `Credit balance is too low` while still reporting green. Subscription usage limits still apply — a large `max_tasks` run can exhaust the 5-hour window |
 | `VERCEL_WEBHOOK_SECRET` | `.env.local` | Webhook signature verification |
-| `CRON_SECRET` | Vercel env + `.env.local` | Protects `/api/cron/*` routes |
+| `CRON_SECRET` | Vercel env + `.env.local` + **GitHub Secrets** | Protects `/api/cron/*` routes. The GitHub Secrets copy is what `cron-scheduled-messages.yml` authenticates with — **the two must match**, or every scheduled-message dispatch 401s |
+| `APP_URL` | GitHub Secrets only | Production base URL, **no trailing slash** (e.g. `https://medvolunteer.vercel.app`). Used only by `cron-scheduled-messages.yml` to know what host to call. The workflow `exit 1`s if it's unset, so a missing value is loud, not silent |
 | `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_ID` / `SUPABASE_DB_PASSWORD` | GitHub Secrets only | CI migration runner (`supabase-migrate.yml`). All three must point at the **same** project. `supabase link` fails fast and the error names the broken secret: `project is paused` / `Could not find project` → stale `SUPABASE_PROJECT_ID`; `your account does not have the necessary privileges` → the PAT is from an account without access to that project; `Invalid access token format. Must be like sbp_0102...1920` → the PAT is a 47-char `sbp_v0_...` token but the pinned CLI only accepts the **classic 44-char `sbp_` + 40-hex** format (the value can be perfectly clean — see the comment in the workflow). Repointing these at cutover is Step 1d of `docs/yakima-production-cutover.md` |
 
 Local Notion automation is a no-op if `NOTION_TOKEN` is not set — it silently skips.
@@ -70,6 +79,7 @@ scripts/      notion-sync.cjs — Notion API helper used by hooks/CI
               notion-pr-sync.yml — PR events → Notion status + PR link. Routes DEV-### to Dev Tasks DB and AB-### to Feature Requests DB.
               auto-fix-bugs.yml — nightly (2am UTC) Claude Code agent: reads "Ready" tasks from Notion Dev Tasks DB, opens PRs. Branch names follow fix/DEV-###-slug.
               auto-build-features.yml — nightly (3am UTC) Claude Code agent: reads "Ready" tasks from Notion Feature Requests DB, opens PRs. Branch names follow feat/AB-###-slug. Requires ANTHROPIC_API_KEY, NOTION_FEATURE_REQUESTS_DB_ID, GH_PAT secrets.
+              cron-scheduled-messages.yml — every 30 min: calls /api/cron/send-auto-messages?mode=scheduled. Exists because Vercel Hobby caps cron at one run/day. See the API routes table.
 ```
 
 ### Route Structure
@@ -134,9 +144,24 @@ Errors are thrown (caught by the client `run()` wrapper in ShiftsView / similar)
 | Route | Purpose |
 |-------|---------|
 | `GET /api/dev/login` | Dev-only auto-login (403 in production) |
-| `GET /api/cron/send-auto-messages` | Vercel Cron — **daily at midnight UTC** (downgraded from hourly 2026-07-11; the Hobby plan only allows daily cron, and the hourly schedule had been silently blocking every production deploy since ~2026-04-29). Dispatches scheduled ("Send Later") messages and daily auto-message rules on this single run — scheduled messages can now be delayed up to ~24h instead of near-real-time. Must include `Authorization: Bearer <CRON_SECRET>` header (fails closed if `CRON_SECRET` unset) |
+| `GET /api/cron/send-auto-messages` | Two callers, and the difference matters — see below. Must include `Authorization: Bearer <CRON_SECRET>` (fails closed if `CRON_SECRET` unset) |
 | `POST /api/webhooks/vercel` | Vercel deploy events → Notion Dev Tasks status + preview URL. HMAC-verified via `VERCEL_WEBHOOK_SECRET` |
 | `POST /api/push-subscription` | PWA push notification subscription management |
+
+#### The two callers of `send-auto-messages` — and why `?mode=scheduled` is load-bearing
+
+| Caller | Schedule | Call | Does |
+|--------|----------|------|------|
+| Vercel Cron (`vercel.json`) | daily, midnight UTC | no param | scheduled messages **+ daily auto-message rules** |
+| `cron-scheduled-messages.yml` | every 30 min | `?mode=scheduled` | scheduled messages **only** |
+
+Vercel's Hobby plan allows exactly one cron run per day (the previous hourly schedule was silently blocking *deploy creation itself* since ~2026-04-29 — downgraded 2026-07-11). But a once-daily run means a message scheduled for 2pm doesn't send until the next midnight, which defeats "Send Later". So GitHub Actions — free, no daily cap — calls the same route every 30 min.
+
+**Do not remove `?mode=scheduled` from the workflow.** The daily auto-message rules are **not idempotent**: they're gated only by a UTC-hour check, and both the 00:00 and 00:30 Actions invocations fall inside the 00:00 UTC hour. Without the param, every daily reminder goes out **twice**. The daily rules belong on Vercel's midnight cron, where they fire exactly once.
+
+The scheduled-message pass *is* idempotent — dispatched rows flip to `status='sent'` and the query only selects `status='scheduled'` — so a retried or duplicated Actions run cannot double-send.
+
+Cadence is a billing constraint: GitHub bills a 1-minute minimum per run, so *frequency* is the cost. `*/30` ≈ 1,450 min/month, inside the 2,000-min free tier for private repos. `*/15` would hit ~2,900 and exceed it.
 
 ### Shared Components
 
