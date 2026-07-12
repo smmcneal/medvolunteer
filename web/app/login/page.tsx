@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Heart, ArrowRight } from 'lucide-react'
+import { Heart, ArrowRight, Eye, EyeOff } from 'lucide-react'
 
 const NAVY = '#1B2A4A'
 const TEAL = '#00897B'
@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [emailFocused, setEmailFocused] = useState(false)
   const [passwordFocused, setPasswordFocused] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -370,14 +371,37 @@ export default function LoginPage() {
                 </label>
                 <input
                   className="mv-input"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   onFocus={() => setPasswordFocused(true)}
                   onBlur={() => setPasswordFocused(false)}
                   required
                   autoComplete="current-password"
+                  style={{ paddingRight: '28px' }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    bottom: '10px',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: '#9ca3af',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  {showPassword
+                    ? <EyeOff style={{ width: '16px', height: '16px' }} />
+                    : <Eye style={{ width: '16px', height: '16px' }} />}
+                </button>
                 <div className="mv-underline" style={{ width: passwordFocused ? '100%' : '0%' }} />
               </div>
 
