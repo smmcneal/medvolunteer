@@ -50,7 +50,7 @@ Copy `web/.env.example` → `web/.env.local` for local dev. Key split:
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | `.env.local` | Email sending |
 | `NOTION_TOKEN` / `NOTION_DEV_TASKS_DB_ID` | `.env.local` + GitHub Secrets | Notion automation |
 | `NOTION_FEATURE_REQUESTS_DB_ID` | GitHub Secrets only | Feature Requests DB (AB-### tasks). Read by `auto-build-features.yml` **and** `notion-pr-sync.yml` — a PR on a `feat/AB-###` branch cannot sync without it |
-| `ANTHROPIC_API_KEY` | GitHub Secrets only | Auto-build CI invokes Claude Code to implement features |
+| `CLAUDE_CODE_OAUTH_TOKEN` | GitHub Secrets only | Authenticates the Claude Code CLI in `auto-fix-bugs.yml` / `auto-build-features.yml` against the **Claude subscription quota** — not pay-as-you-go API credit. Mint with `claude setup-token` (valid ~1 year). **Do not also set `ANTHROPIC_API_KEY` in those workflows**: if both are present the API key takes precedence, and with an empty API balance every run dies with `Credit balance is too low` while still reporting green. Subscription usage limits still apply — a large `max_tasks` run can exhaust the 5-hour window |
 | `VERCEL_WEBHOOK_SECRET` | `.env.local` | Webhook signature verification |
 | `CRON_SECRET` | Vercel env + `.env.local` | Protects `/api/cron/*` routes |
 | `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_ID` | GitHub Secrets only | CI migration runner |

@@ -30,8 +30,6 @@ jobs:
 
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Install repo dependencies
         run: cd web && npm ci
@@ -46,7 +44,11 @@ jobs:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
           NOTION_FEATURE_REQUESTS_DB_ID: ${{ secrets.NOTION_FEATURE_REQUESTS_DB_ID }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Authenticates Claude Code against the Claude subscription (Pro/Max) quota,
+          # NOT pay-as-you-go API credit. Minted with `claude setup-token` (valid ~1 year).
+          # Do not add ANTHROPIC_API_KEY here — if both are set the API key wins and the
+          # run fails with "Credit balance is too low".
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
           MAX_TASKS: ${{ github.event.inputs.max_tasks || '2' }}
         run: |
@@ -114,8 +116,29 @@ jobs:
               "5. Do NOT run git or npm commands — only edit source files" \
               > "$PROMPT_FILE"
 
-            claude -p "$(cat "$PROMPT_FILE")" --dangerously-skip-permissions || true
+            # Capture Claude's exit code and output. A dead API key (expired, revoked,
+            # or out of credit) exits non-zero and writes nothing — which is
+            # indistinguishable from "the agent chose to make no changes" unless we
+            # look. Do not paper over it with `|| true`.
+            set +e
+            claude -p "$(cat "$PROMPT_FILE")" --dangerously-skip-permissions 2>&1 | tee /tmp/claude-out.txt
+            CLAUDE_EXIT=${PIPESTATUS[0]}
+            set -e
             rm -f "$PROMPT_FILE"
+
+            # Account-level failures will hit every remaining task identically —
+            # abort the whole run rather than silently reverting all of them to Ready.
+            if grep -qiE 'credit balance is too low|invalid x-api-key|authentication_error|oauth token|token (has )?expired|unauthorized|rate limit|usage limit' /tmp/claude-out.txt; then
+              echo "::error::$TASK_ID: Claude Code could not run — $(grep -ioE 'credit balance is too low|invalid x-api-key|authentication_error|oauth token[^.]*|token (has )?expired|unauthorized|rate limit|usage limit' /tmp/claude-out.txt | head -1). Re-mint CLAUDE_CODE_OAUTH_TOKEN with 'claude setup-token', or wait out the usage window."
+              git checkout main
+              git branch -D "$BRANCH" 2>/dev/null || true
+              node scripts/notion-sync.cjs feature-status "$PAGE_ID" "Ready"
+              exit 1
+            fi
+
+            if [ "$CLAUDE_EXIT" -ne 0 ]; then
+              echo "::warning::$TASK_ID: Claude Code exited $CLAUDE_EXIT — see output above"
+            fi
 
             if git diff --quiet && git diff --cached --quiet; then
               echo "$TASK_ID: No changes made — reverting to Ready"
