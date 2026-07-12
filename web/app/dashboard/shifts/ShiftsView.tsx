@@ -158,6 +158,13 @@ export default function ShiftsView({
     return map
   }, [volunteers])
 
+  // Build a category lookup map (slug -> name) for displaying a shift's required categories
+  const categoryBySlug = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const c of categories) map[c.slug] = c.name
+    return map
+  }, [categories])
+
   // In React 18, startTransition doesn't track async work — so we await the mutation
   // first, then wrap router.refresh() in a fresh startTransition so isPending correctly
   // reflects the server re-fetch loading state.
@@ -632,7 +639,7 @@ export default function ShiftsView({
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: 'var(--surface-bg)' }}>
-                        {[t('new_shift'), t('shift_date'), t('shift_time'), t('shift_location'), t('assign_volunteers'), ''].map(h => (
+                        {[t('new_shift'), t('shift_date'), t('shift_time'), t('shift_location'), t('categories'), t('assign_volunteers'), ''].map(h => (
                           <th key={h} style={{
                             padding: '10px 20px', textAlign: 'left',
                             fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)',
@@ -686,6 +693,22 @@ export default function ShiftsView({
                                 ? <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '99px', background: `${color}15`, color, fontWeight: 600 }}>{s.location_name}</span>
                                 : <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>—</span>
                               }
+                            </td>
+                            <td style={{ padding: '13px 20px' }}>
+                              {s.required_categories.length > 0 ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '160px' }}>
+                                  {s.required_categories.map(slug => (
+                                    <span key={slug} style={{
+                                      fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: '99px',
+                                      background: `${CAT_COLORS[slug] ?? '#6b7280'}18`, color: CAT_COLORS[slug] ?? '#6b7280',
+                                    }}>
+                                      {categoryBySlug[slug] ?? slug}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>{t('all_categories')}</span>
+                              )}
                             </td>
                             <td style={{ padding: '13px 20px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
@@ -817,6 +840,18 @@ export default function ShiftsView({
                   <Users style={{ width: '12px', height: '12px', color: 'var(--teal)', flexShrink: 0 }} />
                   {selected.assignments.length} / {selected.required_count} {t('spots_open')}
                 </span>
+                {selected.required_categories.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
+                    {selected.required_categories.map(slug => (
+                      <span key={slug} style={{
+                        fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px',
+                        background: `${CAT_COLORS[slug] ?? '#6b7280'}18`, color: CAT_COLORS[slug] ?? '#6b7280',
+                      }}>
+                        {categoryBySlug[slug] ?? slug}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <div style={{ marginTop: '12px', height: '4px', background: 'var(--surface-border)', borderRadius: '99px', overflow: 'hidden' }}>
                 <div style={{
