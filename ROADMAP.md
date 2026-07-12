@@ -11,7 +11,7 @@
 - **The outage that got us here (resolved).** Admin login hung forever on "Signing in…". The first successful production deploy since 2026-04-29 shipped **without** `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY` — not because they were missing from Vercel, but because **`NEXT_PUBLIC_*` is inlined at build time and the vars were saved (17:53 UTC) ~10h *after* the last build (07:17 UTC)**. Env var changes never apply retroactively to an existing build. The browser client got `undefined`, `createClient()` threw synchronously inside `handleLogin` before any network call, and with no `try/catch` the loading state never cleared. Neither Supabase project logged a single auth request — the request never left the browser. Fixed in code (A4.5) + redeploy.
 - **⚠️ The recurring theme today was env-var misconfiguration — three separate incidents.** (1) vars saved after the build, so not inlined; (2) `NEXT_PUBLIC_SUPABASE_*` scoped to *all* environments, so the `demo` **preview build pointed at the live clinic database** (caught before any demo traffic); (3) `NEXT_PUBLIC_SITE_URL`'s value pasted into `NEXT_PUBLIC_SUPABASE_URL`, breaking demo login with a `JSON.parse` error (Supabase's endpoint returned Vercel's 404 HTML). **Lesson: never trust the Vercel dashboard to tell you what the app got — decode the deployed JS bundle.** Vercel masks "Sensitive" values so you cannot read back what's in a field; the bundle is the only ground truth.
 - **A4 (Auth + env cutover) — essentially done.** Prod env vars confirmed correct **in the deployed bundle** (not just the dashboard). Supabase Auth Site URL / redirect URL → `medvolunteer.vercel.app` set on the prod project. `NEXT_PUBLIC_SITE_URL` checked by Sean (it gates volunteer invite links — see the landmine note under A5). Still open (⛔ Sean): CI migration secrets (`SUPABASE_ACCESS_TOKEN`/`SUPABASE_PROJECT_ID`) repointed to prod (needs GitHub repo admin).
-- **✅ Demo environment is now a separate Vercel project (2026-07-11) — see D6.** `envolv-demo.vercel.app` (branch `demo`) → demo Supabase `cquvutwulbtgklqrbamd`. Isolation by construction: separate project, separate env vars, nothing shared to misconfigure. Verified in the bundle — demo points at `cquvut…` with **no prod ref leaked**.
+- **✅ Demo environment is a separate Vercel project, and as of 2026-07-12 it tracks `main` — see D6/D8.** `envolv-demo.vercel.app` → demo Supabase `cquvutwulbtgklqrbamd`. Isolation by construction: separate project, separate env vars, nothing shared to misconfigure. Verified in the bundle — demo points at `cquvut…` with **no prod ref leaked**. The old `demo` branch is gone; both projects build `main` and differ only in env vars, so the demo can no longer fall behind.
 - **Preview app is live and healthy** on Vercel (`medvolunteer.vercel.app`; project `medvolunteer`, team `medvolreview`).
 - **Dummy data is restored** in the preview Supabase project (`cquvutwulbtgklqrbamd`): `seed-demo.sql` (14 volunteers, shifts, hours, credentials, messages) is now wired into `supabase/config.toml` and loads on `db reset`.
 - **Notion Feature Requests backlog populated (D4 done, Sean).** Nightly auto-build CI has real "Ready" tasks to pick up.
@@ -95,19 +95,20 @@ Repo: `C:/Users/smmcn/Desktop/volunteerhub` (exists; not yet assessed). Plan: `d
 
   | | `medvolunteer` | `envolv-demo` |
   |---|---|---|
-  | Branch | `main` | `demo` |
+  | Branch | `main` | `main` *(was `demo` until 2026-07-12 — see D8)* |
   | URL | `medvolunteer.vercel.app` | `envolv-demo.vercel.app` |
   | Supabase | `vopgctgjxbpytntthoxb` (real clinic) | `cquvutwulbtgklqrbamd` (14 fake volunteers) |
 
   Also done: **deleted `medvolunteer-5wjx`**, an accidental duplicate Vercel project wired to the same repo that had been shadow-building every commit since 07:05 UTC (framework never configured, serving publicly).
 
-  **Still open (⛔ Sean):** the *Ignored Build Step* on the `medvolunteer` project, which is what makes the preview-credential leak structurally impossible rather than merely fixed. Settings → Git → Ignored Build Step:
-  ```bash
-  if [ "$VERCEL_GIT_COMMIT_REF" == "main" ]; then exit 1; else exit 0; fi
-  ```
-  (Vercel semantics: exit **1** = build, exit **0** = skip.) Without it, the prod project can still produce preview deployments carrying production credentials.
+  **✅ Closed 2026-07-12 — the *Ignored Build Step* is now set on `medvolunteer`,** which is what makes the preview-credential leak structurally impossible rather than merely fixed. It had never actually been applied: the prod project was still building `feat/AB-*` previews with production env vars. Vercel now offers this as a built-in behavior, so no custom script is needed — Settings → Build and Deployment → Ignored Build Step → Behavior: **`Only build production`** (`if [ "$VERCEL_ENV" == "production" ]; then exit 1; else exit 0; fi`; exit **1** = build, exit **0** = skip). Feature-branch previews are still built by `envolv-demo` against the fake DB — which is where a PR should be reviewed anyway.
 
-  **Standing rule: `main` → real clinic data. `demo` → fake data. Never demo off `main`.**
+  **Standing rule (revised 2026-07-12 — see D8): same code, different data. Both projects build `main`; the database comes from the project's env vars.**
+- [x] **D8. Demo must always be current — demo now tracks `main`** ✅ 2026-07-12. The `demo` branch was never merged forward and the demo site sat **17 commits behind** `main`, serving a July 11 build while every AB-000xx feature (edit/duplicate shifts, shortcodes, statuses, categories, view-password) shipped to prod. Sales demos were showing stale software.
+
+  The branch was load-bearing for nothing: **data isolation lives in the project's env vars, not the branch.** Fixed by pointing `envolv-demo` → Settings → Environments → Production → Branch Tracking at **`main`**, redeploying current `main` to production on that project, and deleting the `demo` branch. Both projects now build every push to `main`; the demo cannot drift again without someone actively breaking it.
+
+  Verified: the live demo bundle resolves to `cquvutwulbtgklqrbamd` and contains **no** `vopgct…`; the login page shows the AB-00010 password-eye toggle (a main-only feature). **Do not recreate the `demo` branch.**
 - [x] **D7. Fix demo seed emails** ✅ 2026-07-11 — `supabase/seed-demo.sql` used `@example.com` for all 14 volunteers. That domain is IANA-reserved and refuses all mail, so one "message all volunteers" click on the demo would have produced **14 hard bounces against `envolv.org`** — the same sending domain Yakima's real volunteer invites depend on. Enough bounces and production invites start landing in spam with no obvious cause. Swapped to `smmcneal+<name>@gmail.com` plus-aliases (deliverable, zero bounces, and an invite can be shown arriving in a real inbox during a demo). Both the seed file and the 14 live rows in the demo project are updated. Demo gets its own Resend API key.
 
 ## Workstream E — Business (Sean only, not for agents)
