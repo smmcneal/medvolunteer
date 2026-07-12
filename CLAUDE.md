@@ -53,7 +53,7 @@ Copy `web/.env.example` → `web/.env.local` for local dev. Key split:
 | `CLAUDE_CODE_OAUTH_TOKEN` | GitHub Secrets only | Authenticates the Claude Code CLI in `auto-fix-bugs.yml` / `auto-build-features.yml` against the **Claude subscription quota** — not pay-as-you-go API credit. Mint with `claude setup-token` (valid ~1 year). **Do not also set `ANTHROPIC_API_KEY` in those workflows**: if both are present the API key takes precedence, and with an empty API balance every run dies with `Credit balance is too low` while still reporting green. Subscription usage limits still apply — a large `max_tasks` run can exhaust the 5-hour window |
 | `VERCEL_WEBHOOK_SECRET` | `.env.local` | Webhook signature verification |
 | `CRON_SECRET` | Vercel env + `.env.local` | Protects `/api/cron/*` routes |
-| `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_ID` | GitHub Secrets only | CI migration runner |
+| `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_ID` / `SUPABASE_DB_PASSWORD` | GitHub Secrets only | CI migration runner (`supabase-migrate.yml`). All three must point at the **same** project. `supabase link` fails fast and the error tells you which secret is wrong: `project is paused` / `Could not find project` → stale `SUPABASE_PROJECT_ID`; `your account does not have the necessary privileges` → `SUPABASE_ACCESS_TOKEN` belongs to an account without access to that project (mint a new PAT at `supabase.com/dashboard/account/tokens`). Repointing these at cutover is Step 1d of `docs/yakima-production-cutover.md` |
 
 Local Notion automation is a no-op if `NOTION_TOKEN` is not set — it silently skips.
 
@@ -216,9 +216,19 @@ Anything sitting in **Ready** is picked up by the nightly agent, which opens a P
 
 `scripts/notion-sync.cjs` reads each database's schema before writing, so it adapts to `Status` being a `select` *or* a `status` property, and to link fields being `url` *or* `rich_text`. Don't hardcode those payload shapes — a wrong guess is a hard 400 that fails the run.
 
-**Task IDs are free text and not guaranteed unique** (there are currently two `AB-00006` rows). Automation passes the Notion **page ID** — returned by `list-ready-features` — to `feature-status`, never the task ID. Keep it that way.
+**Task IDs are free text and not guaranteed unique.** Automation passes the Notion **page ID** — returned by `list-ready-features` — to `feature-status`, never the task ID. Keep it that way. (Two rows once shared `AB-00006`; `notion-sync.cjs` now logs a WARNING and uses the first match, so a duplicate silently writes status/PR links onto the wrong row. `notion-pr-sync.yml` can only look up by task ID — it has no page ID — so duplicates are a real hazard there.)
 
 > ⚠️ `auto-build-features.yml` used to be gated on `notion-sync.cjs bugs-clear`, which skipped the entire run if any dev task sat in Ready / In Progress / **Code Review**. "Code Review" means an open PR awaiting a human merge, so the gate never cleared and no feature was built for weeks. **Gate removed 2026-07-11.** `bugs-clear` survives as a manual diagnostic only — don't reintroduce it as a gate.
+
+#### Operating the pipeline — traps learned the hard way (2026-07-11)
+
+**A blank `Component/File` means the agent invents the feature.** The task's `Component/File` rich-text field is the *entire* spec handed to Claude Code — the title alone is not enough. `AB-00006 "Group Volunteer"` was marked Ready with an empty description; the agent guessed it meant group shift signup and produced 13 files across admin + volunteer + i18n **including a new `supabase/migrations/*.sql`**. That path is exactly the trigger for `supabase-migrate.yml`, so merging it would have applied an agent-invented schema to production. **Never move a task to Ready without a real description.** Park under-specified tasks in Backlog.
+
+**Closing a *conflicted* PR does not reset its Notion task.** `notion-pr-sync.yml` runs on `pull_request`, which GitHub dispatches against the merge ref (`refs/pull/N/merge`). A PR with conflicts has no valid merge ref, so **no workflow run fires at all** — including the `closed → Ready` step. The task is stranded in Code Review and the nightly agent will never pick it up again. After closing a conflicted PR, set the task back to Ready in Notion by hand. (For cleanly-mergeable PRs the `closed → Ready` path works — verified.)
+
+**Prefer regeneration over hand-merging conflicts.** Every feature in a single run is branched from the same `main`, so once you merge the first PR, any other PR touching the same file conflicts. These branches are cheap and disposable: close the conflicted PR, set the task back to Ready, and re-run the workflow — the agent rebuilds against the new `main` and integrates with what just landed, rather than fighting it. (`AB-00005` conflicted with the merged `AB-00008` in `ShiftsView.tsx` across 5 hunks; a rebuild produced a clean, richer PR in ~3 minutes.) The workflow deletes any stale remote branch of the same name on the next run, so no cleanup is needed.
+
+**The agent's failures used to look like successes.** `claude -p ... || true` swallowed every error, so a dead API key reported "No changes made — reverting to Ready" and the run went green. Both nightly workflows now `tee` Claude's output, grep it for account-level failures (credit / auth / usage limit), and `exit 1` with a `::error::` rather than reverting all tasks. If you ever see tasks bouncing back to Ready with no PRs, read the actual Claude output before believing "no changes".
 
 ### i18n
 
