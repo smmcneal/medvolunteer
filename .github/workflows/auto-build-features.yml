@@ -41,16 +41,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Check all bugs are resolved
-        env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-          NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
-        run: |
-          if ! node scripts/notion-sync.cjs bugs-clear; then
-            echo "Bug backlog not clear — skipping feature automation."
-            exit 0
-          fi
-
       - name: Build features
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
@@ -61,12 +51,6 @@ jobs:
           MAX_TASKS: ${{ github.event.inputs.max_tasks || '2' }}
         run: |
           set -euo pipefail
-
-          # Re-check bugs-clear (in case the gate step was skipped via exit 0)
-          if ! node scripts/notion-sync.cjs bugs-clear 2>/dev/null; then
-            echo "Bug backlog not clear — skipping feature automation."
-            exit 0
-          fi
 
           # Fetch triaged feature list
           node scripts/notion-sync.cjs list-ready-features --max "$MAX_TASKS" > /tmp/features.json
@@ -79,12 +63,15 @@ jobs:
           fi
 
           for i in $(seq 0 $((TASK_COUNT - 1))); do
+            # PAGE_ID is the stable identity. Task IDs are free text in Notion and may
+            # collide (there are currently two AB-00006 rows) — never look up by them.
+            PAGE_ID=$(python3    -c "import json; print(json.load(open('/tmp/features.json'))[$i].get('pageId',''))")
             TASK_ID=$(python3    -c "import json; print(json.load(open('/tmp/features.json'))[$i].get('taskId',''))")
             TITLE=$(python3      -c "import json; print(json.load(open('/tmp/features.json'))[$i].get('title',''))")
             DESCRIPTION=$(python3 -c "import json; print(json.load(open('/tmp/features.json'))[$i].get('description',''))")
 
-            if [ -z "$TASK_ID" ] || [ -z "$TITLE" ]; then
-              echo "Skipping task $i — missing taskId or title"
+            if [ -z "$PAGE_ID" ] || [ -z "$TASK_ID" ] || [ -z "$TITLE" ]; then
+              echo "Skipping task $i — missing pageId, taskId or title"
               continue
             fi
 
@@ -106,7 +93,7 @@ jobs:
             git branch -D "$BRANCH" 2>/dev/null || true
 
             # Mark In Progress in Feature Requests DB
-            node scripts/notion-sync.cjs feature-status "$TASK_ID" "In Progress"
+            node scripts/notion-sync.cjs feature-status "$PAGE_ID" "In Progress"
 
             git checkout -b "$BRANCH"
 
@@ -134,7 +121,7 @@ jobs:
               echo "$TASK_ID: No changes made — reverting to Ready"
               git checkout main
               git branch -D "$BRANCH"
-              node scripts/notion-sync.cjs feature-status "$TASK_ID" "Ready"
+              node scripts/notion-sync.cjs feature-status "$PAGE_ID" "Ready"
               continue
             fi
 
@@ -152,7 +139,7 @@ jobs:
                 --head "$BRANCH"; then
               echo "$TASK_ID: PR creation failed — reverting to Ready"
               git checkout main
-              node scripts/notion-sync.cjs feature-status "$TASK_ID" "Ready"
+              node scripts/notion-sync.cjs feature-status "$PAGE_ID" "Ready"
               continue
             fi
 

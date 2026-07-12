@@ -1,11 +1,13 @@
 name: Notion PR Sync
 
-# Automatically updates the Notion Dev Tasks & QA database when PRs move
-# through the GitHub lifecycle. Extracts DEV-### from branch name or PR title.
+# Automatically updates Notion when PRs move through the GitHub lifecycle.
+# Extracts DEV-### (bugs / dev tasks) or AB-### (feature requests) from the
+# branch name or PR title and routes to the matching database.
 #
 # Required GitHub secrets:
-#   NOTION_TOKEN           — Notion integration secret (starts with secret_)
-#   NOTION_DEV_TASKS_DB_ID — Dev Tasks & QA database ID (from Notion URL)
+#   NOTION_TOKEN                   — Notion integration secret
+#   NOTION_DEV_TASKS_DB_ID         — Dev Tasks & QA database ID
+#   NOTION_FEATURE_REQUESTS_DB_ID  — Feature Requests database ID
 
 on:
   pull_request:
@@ -25,21 +27,22 @@ jobs:
 
       - name: Extract task ID
         id: task
+        env:
+          BRANCH: ${{ github.head_ref }}
+          TITLE: ${{ github.event.pull_request.title }}
         run: |
-          BRANCH="${{ github.head_ref }}"
-          TITLE="${{ github.event.pull_request.title }}"
-
-          # Try branch name first, then PR title
-          TASK_ID=$(echo "$BRANCH $TITLE" | grep -oE 'DEV-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
+          # Branch name first, then PR title. Matches DEV-### and AB-###.
+          TASK_ID=$(echo "$BRANCH $TITLE" | grep -oiE '(DEV|AB)-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
 
           if [ -z "$TASK_ID" ]; then
-            echo "No DEV-### found in branch '$BRANCH' or title '$TITLE' — skipping."
+            echo "No DEV-###/AB-### found in branch '$BRANCH' or title '$TITLE' — skipping."
             echo "found=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Found task: $TASK_ID"
-            echo "task_id=$TASK_ID" >> "$GITHUB_OUTPUT"
-            echo "found=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          echo "Found task: $TASK_ID"
+          echo "task_id=$TASK_ID" >> "$GITHUB_OUTPUT"
+          echo "found=true" >> "$GITHUB_OUTPUT"
 
       # ── PR opened / reopened → Code Review ────────────────────────────────
       - name: Set status → Code Review
@@ -51,6 +54,7 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
+          NOTION_FEATURE_REQUESTS_DB_ID: ${{ secrets.NOTION_FEATURE_REQUESTS_DB_ID }}
         run: node scripts/notion-sync.cjs status "${{ steps.task.outputs.task_id }}" "Code Review"
 
       - name: Add PR link
@@ -61,6 +65,7 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
+          NOTION_FEATURE_REQUESTS_DB_ID: ${{ secrets.NOTION_FEATURE_REQUESTS_DB_ID }}
         run: node scripts/notion-sync.cjs pr "${{ steps.task.outputs.task_id }}" "${{ github.event.pull_request.html_url }}"
 
       # ── PR merged → Done ──────────────────────────────────────────────────
@@ -72,6 +77,7 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
+          NOTION_FEATURE_REQUESTS_DB_ID: ${{ secrets.NOTION_FEATURE_REQUESTS_DB_ID }}
         run: node scripts/notion-sync.cjs status "${{ steps.task.outputs.task_id }}" "Done"
 
       # ── PR closed without merge → Ready ───────────────────────────────────
@@ -83,4 +89,5 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DEV_TASKS_DB_ID: ${{ secrets.NOTION_DEV_TASKS_DB_ID }}
+          NOTION_FEATURE_REQUESTS_DB_ID: ${{ secrets.NOTION_FEATURE_REQUESTS_DB_ID }}
         run: node scripts/notion-sync.cjs status "${{ steps.task.outputs.task_id }}" "Ready"

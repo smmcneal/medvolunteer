@@ -49,7 +49,7 @@ Copy `web/.env.example` → `web/.env.local` for local dev. Key split:
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | `.env.local` + Vercel | Web push subscription; push silently doesn't work without it |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | `.env.local` | Email sending |
 | `NOTION_TOKEN` / `NOTION_DEV_TASKS_DB_ID` | `.env.local` + GitHub Secrets | Notion automation |
-| `NOTION_FEATURE_REQUESTS_DB_ID` | GitHub Secrets only | Auto-build CI reads triaged features from this DB |
+| `NOTION_FEATURE_REQUESTS_DB_ID` | GitHub Secrets only | Feature Requests DB (AB-### tasks). Read by `auto-build-features.yml` **and** `notion-pr-sync.yml` — a PR on a `feat/AB-###` branch cannot sync without it |
 | `ANTHROPIC_API_KEY` | GitHub Secrets only | Auto-build CI invokes Claude Code to implement features |
 | `VERCEL_WEBHOOK_SECRET` | `.env.local` | Webhook signature verification |
 | `CRON_SECRET` | Vercel env + `.env.local` | Protects `/api/cron/*` routes |
@@ -67,8 +67,9 @@ supabase/     Migrations, seed data, edge functions
 scripts/      notion-sync.cjs — Notion API helper used by hooks/CI
               build-heather-guide.cjs — generates Heather_Notion_Setup_Guide.docx
 .github/      supabase-migrate.yml — auto-applies migrations on merge to main (push paths filter: supabase/migrations/**; single migrate job, concurrency-guarded)
-              notion-pr-sync.yml — PR events → Notion Dev Tasks status
-              auto-build-features.yml — nightly (3am UTC) Claude Code agent that reads "Ready" tasks from Notion Feature Requests DB and opens PRs. Skips if bug backlog is not clear. Branch names follow feat/DEV-###-slug. Requires ANTHROPIC_API_KEY, NOTION_FEATURE_REQUESTS_DB_ID, GH_PAT secrets.
+              notion-pr-sync.yml — PR events → Notion status + PR link. Routes DEV-### to Dev Tasks DB and AB-### to Feature Requests DB.
+              auto-fix-bugs.yml — nightly (2am UTC) Claude Code agent: reads "Ready" tasks from Notion Dev Tasks DB, opens PRs. Branch names follow fix/DEV-###-slug.
+              auto-build-features.yml — nightly (3am UTC) Claude Code agent: reads "Ready" tasks from Notion Feature Requests DB, opens PRs. Branch names follow feat/AB-###-slug. Requires ANTHROPIC_API_KEY, NOTION_FEATURE_REQUESTS_DB_ID, GH_PAT secrets.
 ```
 
 ### Route Structure
@@ -198,13 +199,26 @@ async function run(fn: () => Promise<void>) {
 
 ### Notion Automation Pipeline
 
-When a branch is pushed or a PR is opened/merged, the system updates the Notion Dev Tasks & QA database automatically:
+Two Notion databases feed the pipeline, distinguished by task ID prefix:
+
+| Prefix | Database | Env var | Built by | Branch prefix |
+|--------|----------|---------|----------|---------------|
+| `DEV-###` | Dev Tasks & QA | `NOTION_DEV_TASKS_DB_ID` | `auto-fix-bugs.yml` (2am UTC) | `fix/` |
+| `AB-###` | Feature Requests | `NOTION_FEATURE_REQUESTS_DB_ID` | `auto-build-features.yml` (3am UTC) | `feat/` |
+
+Anything sitting in **Ready** is picked up by the nightly agent, which opens a PR. From there:
 
 1. **PostToolUse hook** (`.claude/settings.local.json`) — git commit/push → marks task "In Progress"
-2. **`notion-pr-sync.yml`** — PR opened/merged/closed → updates task status in Notion
+2. **`notion-pr-sync.yml`** — PR opened/merged/closed → updates status + PR link in the DB matching the prefix
 3. **`/api/webhooks/vercel`** — deploy succeeded → moves task to "Testing" + stores preview URL in GitHub Link field
 
-Task ID is extracted from the branch name (must contain `DEV-###`). **Branch names must follow `feat/DEV-###-slug` — the entire pipeline (hook → PR sync → webhook) fires only if the branch name contains a `DEV-###` token.** All steps silently no-op if Notion env vars are absent.
+**Branch names must follow `fix/DEV-###-slug` or `feat/AB-###-slug`** — the entire pipeline (hook → PR sync → webhook) fires only if the branch name contains a `DEV-###` or `AB-###` token. All steps silently no-op if Notion env vars are absent.
+
+`scripts/notion-sync.cjs` reads each database's schema before writing, so it adapts to `Status` being a `select` *or* a `status` property, and to link fields being `url` *or* `rich_text`. Don't hardcode those payload shapes — a wrong guess is a hard 400 that fails the run.
+
+**Task IDs are free text and not guaranteed unique** (there are currently two `AB-00006` rows). Automation passes the Notion **page ID** — returned by `list-ready-features` — to `feature-status`, never the task ID. Keep it that way.
+
+> ⚠️ `auto-build-features.yml` used to be gated on `notion-sync.cjs bugs-clear`, which skipped the entire run if any dev task sat in Ready / In Progress / **Code Review**. "Code Review" means an open PR awaiting a human merge, so the gate never cleared and no feature was built for weeks. **Gate removed 2026-07-11.** `bugs-clear` survives as a manual diagnostic only — don't reintroduce it as a gate.
 
 ### i18n
 
