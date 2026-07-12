@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { createFlag, deleteFlag } from './settingsActions'
+import { createFlag, deleteFlag, updateFlag } from './settingsActions'
 import type { OrgFlag, FlagSeverity } from '@/types/database'
 import { useAdminT } from '@/lib/admin-lang'
 
@@ -26,6 +26,13 @@ export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[]
   const [error, setError]       = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
+  const [editingId, setEditingId]         = useState<string | null>(null)
+  const [editName, setEditName]           = useState('')
+  const [editDescription, setEditDesc]    = useState('')
+  const [editSeverity, setEditSeverity]   = useState<FlagSeverity>('warning')
+  const [editColor, setEditColor]         = useState(PRESET_COLORS[0])
+  const [editError, setEditError]         = useState<string | null>(null)
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) return
@@ -38,6 +45,26 @@ export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[]
     }])
     setName('')
     setDesc('')
+  }
+
+  function startEdit(flag: OrgFlag) {
+    setEditingId(flag.id)
+    setEditName(flag.name)
+    setEditDesc(flag.description ?? '')
+    setEditSeverity(flag.severity)
+    setEditColor(flag.color)
+    setEditError(null)
+  }
+
+  async function handleSaveEdit(id: string) {
+    if (!editName.trim()) return
+    setEditError(null)
+    const res = await updateFlag(id, editName.trim(), editDescription.trim(), editSeverity, editColor)
+    if (res.error) { setEditError(res.error); return }
+    setFlags(prev => prev.map(flag => flag.id === id
+      ? { ...flag, name: editName.trim(), description: editDescription.trim() || null, severity: editSeverity, color: editColor }
+      : flag))
+    setEditingId(null)
   }
 
   function handleDelete(id: string) {
@@ -61,6 +88,74 @@ export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[]
         )}
         {flags.map(flag => {
           const sev = SEVERITY_STYLES[flag.severity]
+
+          if (editingId === flag.id) {
+            return (
+              <div key={flag.id} style={{
+                display: 'flex', flexDirection: 'column', gap: 10,
+                padding: '12px 14px', borderRadius: 8, background: '#f9fafb',
+                border: '1.5px solid #6366f1',
+              }}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <input
+                    autoFocus
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    maxLength={60}
+                    style={{ flex: '1 1 180px', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 13, outline: 'none' }}
+                  />
+                  <input
+                    value={editDescription}
+                    onChange={e => setEditDesc(e.target.value)}
+                    placeholder={t('flag_description')}
+                    maxLength={120}
+                    style={{ flex: '1 1 180px', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 13, outline: 'none' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {(['info', 'warning', 'critical'] as FlagSeverity[]).map(s => {
+                      const sevStyle = SEVERITY_STYLES[s]
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setEditSeverity(s)}
+                          style={{
+                            padding: '4px 10px', borderRadius: 6, border: editSeverity === s ? `2px solid ${sevStyle.text}` : '1px solid #e2e8f0',
+                            background: editSeverity === s ? sevStyle.bg : '#fff',
+                            color: editSeverity === s ? sevStyle.text : '#6b7280',
+                            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          {t(`severity_${s}`)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {PRESET_COLORS.map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setEditColor(c)}
+                        style={{
+                          width: 18, height: 18, borderRadius: '50%', background: c, border: 'none',
+                          cursor: 'pointer', outline: editColor === c ? `2px solid ${c}` : 'none', outlineOffset: 2,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                    <button onClick={() => void handleSaveEdit(flag.id)} style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#1B2A4A', border: 'none', borderRadius: 5, padding: '5px 12px', cursor: 'pointer' }}>{t('save_label')}</button>
+                    <button onClick={() => setEditingId(null)} style={{ fontSize: 12, color: '#6b7280', background: 'none', border: '1px solid #e5e7eb', borderRadius: 5, padding: '5px 10px', cursor: 'pointer' }}>{t('cancel')}</button>
+                  </div>
+                </div>
+                {editError && <p style={{ color: '#dc2626', fontSize: 12, margin: 0 }}>{editError}</p>}
+              </div>
+            )
+          }
+
           return (
             <div key={flag.id} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -77,10 +172,16 @@ export default function FlagsManager({ initialFlags }: { initialFlags: OrgFlag[]
                   {t(`severity_${flag.severity}`)}
                 </span>
               </div>
-              <button
-                onClick={() => handleDelete(flag.id)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 18, lineHeight: 1, padding: '0 4px' }}
-              >×</button>
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                <button
+                  onClick={() => startEdit(flag)}
+                  style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 5, cursor: 'pointer', color: '#6b7280', fontSize: 11, fontWeight: 600, padding: '3px 8px' }}
+                >{t('edit')}</button>
+                <button
+                  onClick={() => handleDelete(flag.id)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 18, lineHeight: 1, padding: '0 4px' }}
+                >×</button>
+              </div>
             </div>
           )
         })}
