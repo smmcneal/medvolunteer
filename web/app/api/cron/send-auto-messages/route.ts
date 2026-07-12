@@ -25,6 +25,18 @@ export async function GET(request: Request) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
 
+  // ?mode=scheduled → dispatch "Send Later" messages ONLY; never run the daily
+  // auto-message rules. Safe to call at any frequency: the scheduled-message pass
+  // is idempotent (rows flip to status='sent' and the query only picks up
+  // status='scheduled'). This is what `.github/workflows/cron-scheduled-messages.yml`
+  // calls every 30 minutes, because Vercel Hobby cron is capped at once a day.
+  //
+  // No mode (Vercel's own midnight cron) → unchanged behavior: daily rules + scheduled.
+  // The daily rules are NOT idempotent — they are gated solely by the UTC-hour check
+  // below, so they must never run on the frequent invocation.
+  const mode = new URL(request.url).searchParams.get('mode')
+  const scheduledOnly = mode === 'scheduled'
+
   const supabase = createAdminClient()
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -33,10 +45,12 @@ export async function GET(request: Request) {
   const { data: org } = await supabase.from('organizations').select('id').limit(1).single()
   if (!org) return NextResponse.json({ ok: false, error: 'No org found' }, { status: 500 })
 
-  // The cron runs hourly so "Send Later" messages go out near their scheduled
-  // time, but the daily reminder rules must only fire once — on the midnight
-  // UTC run — or volunteers would get the same reminder 24 times.
-  const isDailyRun = new Date().getUTCHours() === 0
+  // The daily reminder rules must fire exactly once per day — on the midnight UTC
+  // run — or volunteers get the same reminder repeatedly. Two guards, both required:
+  //   scheduledOnly  — the every-30-min GitHub Actions call must never run rules
+  //                    (the 00:00 and 00:30 invocations both fall in UTC hour 0).
+  //   getUTCHours()  — belt and braces if the Vercel schedule is ever made hourly.
+  const isDailyRun = !scheduledOnly && new Date().getUTCHours() === 0
 
   const { data: rules, error } = isDailyRun
     ? await supabase

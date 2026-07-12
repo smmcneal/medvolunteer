@@ -1,0 +1,73 @@
+name: Dispatch Scheduled Messages
+
+# Near-real-time delivery for "Send Later" messages (AB-00003).
+#
+# WHY THIS EXISTS: Vercel's Hobby plan allows only ONE cron run per day, so
+# vercel.json is pinned to "0 0 * * *". That means a message scheduled for 2pm
+# would not actually go out until the next midnight-UTC run — a delay of up to
+# ~24 hours, which defeats the feature. GitHub Actions cron is free and runs as
+# often as every 5 minutes, so we call the same route from here instead.
+#
+# WHAT IT DOES NOT DO: it passes ?mode=scheduled, which dispatches due messages
+# and skips the daily auto-message rules entirely. DO NOT REMOVE THAT PARAMETER.
+# The daily rules are NOT idempotent — they are gated only by a UTC-hour check,
+# and two of these invocations (00:00 and 00:30) land inside the 00:00 UTC hour,
+# so calling the route without the parameter would send every daily reminder twice.
+# The daily rules stay on Vercel's midnight cron, where they fire exactly once.
+#
+# The scheduled-message pass IS idempotent: dispatched rows flip to status='sent'
+# and the query only selects status='scheduled', so a duplicate or retried run
+# cannot double-send.
+#
+# Required GitHub secrets:
+#   APP_URL      — production base URL, no trailing slash (e.g. https://medvolunteer.vercel.app)
+#   CRON_SECRET  — must match the CRON_SECRET set in the Vercel environment
+
+on:
+  schedule:
+    # Every 30 min = ~1,450 Actions minutes/month (GitHub bills a 1-minute minimum
+    # per run, so run FREQUENCY — not duration — is what costs). That fits inside
+    # the 2,000-min free tier for private repos; */15 would blow past it at ~2,900.
+    # Worst-case "Send Later" latency is therefore ~30 min plus GitHub's scheduling
+    # drift, versus ~24h on Vercel Hobby's once-daily cron.
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+# Never let two dispatch runs overlap.
+concurrency:
+  group: dispatch-scheduled-messages
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch due scheduled messages
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${APP_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::APP_URL or CRON_SECRET repo secret is not set — cannot dispatch."
+            exit 1
+          fi
+
+          # The route fails closed (500) if CRON_SECRET is unset server-side and
+          # 401s on a bad token, so a mismatch surfaces here rather than silently
+          # no-op'ing.
+          HTTP_CODE=$(curl -sS \
+            --max-time 60 --retry 2 --retry-delay 5 --retry-connrefused \
+            -o /tmp/cron-response.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL}/api/cron/send-auto-messages?mode=scheduled")
+
+          echo "HTTP $HTTP_CODE"
+          cat /tmp/cron-response.json 2>/dev/null || true
+          echo
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Scheduled-message dispatch failed (HTTP $HTTP_CODE). 401 = CRON_SECRET mismatch; 500 = CRON_SECRET missing in Vercel."
+            exit 1
+          fi
