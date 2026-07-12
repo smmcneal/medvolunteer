@@ -53,7 +53,7 @@ Copy `web/.env.example` → `web/.env.local` for local dev. Key split:
 | `CLAUDE_CODE_OAUTH_TOKEN` | GitHub Secrets only | Authenticates the Claude Code CLI in `auto-fix-bugs.yml` / `auto-build-features.yml` against the **Claude subscription quota** — not pay-as-you-go API credit. Mint with `claude setup-token` (valid ~1 year). **Do not also set `ANTHROPIC_API_KEY` in those workflows**: if both are present the API key takes precedence, and with an empty API balance every run dies with `Credit balance is too low` while still reporting green. Subscription usage limits still apply — a large `max_tasks` run can exhaust the 5-hour window |
 | `VERCEL_WEBHOOK_SECRET` | `.env.local` | Webhook signature verification |
 | `CRON_SECRET` | Vercel env + `.env.local` | Protects `/api/cron/*` routes |
-| `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_ID` / `SUPABASE_DB_PASSWORD` | GitHub Secrets only | CI migration runner (`supabase-migrate.yml`). All three must point at the **same** project. `supabase link` fails fast and the error tells you which secret is wrong: `project is paused` / `Could not find project` → stale `SUPABASE_PROJECT_ID`; `your account does not have the necessary privileges` → `SUPABASE_ACCESS_TOKEN` belongs to an account without access to that project (mint a new PAT at `supabase.com/dashboard/account/tokens`). Repointing these at cutover is Step 1d of `docs/yakima-production-cutover.md` |
+| `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_ID` / `SUPABASE_DB_PASSWORD` | GitHub Secrets only | CI migration runner (`supabase-migrate.yml`). All three must point at the **same** project. `supabase link` fails fast and the error names the broken secret: `project is paused` / `Could not find project` → stale `SUPABASE_PROJECT_ID`; `your account does not have the necessary privileges` → the PAT is from an account without access to that project; `Invalid access token format. Must be like sbp_0102...1920` → the PAT is a 47-char `sbp_v0_...` token but the pinned CLI only accepts the **classic 44-char `sbp_` + 40-hex** format (the value can be perfectly clean — see the comment in the workflow). Repointing these at cutover is Step 1d of `docs/yakima-production-cutover.md` |
 
 Local Notion automation is a no-op if `NOTION_TOKEN` is not set — it silently skips.
 
@@ -229,6 +229,21 @@ Anything sitting in **Ready** is picked up by the nightly agent, which opens a P
 **Prefer regeneration over hand-merging conflicts.** Every feature in a single run is branched from the same `main`, so once you merge the first PR, any other PR touching the same file conflicts. These branches are cheap and disposable: close the conflicted PR, set the task back to Ready, and re-run the workflow — the agent rebuilds against the new `main` and integrates with what just landed, rather than fighting it. (`AB-00005` conflicted with the merged `AB-00008` in `ShiftsView.tsx` across 5 hunks; a rebuild produced a clean, richer PR in ~3 minutes.) The workflow deletes any stale remote branch of the same name on the next run, so no cleanup is needed.
 
 **The agent's failures used to look like successes.** `claude -p ... || true` swallowed every error, so a dead API key reported "No changes made — reverting to Ready" and the run went green. Both nightly workflows now `tee` Claude's output, grep it for account-level failures (credit / auth / usage limit), and `exit 1` with a `::error::` rather than reverting all tasks. If you ever see tasks bouncing back to Ready with no PRs, read the actual Claude output before believing "no changes".
+
+### Supabase migration history
+
+`supabase db push` refuses to run with `Remote migration versions not found in local migrations directory` whenever a version recorded in the remote's `supabase_migrations.schema_migrations` has no matching file in `supabase/migrations/`.
+
+**This is caused by applying migrations out-of-band** — e.g. through the Supabase MCP connector or the SQL editor, which stamp their own timestamp rather than reusing the repo filename's. It happened with `precutover_hardening`: the repo has `20260711050700`, prod recorded `20260711050726`, and the demo project recorded `20260711050723` — three stamps, one file. The schema was identical in all three; only the bookkeeping diverged.
+
+Fix is bookkeeping-only, never re-running the SQL:
+
+```bash
+supabase migration repair --status reverted <phantom-remote-version>
+supabase migration repair --status applied  <version-matching-the-repo-file>
+```
+
+(Equivalently: delete the phantom row from `supabase_migrations.schema_migrations` and insert the repo's version.) **Prefer applying migrations via `supabase db push`** so the recorded version always matches the filename and this never arises.
 
 ### i18n
 

@@ -47,33 +47,17 @@ jobs:
             echo "SHOULD_MIGRATE=true" >> "$GITHUB_ENV"
           fi
 
-      # TEMPORARY DIAGNOSTIC — delete once the token issue is resolved.
-      # Reports the SHAPE of SUPABASE_ACCESS_TOKEN without ever printing it: length,
-      # prefix, whitespace, and which format regex it satisfies. GitHub masks secret
-      # values in logs anyway; these are derived booleans, so nothing leaks.
-      - name: Diagnose access token shape
-        if: env.SHOULD_MIGRATE == 'true'
-        env:
-          TOK: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: |
-          if [ -z "${TOK:-}" ]; then echo "::error::SUPABASE_ACCESS_TOKEN is EMPTY"; exit 1; fi
-          LEN=${#TOK}
-          TRIMMED=$(printf '%s' "$TOK" | tr -d '[:space:]')
-          echo "length ................. $LEN"
-          echo "length after stripping whitespace ... ${#TRIMMED}"
-          echo "has leading/trailing whitespace ..... $([ "$LEN" -ne "${#TRIMMED}" ] && echo YES || echo no)"
-          echo "starts with 'sbp_' .................. $(printf '%s' "$TOK" | grep -q '^sbp_' && echo yes || echo NO)"
-          echo "starts with 'sbp_v0_' ............... $(printf '%s' "$TOK" | grep -q '^sbp_v0_' && echo yes || echo no)"
-          echo "matches CLASSIC ^sbp_[a-f0-9]{40}$ .. $(printf '%s' "$TRIMMED" | grep -qE '^sbp_[a-f0-9]{40}$' && echo yes || echo NO)"
-          echo "contains bullet/mask chars .......... $(printf '%s' "$TOK" | grep -q '•' && echo YES--you-copied-the-masked-value || echo no)"
-
-      # Pin the CLI explicitly. Do NOT go back to `version: latest`: resolving
-      # "latest" hits the GitHub API unauthenticated, gets rate-limited, and the
-      # action silently falls back to a stale CLI. That stale CLI only accepts the
-      # legacy `sbp_` + 40-hex token format and rejects modern `sbp_v0_...` personal
-      # access tokens with "Invalid access token format. Must be like sbp_0102...1920"
-      # — which looks like a bad secret but is really a bad CLI. (Cost an hour, 2026-07-12.)
-      # If you must track latest, pass github-token so the lookup is authenticated.
+      # ⚠️ SUPABASE_ACCESS_TOKEN must be a CLASSIC 44-char token: `sbp_` + 40 hex.
+      # CLI 2.84.2 validates against that regex and rejects the newer 47-char
+      # `sbp_v0_...` tokens with:
+      #     Invalid access token format. Must be like `sbp_0102...1920`.
+      # That error reads like a bad secret, but the value can be perfectly clean —
+      # it's a format/CLI-version mismatch. If you rotate the token and the dashboard
+      # only issues `sbp_v0_...`, you must ALSO bump the CLI version below to one that
+      # accepts it. (Verified 2026-07-12: 2.84.2 + classic token = works.)
+      #
+      # Do NOT go back to `version: latest` without `github-token` — resolving "latest"
+      # unauthenticated gets rate-limited and silently falls back to a stale CLI.
       - name: Setup Supabase CLI
         if: env.SHOULD_MIGRATE == 'true'
         uses: supabase/setup-cli@v2
