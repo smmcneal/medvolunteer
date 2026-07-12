@@ -37,10 +37,16 @@ Credentials are in `web/.env.local` (`DEV_ADMIN_EMAIL` etc.). Blocked with 403 i
 
 Copy `web/.env.example` → `web/.env.local` for local dev. Key split:
 
+> ⚠️ **`NEXT_PUBLIC_*` vars are inlined at BUILD time.** Changing one in Vercel does nothing to an existing deployment — it only takes effect on the next build. This caused a production login outage on 2026-07-11 (vars saved ~10h after the last build). **After any `NEXT_PUBLIC_*` change, redeploy.**
+>
+> To verify what a deployment *actually* got — as opposed to what the dashboard claims — decode the deployed JS bundle. Vercel masks "Sensitive" values so you cannot read a field back; the bundle is the only ground truth.
+
 | Var | Where | Purpose |
 |-----|-------|---------|
 | `NEXT_PUBLIC_SUPABASE_URL` / `ANON_KEY` | `.env.local` | Supabase client |
 | `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` | Admin client (bypasses RLS) |
+| `NEXT_PUBLIC_SITE_URL` | `.env.local` + Vercel | **Volunteer invite links only** (`dashboard/volunteers/actions.ts`). Falls back to `http://localhost:3000` — if unset in production, every invite email contains a dead localhost link and the admin still sees "invite sent". Must be the real domain, and needs a redeploy to take effect. |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | `.env.local` + Vercel | Web push subscription; push silently doesn't work without it |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | `.env.local` | Email sending |
 | `NOTION_TOKEN` / `NOTION_DEV_TASKS_DB_ID` | `.env.local` + GitHub Secrets | Notion automation |
 | `NOTION_FEATURE_REQUESTS_DB_ID` | GitHub Secrets only | Auto-build CI reads triaged features from this DB |
