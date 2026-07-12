@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation'
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List,
   MapPin, Clock, Users, Trash2, UserPlus, X,
-  LogIn, LogOut, AlertCircle, Search, ArrowLeft, GraduationCap,
+  LogIn, LogOut, AlertCircle, Search, ArrowLeft, GraduationCap, Copy,
 } from 'lucide-react'
 import CalendarWeekView from './CalendarWeekView'
 import CalendarDayView from './CalendarDayView'
 import { useAdminT } from '@/lib/admin-lang'
 import {
-  createShift, deleteShift,
+  createShift, deleteShift, duplicateShift,
   createRecurringShifts, bulkUpdateRecurringShifts, bulkDeleteRecurringShifts,
   assignVolunteer, assignTraineeWithMentor, removeAssignment,
   manualClockIn, manualClockOut,
@@ -314,6 +314,13 @@ export default function ShiftsView({
       if (!confirm('Delete this shift?')) return
       run(async () => { await deleteShift(id); setSelectedId(null) })
     }
+  }
+
+  function handleDuplicate(id: string) {
+    run(async () => {
+      const { shiftId } = await duplicateShift(id)
+      setSelectedId(shiftId)
+    })
   }
 
   function handlePickVolunteer(v: VolunteerLike) {
@@ -1159,6 +1166,19 @@ export default function ShiftsView({
 
             {/* Panel footer */}
             <div style={{ padding: '12px 20px', borderTop: '1px solid var(--surface-border-sub)', display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => handleDuplicate(selected.id)}
+                style={{
+                  padding: '7px 12px', borderRadius: '7px',
+                  border: '1px solid var(--surface-border)', background: 'transparent', cursor: 'pointer',
+                  color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 500,
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-bg)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+              >
+                <Copy style={{ width: '12px', height: '12px' }} /> {t('duplicate_shift')}
+              </button>
               <button
                 onClick={() => handleDelete(selected.id)}
                 style={{
