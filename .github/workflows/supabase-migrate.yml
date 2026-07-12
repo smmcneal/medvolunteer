@@ -47,11 +47,19 @@ jobs:
             echo "SHOULD_MIGRATE=true" >> "$GITHUB_ENV"
           fi
 
+      # Pin the CLI explicitly. Do NOT go back to `version: latest`: resolving
+      # "latest" hits the GitHub API unauthenticated, gets rate-limited, and the
+      # action silently falls back to a stale CLI. That stale CLI only accepts the
+      # legacy `sbp_` + 40-hex token format and rejects modern `sbp_v0_...` personal
+      # access tokens with "Invalid access token format. Must be like sbp_0102...1920"
+      # — which looks like a bad secret but is really a bad CLI. (Cost an hour, 2026-07-12.)
+      # If you must track latest, pass github-token so the lookup is authenticated.
       - name: Setup Supabase CLI
         if: env.SHOULD_MIGRATE == 'true'
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v2
         with:
-          version: latest
+          version: 2.84.2
+          github-token: ${{ github.token }}
 
       - name: List pending migrations (dry run)
         if: env.SHOULD_MIGRATE == 'true' && github.event.inputs.dry_run == 'true'
