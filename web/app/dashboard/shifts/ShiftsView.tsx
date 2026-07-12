@@ -230,7 +230,9 @@ export default function ShiftsView({
     const now = new Date().toISOString()
     return shifts.filter(s => {
       if (listFilter === 'upcoming' ? s.start_time < now : s.start_time >= now) return false
-      if (listCategoryFilter && !s.required_categories.includes(listCategoryFilter)) return false
+      // An empty required_categories means the shift is open to all categories,
+      // so it should match every category filter (not be excluded).
+      if (listCategoryFilter && s.required_categories.length > 0 && !s.required_categories.includes(listCategoryFilter)) return false
       return true
     })
   }, [shifts, listFilter, listCategoryFilter])
