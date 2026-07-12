@@ -262,6 +262,7 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     this_shift_only_desc: 'Only the selected occurrence will be updated.',
     this_and_future: 'This and all future shifts',
     this_and_future_desc: 'This and all occurrences after it will be updated.',
+    edit_recurring_fields_locked: 'Date, time, and categories can\'t be changed here for recurring shifts. Duplicate this shift to change those.',
     confirm: 'Confirm',
 
     // Documents view
@@ -694,6 +695,7 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     this_shift_only_desc: 'Solo se actualizará la ocurrencia seleccionada.',
     this_and_future: 'Este y todos los turnos futuros',
     this_and_future_desc: 'Este y todas las ocurrencias posteriores se actualizarán.',
+    edit_recurring_fields_locked: 'La fecha, hora y categorías no se pueden cambiar aquí para turnos recurrentes. Duplica este turno para cambiarlos.',
     confirm: 'Confirmar',
 
     // Documents view
