@@ -84,6 +84,10 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
     keep_shift: 'Keep it',
     select_time: 'Select',
     moving: 'Moving…',
+    sign_up_btn: 'Sign Up',
+    signing_up: 'Signing up…',
+    group_size_label: 'Bringing others? Total people',
+    group_size_prefix: 'Party of',
 
     // Handbook
     handbook_title: 'Volunteer Handbook',
@@ -213,6 +217,10 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
     keep_shift: 'Mantener',
     select_time: 'Seleccionar',
     moving: 'Moviendo…',
+    sign_up_btn: 'Inscribirse',
+    signing_up: 'Inscribiendo…',
+    group_size_label: '¿Traes a otras personas? Total de personas',
+    group_size_prefix: 'Grupo de',
 
     // Handbook
     handbook_title: 'Manual del voluntario',

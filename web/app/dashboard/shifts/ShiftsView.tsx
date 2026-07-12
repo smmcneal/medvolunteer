@@ -16,7 +16,7 @@ import {
   assignVolunteer, assignTraineeWithMentor, removeAssignment,
   manualClockIn, manualClockOut,
 } from './actions'
-import type { ShiftWithRoster } from './page'
+import { filledSpots, type ShiftWithRoster } from './page'
 import type { Location, Volunteer } from '@/types/database'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -545,7 +545,7 @@ export default function ShiftsView({
 
                       {dayShifts.slice(0, 2).map(s => {
                         const color = locationColor(s.location_id, locations)
-                        const filled = s.assignments.length
+                        const filled = filledSpots(s.assignments)
                         const needed = s.required_count
                         const isSelected = selectedId === s.id
                         return (
@@ -659,7 +659,7 @@ export default function ShiftsView({
                     <tbody>
                       {listShifts.map((s, i) => {
                         const color = locationColor(s.location_id, locations)
-                        const filled = s.assignments.length
+                        const filled = filledSpots(s.assignments)
                         const isSelected = selectedId === s.id
                         return (
                           <tr
@@ -845,7 +845,7 @@ export default function ShiftsView({
                 )}
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
                   <Users style={{ width: '12px', height: '12px', color: 'var(--teal)', flexShrink: 0 }} />
-                  {selected.assignments.length} / {selected.required_count} {t('spots_open')}
+                  {filledSpots(selected.assignments)} / {selected.required_count} {t('spots_open')}
                 </span>
                 {selected.required_categories.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
@@ -863,8 +863,8 @@ export default function ShiftsView({
               <div style={{ marginTop: '12px', height: '4px', background: 'var(--surface-border)', borderRadius: '99px', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%', borderRadius: '99px', transition: 'width 0.3s',
-                  background: selected.assignments.length >= selected.required_count ? '#22c55e' : TEAL,
-                  width: `${Math.min(100, (selected.assignments.length / selected.required_count) * 100)}%`,
+                  background: filledSpots(selected.assignments) >= selected.required_count ? '#22c55e' : TEAL,
+                  width: `${Math.min(100, (filledSpots(selected.assignments) / selected.required_count) * 100)}%`,
                 }} />
               </div>
             </div>
@@ -1053,6 +1053,11 @@ export default function ShiftsView({
                                 <GraduationCap style={{ width: '10px', height: '10px' }} /> {t('trainee_label')}
                               </span>
                             )}
+                            {a.group_size > 1 && (
+                              <span style={{ fontSize: '10px', background: '#e0f2f1', color: '#00695C', padding: '1px 5px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                <Users style={{ width: '10px', height: '10px' }} /> {t('group_size_prefix')} {a.group_size}
+                              </span>
+                            )}
                           </div>
                           {/* Mentor line */}
                           {isTrainee && mentorVol && (
@@ -1143,7 +1148,7 @@ export default function ShiftsView({
                   })}
 
                   {/* Open slots */}
-                  {Array.from({ length: Math.max(0, selected.required_count - selected.assignments.length) }).map((_, i) => (
+                  {Array.from({ length: Math.max(0, selected.required_count - filledSpots(selected.assignments)) }).map((_, i) => (
                     <div key={`open-${i}`} style={{
                       padding: '10px 12px', borderRadius: '9px',
                       border: '1.5px dashed var(--surface-border)',

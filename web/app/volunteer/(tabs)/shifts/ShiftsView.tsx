@@ -115,12 +115,12 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
     })
   }
 
-  function handleSignUp(shiftId: string, shiftName: string) {
+  function handleSignUp(shiftId: string, shiftName: string, groupSize: number) {
     setActionError(null)
     setSigningUpShiftId(shiftId)
     startTransition(async () => {
       try {
-        await volunteerSignUpForShift(shiftId)
+        await volunteerSignUpForShift(shiftId, groupSize)
         setSignUpSuccess(shiftName)
         setTimeout(() => setSignUpSuccess(null), 5000)
         router.refresh()
@@ -257,7 +257,7 @@ export default function ShiftsView({ assignments, volunteerId, orgId, availableS
                     key={s.id}
                     shift={s}
                     isSigningUp={signingUpShiftId === s.id && isPending}
-                    onSignUp={() => handleSignUp(s.id, s.name)}
+                    onSignUp={groupSize => handleSignUp(s.id, s.name, groupSize)}
                   />
                 ))}
               </div>
@@ -495,6 +495,11 @@ function UpcomingCard({
             <p style={{ fontSize: '13px', color: '#6b7280', margin: 0 }}>
               🕐 {formatDate(shift.start_time)} · {formatTime(shift.start_time)} – {formatTime(shift.end_time)} · {shiftDuration(shift.start_time, shift.end_time)}
             </p>
+            {a.group_size > 1 && (
+              <p style={{ fontSize: '12px', color: '#00897B', fontWeight: 600, margin: '4px 0 0' }}>
+                👥 {t('group_size_prefix')} {a.group_size}
+              </p>
+            )}
           </div>
         </div>
 
@@ -584,9 +589,11 @@ function AvailableShiftCard({
 }: {
   shift: AvailableShift
   isSigningUp: boolean
-  onSignUp: () => void
+  onSignUp: (groupSize: number) => void
 }) {
+  const t = useT()
   const loc = s.locations
+  const [groupSize, setGroupSize] = useState(1)
 
   return (
     <div style={{
@@ -616,15 +623,40 @@ function AvailableShiftCard({
           <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 12px', fontStyle: 'italic' }}>{s.notes}</p>
         )}
 
+        {s.spots_left > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <label htmlFor={`group-size-${s.id}`} style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>
+              {t('group_size_label')}
+            </label>
+            <input
+              id={`group-size-${s.id}`}
+              type="number"
+              min={1}
+              max={s.spots_left}
+              value={groupSize}
+              onChange={e => {
+                const n = parseInt(e.target.value, 10)
+                if (Number.isNaN(n)) { setGroupSize(1); return }
+                setGroupSize(Math.min(Math.max(n, 1), s.spots_left))
+              }}
+              style={{
+                width: '56px', padding: '6px 8px', borderRadius: '8px',
+                border: '1.5px solid #d1fae5', fontSize: '13px', fontWeight: 600,
+                textAlign: 'center', color: '#111827',
+              }}
+            />
+          </div>
+        )}
+
         <button
-          onClick={onSignUp}
+          onClick={() => onSignUp(groupSize)}
           disabled={isSigningUp}
           style={{
             width: '100%', padding: '11px', borderRadius: '10px', fontSize: '14px', fontWeight: 700,
             border: 'none', background: isSigningUp ? '#e0f2f1' : '#00897B', color: 'white', cursor: 'pointer',
           }}
         >
-          {isSigningUp ? 'Signing up…' : '+ Sign Up'}
+          {isSigningUp ? t('signing_up') : `+ ${t('sign_up_btn')}`}
         </button>
       </div>
     </div>

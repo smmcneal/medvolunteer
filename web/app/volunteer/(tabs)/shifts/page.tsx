@@ -40,6 +40,7 @@ export interface AssignmentWithShift {
   id: string
   shift_id: string
   status: string
+  group_size: number
   shift: ShiftRow
   openEntry: TimeEntryRow | null
   pastEntries: TimeEntryRow[]
@@ -84,7 +85,7 @@ export default async function ShiftsPage() {
   // Fetch all non-cancelled assignments with shift + location
   const { data: rawAssignments } = await admin
     .from('shift_assignments')
-    .select('id, shift_id, status, shifts(id, name, start_time, end_time, location_id, notes, locations(id, name, lat, lng, geofence_radius_meters))')
+    .select('id, shift_id, status, group_size, shifts(id, name, start_time, end_time, location_id, notes, locations(id, name, lat, lng, geofence_radius_meters))')
     .eq('volunteer_id', volunteer.id)
     .neq('status', 'cancelled')
 
@@ -116,11 +117,13 @@ export default async function ShiftsPage() {
     id: string
     shift_id: string
     status: string
+    group_size: number
     shifts: ShiftRow
   }) => ({
     id: a.id,
     shift_id: a.shift_id,
     status: a.status,
+    group_size: a.group_size ?? 1,
     shift: a.shifts,
     openEntry: teByShift[a.shift_id]?.find(te => !te.clock_out) ?? null,
     pastEntries: teByShift[a.shift_id]?.filter(te => !!te.clock_out) ?? [],
@@ -146,13 +149,13 @@ export default async function ShiftsPage() {
 
       const { data: takenAssignments } = await admin
         .from('shift_assignments')
-        .select('shift_id')
+        .select('shift_id, group_size')
         .in('shift_id', allShiftIds)
         .neq('status', 'cancelled')
 
       const countByShift: Record<string, number> = {}
       for (const a of (takenAssignments ?? [])) {
-        countByShift[a.shift_id] = (countByShift[a.shift_id] ?? 0) + 1
+        countByShift[a.shift_id] = (countByShift[a.shift_id] ?? 0) + (a.group_size ?? 1)
       }
 
       const assignedShiftIds = new Set(enriched.map(a => a.shift_id))

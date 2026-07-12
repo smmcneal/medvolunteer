@@ -14,6 +14,7 @@ export interface AssignmentWithVolunteer {
   role: string | null
   status: string
   mentor_id: string | null
+  group_size: number
   volunteer: Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'category' | 'pipeline_phase'>
   time_entry: TimeEntry | null
 }
@@ -32,6 +33,12 @@ export interface ShiftWithRoster {
   recurrence_group_id: string | null
   recurrence_end_date: string | null
   assignments: AssignmentWithVolunteer[]
+}
+
+// Sums group_size across non-cancelled assignments — a single sign-up can
+// represent more than one person, so "filled" isn't just assignments.length.
+export function filledSpots(assignments: { group_size: number }[]): number {
+  return assignments.reduce((sum, a) => sum + (a.group_size ?? 1), 0)
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -56,7 +63,7 @@ async function fetchShiftsData() {
         recurrence_rule, recurrence_group_id, recurrence_end_date,
         location:locations(id, name),
         shift_assignments(
-          id, role, status, volunteer_id, mentor_id,
+          id, role, status, volunteer_id, mentor_id, group_size,
           volunteer:volunteers!volunteer_id(id, first_name, last_name, category, pipeline_phase)
         )
       `)

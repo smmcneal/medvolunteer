@@ -125,16 +125,18 @@ export async function GET(request: Request) {
     } else if (rule.trigger_type === 'open_shift') {
       const { data: shifts } = await supabase
         .from('shifts')
-        .select('id, name, required_count, shift_assignments(id, status)')
+        .select('id, name, required_count, shift_assignments(id, status, group_size)')
         .eq('org_id', org.id)
         .gte('start_time', `${targetDateStr}T00:00:00`)
         .lt('start_time', `${targetDateStr}T23:59:59.999`)
 
       const openShifts = (shifts ?? []).filter(s => {
-        const row = s as { shift_assignments?: { status: string }[]; required_count: number }
-        // Count only active assignments — cancelled rows don't fill a slot
+        const row = s as { shift_assignments?: { status: string; group_size: number }[]; required_count: number }
+        // Count only active assignments — cancelled rows don't fill a slot.
+        // A single sign-up can cover more than one person via group_size.
         const filled = (row.shift_assignments ?? [])
-          .filter(a => a.status !== 'cancelled').length
+          .filter(a => a.status !== 'cancelled')
+          .reduce((sum, a) => sum + (a.group_size ?? 1), 0)
         return filled < row.required_count
       })
 

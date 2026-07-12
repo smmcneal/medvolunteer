@@ -1,6 +1,6 @@
 'use client'
 
-import type { ShiftWithRoster } from './page'
+import { filledSpots, type ShiftWithRoster } from './page'
 
 const START_HOUR = 6
 const END_HOUR = 22
@@ -154,7 +154,7 @@ export default function CalendarWeekView({ weekStart, shifts, onSelectShift, hol
 
               {dayShifts.map(s => {
                 const { rowStart, rowSpan } = shiftRows(s)
-                const filled = s.assignments.length
+                const filled = filledSpots(s.assignments)
                 const isFull = filled >= s.required_count
                 const bg = isFull ? '#fffbeb' : '#ecfdf5'
                 const border = isFull ? '#fbbf24' : TEAL

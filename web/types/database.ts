@@ -187,6 +187,7 @@ export interface ShiftAssignment {
   role: string | null
   status: 'assigned' | 'confirmed' | 'cancelled'
   mentor_id: string | null
+  group_size: number
   created_at: string
 }
 

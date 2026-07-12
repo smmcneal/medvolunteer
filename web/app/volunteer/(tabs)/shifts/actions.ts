@@ -98,6 +98,7 @@ async function upsertAssignment(
   admin: ReturnType<typeof createAdminClient>,
   shiftId: string,
   volunteerId: string,
+  groupSize: number,
 ): Promise<{ assignmentId: string }> {
   const { data: existing } = await admin
     .from('shift_assignments')
@@ -109,7 +110,7 @@ async function upsertAssignment(
   if (existing) {
     const { error } = await admin
       .from('shift_assignments')
-      .update({ status: 'assigned' })
+      .update({ status: 'assigned', group_size: groupSize })
       .eq('id', existing.id)
     if (error) throw new Error(error.message)
     return { assignmentId: existing.id }
@@ -117,16 +118,20 @@ async function upsertAssignment(
 
   const { data: created, error } = await admin
     .from('shift_assignments')
-    .insert({ shift_id: shiftId, volunteer_id: volunteerId, status: 'assigned' })
+    .insert({ shift_id: shiftId, volunteer_id: volunteerId, status: 'assigned', group_size: groupSize })
     .select('id')
     .single()
   if (error || !created) throw new Error(error?.message ?? 'Failed to create assignment')
   return { assignmentId: created.id }
 }
 
-export async function volunteerSignUpForShift(shiftId: string): Promise<void> {
+export async function volunteerSignUpForShift(shiftId: string, groupSize = 1): Promise<void> {
   const { user } = await requireVolunteer()
   const admin = createAdminClient()
+
+  if (!Number.isInteger(groupSize) || groupSize < 1) {
+    throw new Error('Group size must be at least 1')
+  }
 
   const { data: volunteer } = await admin
     .from('volunteers')
@@ -165,17 +170,18 @@ export async function volunteerSignUpForShift(shiftId: string): Promise<void> {
 
   if (existing) throw new Error('You are already signed up for this shift')
 
-  const { count } = await admin
+  const { data: taken } = await admin
     .from('shift_assignments')
-    .select('id', { count: 'exact', head: true })
+    .select('group_size')
     .eq('shift_id', shiftId)
     .neq('status', 'cancelled')
 
-  if ((count ?? 0) >= shift.required_count) throw new Error('This shift is full')
+  const takenCount = (taken ?? []).reduce((sum, a) => sum + (a.group_size ?? 1), 0)
+  if (takenCount + groupSize > shift.required_count) throw new Error('Not enough spots left for that group size')
 
   // Capacity is also enforced by the shift_capacity_check DB trigger, which
   // closes the race two concurrent sign-ups could otherwise win together.
-  await upsertAssignment(admin, shiftId, volunteer.id)
+  await upsertAssignment(admin, shiftId, volunteer.id, groupSize)
 
   revalidatePath('/volunteer/shifts')
   revalidatePath('/dashboard/shifts')
@@ -193,11 +199,12 @@ export async function volunteerMoveShift(
   if (volunteer.status !== 'volunteer') throw new Error('Only active volunteers can change shifts')
 
   // Verify old assignment belongs to this volunteer
-  const { data: oldAssignment } = await admin.from('shift_assignments').select('id, volunteer_id, status, shifts(start_time)').eq('id', oldAssignmentId).single()
+  const { data: oldAssignment } = await admin.from('shift_assignments').select('id, volunteer_id, status, group_size, shifts(start_time)').eq('id', oldAssignmentId).single()
   if (!oldAssignment || oldAssignment.volunteer_id !== volunteer.id) throw new Error('Assignment not found')
   if (oldAssignment.status === 'cancelled') throw new Error('Assignment is already cancelled')
   const shiftStart = new Date((oldAssignment.shifts as unknown as { start_time: string }).start_time)
   if (new Date() >= shiftStart) throw new Error('Cannot move a shift that has already started')
+  const groupSize = oldAssignment.group_size ?? 1
 
   // Verify new shift exists, belongs to org, is in the future, and has space
   const { data: newShift } = await admin.from('shifts').select('id, start_time, required_count, org_id, required_categories').eq('id', newShiftId).eq('org_id', volunteer.org_id).single()
@@ -210,8 +217,9 @@ export async function volunteerMoveShift(
     throw new Error('You are not eligible for that shift')
   }
 
-  const { count } = await admin.from('shift_assignments').select('id', { count: 'exact', head: true }).eq('shift_id', newShiftId).neq('status', 'cancelled')
-  if ((count ?? 0) >= newShift.required_count) throw new Error('That shift is now full')
+  const { data: newTaken } = await admin.from('shift_assignments').select('group_size').eq('shift_id', newShiftId).neq('status', 'cancelled')
+  const newTakenCount = (newTaken ?? []).reduce((sum, a) => sum + (a.group_size ?? 1), 0)
+  if (newTakenCount + groupSize > newShift.required_count) throw new Error('That shift is now full')
 
   // Cancel old
   const { error: cancelErr } = await admin.from('shift_assignments').update({ status: 'cancelled' }).eq('id', oldAssignmentId)
@@ -219,7 +227,7 @@ export async function volunteerMoveShift(
 
   // Create (or re-activate) the new assignment
   try {
-    const { assignmentId } = await upsertAssignment(admin, newShiftId, volunteer.id)
+    const { assignmentId } = await upsertAssignment(admin, newShiftId, volunteer.id, groupSize)
     revalidatePath('/volunteer/shifts')
     revalidatePath('/dashboard/shifts')
     return { newAssignmentId: assignmentId }
