@@ -238,6 +238,7 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     assign_btn: 'Assign',
     create_shift: 'Create Shift',
     delete_shift: 'Delete shift',
+    duplicate_shift: 'Duplicate shift',
     edit_shift: 'Edit',
     recurring_shift: 'Recurring Shift',
     repeat_frequency: 'Repeat',
@@ -261,6 +262,7 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     this_shift_only_desc: 'Only the selected occurrence will be updated.',
     this_and_future: 'This and all future shifts',
     this_and_future_desc: 'This and all occurrences after it will be updated.',
+    edit_recurring_fields_locked: 'Date, time, and categories can\'t be changed here for recurring shifts. Duplicate this shift to change those.',
     confirm: 'Confirm',
 
     // Documents view
@@ -376,6 +378,9 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     read_stat: 'Read',
     sent_prefix: 'Sent',
     save_label: 'Save',
+    shortcodes_label: 'Insert:',
+    shortcode_first_name: 'First name',
+    shortcode_last_name: 'Last name',
 
     // Alerts
     alerts_title: 'Alerts',
@@ -666,6 +671,7 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     assign_btn: 'Asignar',
     create_shift: 'Crear turno',
     delete_shift: 'Eliminar turno',
+    duplicate_shift: 'Duplicar turno',
     edit_shift: 'Editar',
     recurring_shift: 'Turno recurrente',
     repeat_frequency: 'Repetir',
@@ -689,6 +695,7 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     this_shift_only_desc: 'Solo se actualizará la ocurrencia seleccionada.',
     this_and_future: 'Este y todos los turnos futuros',
     this_and_future_desc: 'Este y todas las ocurrencias posteriores se actualizarán.',
+    edit_recurring_fields_locked: 'La fecha, hora y categorías no se pueden cambiar aquí para turnos recurrentes. Duplica este turno para cambiarlos.',
     confirm: 'Confirmar',
 
     // Documents view
@@ -804,6 +811,9 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     read_stat: 'Leídos',
     sent_prefix: 'Enviado',
     save_label: 'Guardar',
+    shortcodes_label: 'Insertar:',
+    shortcode_first_name: 'Nombre',
+    shortcode_last_name: 'Apellido',
 
     // Alerts
     alerts_title: 'Alertas',

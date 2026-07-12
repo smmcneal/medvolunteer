@@ -5,14 +5,15 @@ import { useRouter } from 'next/navigation'
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List,
   MapPin, Clock, Users, Trash2, UserPlus, X,
-  LogIn, LogOut, AlertCircle, Search, ArrowLeft, GraduationCap,
+  LogIn, LogOut, AlertCircle, Search, ArrowLeft, GraduationCap, Copy, Pencil,
 } from 'lucide-react'
 import CalendarWeekView from './CalendarWeekView'
 import CalendarDayView from './CalendarDayView'
+import EditRecurringModal from './EditRecurringModal'
 import { useAdminT } from '@/lib/admin-lang'
 import {
-  createShift, deleteShift,
-  createRecurringShifts, bulkUpdateRecurringShifts, bulkDeleteRecurringShifts,
+  createShift, updateShift, deleteShift, duplicateShift,
+  createRecurringShifts, bulkDeleteRecurringShifts,
   assignVolunteer, assignTraineeWithMentor, removeAssignment,
   manualClockIn, manualClockOut,
 } from './actions'
@@ -148,6 +149,13 @@ export default function ShiftsView({
   const [recurFrequency, setRecurFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly')
   const [recurEndDate, setRecurEndDate] = useState('')
 
+  // Edit shift modal state
+  const [showEdit, setShowEdit]   = useState(false)
+  const [editForm, setEditForm]   = useState<CreateForm>(EMPTY_CREATE)
+  const [pendingRecurringEdit, setPendingRecurringEdit] = useState<{
+    shift: ShiftWithRoster
+    updateData: { name?: string; location_id?: string | null; required_count?: number; notes?: string }
+  } | null>(null)
 
   const selected = shifts.find(s => s.id === selectedId) ?? null
 
@@ -157,6 +165,13 @@ export default function ShiftsView({
     for (const v of volunteers) map[v.id] = v
     return map
   }, [volunteers])
+
+  // Build a category lookup map (slug -> name) for displaying a shift's required categories
+  const categoryBySlug = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const c of categories) map[c.slug] = c.name
+    return map
+  }, [categories])
 
   // In React 18, startTransition doesn't track async work — so we await the mutation
   // first, then wrap router.refresh() in a fresh startTransition so isPending correctly
@@ -306,6 +321,58 @@ export default function ShiftsView({
     } else {
       if (!confirm('Delete this shift?')) return
       run(async () => { await deleteShift(id); setSelectedId(null) })
+    }
+  }
+
+  function handleDuplicate(id: string) {
+    run(async () => {
+      const { shiftId } = await duplicateShift(id)
+      setSelectedId(shiftId)
+    })
+  }
+
+  function handleOpenEdit() {
+    if (!selected) return
+    const start = new Date(selected.start_time)
+    const end = new Date(selected.end_time)
+    setEditForm({
+      name: selected.name,
+      location_id: selected.location_id ?? '',
+      start_date: dateKey(start),
+      start_time: start.toTimeString().slice(0, 5),
+      end_date: dateKey(end),
+      end_time: end.toTimeString().slice(0, 5),
+      required_count: String(selected.required_count),
+      required_categories: selected.required_categories,
+      notes: selected.notes ?? '',
+    })
+    setShowEdit(true)
+  }
+
+  function handleSaveEdit() {
+    if (!selected) return
+    if (!editForm.name || !editForm.start_date || !editForm.start_time || !editForm.end_date || !editForm.end_time) return
+
+    const fullData = {
+      name: editForm.name,
+      location_id: editForm.location_id || null,
+      start_time: buildISO(editForm.start_date, editForm.start_time),
+      end_time: buildISO(editForm.end_date, editForm.end_time),
+      required_count: parseInt(editForm.required_count) || 1,
+      required_categories: editForm.required_categories,
+      notes: editForm.notes,
+    }
+
+    if (selected.recurrence_group_id) {
+      // Bulk update only supports these fields — time/category changes are per-occurrence only
+      const { name, location_id, required_count, notes } = fullData
+      setPendingRecurringEdit({ shift: selected, updateData: { name, location_id, required_count, notes } })
+      setShowEdit(false)
+    } else {
+      run(async () => {
+        await updateShift(selected.id, fullData)
+        setShowEdit(false)
+      })
     }
   }
 
@@ -632,7 +699,7 @@ export default function ShiftsView({
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: 'var(--surface-bg)' }}>
-                        {[t('new_shift'), t('shift_date'), t('shift_time'), t('shift_location'), t('assign_volunteers'), ''].map(h => (
+                        {[t('new_shift'), t('shift_date'), t('shift_time'), t('shift_location'), t('categories'), t('assign_volunteers'), ''].map(h => (
                           <th key={h} style={{
                             padding: '10px 20px', textAlign: 'left',
                             fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)',
@@ -686,6 +753,22 @@ export default function ShiftsView({
                                 ? <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '99px', background: `${color}15`, color, fontWeight: 600 }}>{s.location_name}</span>
                                 : <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>—</span>
                               }
+                            </td>
+                            <td style={{ padding: '13px 20px' }}>
+                              {s.required_categories.length > 0 ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '160px' }}>
+                                  {s.required_categories.map(slug => (
+                                    <span key={slug} style={{
+                                      fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: '99px',
+                                      background: `${CAT_COLORS[slug] ?? '#6b7280'}18`, color: CAT_COLORS[slug] ?? '#6b7280',
+                                    }}>
+                                      {categoryBySlug[slug] ?? slug}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>{t('all_categories')}</span>
+                              )}
                             </td>
                             <td style={{ padding: '13px 20px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
@@ -817,6 +900,18 @@ export default function ShiftsView({
                   <Users style={{ width: '12px', height: '12px', color: 'var(--teal)', flexShrink: 0 }} />
                   {selected.assignments.length} / {selected.required_count} {t('spots_open')}
                 </span>
+                {selected.required_categories.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
+                    {selected.required_categories.map(slug => (
+                      <span key={slug} style={{
+                        fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px',
+                        background: `${CAT_COLORS[slug] ?? '#6b7280'}18`, color: CAT_COLORS[slug] ?? '#6b7280',
+                      }}>
+                        {categoryBySlug[slug] ?? slug}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <div style={{ marginTop: '12px', height: '4px', background: 'var(--surface-border)', borderRadius: '99px', overflow: 'hidden' }}>
                 <div style={{
@@ -1125,6 +1220,32 @@ export default function ShiftsView({
             {/* Panel footer */}
             <div style={{ padding: '12px 20px', borderTop: '1px solid var(--surface-border-sub)', display: 'flex', gap: '8px' }}>
               <button
+                onClick={handleOpenEdit}
+                style={{
+                  padding: '7px 12px', borderRadius: '7px',
+                  border: '1px solid var(--surface-border)', background: 'transparent', cursor: 'pointer',
+                  color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 500,
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-bg)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+              >
+                <Pencil style={{ width: '12px', height: '12px' }} /> {t('edit_shift')}
+              </button>
+              <button
+                onClick={() => handleDuplicate(selected.id)}
+                style={{
+                  padding: '7px 12px', borderRadius: '7px',
+                  border: '1px solid var(--surface-border)', background: 'transparent', cursor: 'pointer',
+                  color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 500,
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-bg)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+              >
+                <Copy style={{ width: '12px', height: '12px' }} /> {t('duplicate_shift')}
+              </button>
+              <button
                 onClick={() => handleDelete(selected.id)}
                 style={{
                   padding: '7px 12px', borderRadius: '7px',
@@ -1405,6 +1526,143 @@ export default function ShiftsView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Edit Shift Modal ────────────────────────────────────── */}
+      {showEdit && selected && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(10,15,30,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 50, backdropFilter: 'blur(2px)',
+        }}>
+          <div style={{
+            background: 'var(--surface-card)', borderRadius: '16px',
+            padding: '28px', width: '100%', maxWidth: '490px',
+            boxShadow: '0 24px 64px rgba(10,15,30,0.2), 0 4px 16px rgba(10,15,30,0.1)',
+            border: '1px solid var(--surface-border)',
+            maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px' }}>
+              <div>
+                <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.2px' }}>{t('edit_shift')}</h2>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{selected.name}</p>
+              </div>
+              <button onClick={() => setShowEdit(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: '4px', borderRadius: '6px' }}>
+                <X style={{ width: '18px', height: '18px' }} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('shift_name')} *</label>
+                <input style={inputStyle} value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} autoFocus />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('shift_location')}</label>
+                <select style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }} value={editForm.location_id} onChange={e => setEditForm(f => ({ ...f, location_id: e.target.value }))}>
+                  <option value="">No location</option>
+                  {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('start_date')} *</label>
+                  <input style={inputStyle} type="date" value={editForm.start_date} disabled={!!selected.recurrence_group_id} onChange={e => setEditForm(f => ({ ...f, start_date: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('start_time')} *</label>
+                  <input style={inputStyle} type="time" value={editForm.start_time} disabled={!!selected.recurrence_group_id} onChange={e => { if (e.target.value) setEditForm(f => ({ ...f, start_time: e.target.value })) }} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('end_date')} *</label>
+                  <input style={inputStyle} type="date" value={editForm.end_date} disabled={!!selected.recurrence_group_id} onChange={e => setEditForm(f => ({ ...f, end_date: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('end_time')} *</label>
+                  <input style={inputStyle} type="time" value={editForm.end_time} disabled={!!selected.recurrence_group_id} onChange={e => { if (e.target.value) setEditForm(f => ({ ...f, end_time: e.target.value })) }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('required_volunteers')}</label>
+                <input style={inputStyle} type="number" min="1" value={editForm.required_count} onChange={e => setEditForm(f => ({ ...f, required_count: e.target.value }))} />
+              </div>
+
+              {categories.length > 0 && (
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {t('categories')} <span style={{ fontWeight: 400, textTransform: 'none' }}>(leave empty for all)</span>
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {categories.map(c => {
+                      const checked = editForm.required_categories.includes(c.slug)
+                      return (
+                        <button
+                          key={c.slug}
+                          type="button"
+                          disabled={!!selected.recurrence_group_id}
+                          onClick={() => setEditForm(f => ({
+                            ...f,
+                            required_categories: checked
+                              ? f.required_categories.filter(s => s !== c.slug)
+                              : [...f.required_categories, c.slug],
+                          }))}
+                          style={{
+                            fontSize: '12px', fontWeight: 500,
+                            padding: '4px 10px', borderRadius: '6px', cursor: selected.recurrence_group_id ? 'not-allowed' : 'pointer',
+                            border: `1.5px solid ${checked ? (CAT_COLORS[c.slug] ?? TEAL) : 'var(--surface-border)'}`,
+                            background: checked ? `${(CAT_COLORS[c.slug] ?? TEAL)}22` : 'transparent',
+                            color: checked ? (CAT_COLORS[c.slug] ?? TEAL) : 'var(--text-secondary)',
+                            opacity: selected.recurrence_group_id ? 0.6 : 1,
+                          }}
+                        >
+                          {c.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('shift_notes')}</label>
+                <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '56px', lineHeight: 1.5 }} value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} placeholder={t('shift_notes')} />
+              </div>
+
+              {selected.recurrence_group_id && (
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>
+                  {t('edit_recurring_fields_locked')}
+                </p>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '22px', paddingTop: '18px', borderTop: '1px solid var(--surface-border-sub)' }}>
+              <button className="shift-new-btn" style={btnPrimary} onClick={handleSaveEdit} disabled={!editForm.name || !editForm.start_date || !editForm.start_time || !editForm.end_date || !editForm.end_time || isPending}>
+                {isPending ? t('saving') : t('save')}
+              </button>
+              <button style={btnSecondary} onClick={() => setShowEdit(false)}>
+                {t('cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Recurring edit scope confirmation ──────────────────── */}
+      {pendingRecurringEdit && (
+        <EditRecurringModal
+          shift={pendingRecurringEdit.shift}
+          updateData={pendingRecurringEdit.updateData}
+          onClose={() => setPendingRecurringEdit(null)}
+          onDone={() => {
+            setPendingRecurringEdit(null)
+            startTransition(() => { router.refresh() })
+          }}
+        />
       )}
     </div>
   )
