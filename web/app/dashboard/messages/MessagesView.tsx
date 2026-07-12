@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useMemo } from 'react'
+import { useRef, useState, useTransition, useMemo } from 'react'
 import type { MessageWithRecipients } from './page'
 import type { Volunteer, MessageChannel, MessageTemplate, Category } from '@/types/database'
 import { sendMessage, saveTemplate, deleteTemplate } from './actions'
@@ -14,6 +14,13 @@ const CHANNEL_CONFIG: Record<MessageChannel, { label: string; icon: string; colo
   sms:   { label: 'SMS',   icon: '💬', color: '#10b981', bg: '#f0fdf4', desc: 'Text message'  },
   push:  { label: 'Push',  icon: '🔔', color: '#8b5cf6', bg: '#faf5ff', desc: 'App notify'    },
 }
+
+// Recipient merge fields renderTemplate() actually substitutes for admin-composed
+// sends (see messages/actions.ts sendMessage) — keep in sync with that call site.
+const SHORTCODES: { code: string; labelKey: string }[] = [
+  { code: '{{first_name}}', labelKey: 'shortcode_first_name' },
+  { code: '{{last_name}}', labelKey: 'shortcode_last_name' },
+]
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -32,6 +39,21 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
+  })
+}
+
+function insertShortcodeInto(
+  el: HTMLInputElement | HTMLTextAreaElement | null,
+  value: string,
+  setValue: (v: string) => void,
+  code: string
+) {
+  const start = el?.selectionStart ?? value.length
+  const end = el?.selectionEnd ?? value.length
+  setValue(value.slice(0, start) + code + value.slice(end))
+  requestAnimationFrame(() => {
+    el?.focus()
+    el?.setSelectionRange(start + code.length, start + code.length)
   })
 }
 
@@ -64,6 +86,8 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const subjectRef = useRef<HTMLInputElement>(null)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
 
   // Send Later state
   const [sendLater, setSendLater] = useState(false)
@@ -550,8 +574,12 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
 
             {/* Subject */}
             <div style={{ marginBottom: '14px' }}>
-              <label style={labelStyle}>{t('subject')}</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '7px' }}>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>{t('subject')}</label>
+                <ShortcodeChips onInsert={code => insertShortcodeInto(subjectRef.current, subject, setSubject, code)} />
+              </div>
               <input
+                ref={subjectRef}
                 value={subject}
                 onChange={e => setSubject(e.target.value)}
                 placeholder="Message subject"
@@ -561,8 +589,12 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
 
             {/* Body */}
             <div style={{ marginBottom: '20px' }}>
-              <label style={labelStyle}>{t('body')}</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '7px' }}>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>{t('body')}</label>
+                <ShortcodeChips onInsert={code => insertShortcodeInto(bodyRef.current, body, setBody, code)} />
+              </div>
               <textarea
+                ref={bodyRef}
                 value={body}
                 onChange={e => setBody(e.target.value)}
                 placeholder="Write your message here…"
@@ -698,6 +730,34 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Shortcode Chips ────────────────────────────────────────────────────────────
+
+function ShortcodeChips({ onInsert }: { onInsert: (code: string) => void }) {
+  const t = useAdminT()
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: '10px', color: 'var(--text-faint)', fontWeight: 600 }}>{t('shortcodes_label')}</span>
+      {SHORTCODES.map(sc => (
+        <button
+          key={sc.code}
+          type="button"
+          onClick={() => onInsert(sc.code)}
+          title={sc.code}
+          style={{
+            padding: '2px 8px', borderRadius: '99px',
+            border: '1px solid var(--surface-border)',
+            background: 'var(--surface-bg)', color: 'var(--text-secondary)',
+            fontSize: '10px', fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'inherit', letterSpacing: '0.01em',
+          }}
+        >
+          {t(sc.labelKey)}
+        </button>
+      ))}
     </div>
   )
 }
