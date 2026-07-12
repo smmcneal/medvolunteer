@@ -376,6 +376,9 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     read_stat: 'Read',
     sent_prefix: 'Sent',
     save_label: 'Save',
+    shortcodes_label: 'Insert:',
+    shortcode_first_name: 'First name',
+    shortcode_last_name: 'Last name',
 
     // Alerts
     alerts_title: 'Alerts',
@@ -804,6 +807,9 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     read_stat: 'Leídos',
     sent_prefix: 'Enviado',
     save_label: 'Guardar',
+    shortcodes_label: 'Insertar:',
+    shortcode_first_name: 'Nombre',
+    shortcode_last_name: 'Apellido',
 
     // Alerts
     alerts_title: 'Alertas',
