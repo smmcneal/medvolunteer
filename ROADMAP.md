@@ -1,5 +1,5 @@
 # Envolv Roadmap & Agent Task List
-*Originally written 2026-07-06. Updated 2026-07-12 (demo now tracks `main`; scheduled-message cron moved to GitHub Actions; CI migration runner fixed; A4 fully closed).*
+*Originally written 2026-07-06. Updated 2026-07-12 (demo now tracks `main`; scheduled-message cron moved to GitHub Actions; CI migration runner fixed; A4 fully closed; Workstream F added — pricing-page feature parity).*
 *Supersedes Phases 9–10 of `MedVolunteer-roadmap.txt` (SiteGround plan is obsolete — we deploy on Vercel).*
 *Context docs: `docs/ENVOLV-STATUS-2026-07-06.md` (full status assessment) and `docs/yakima-production-cutover.md` (cutover runbook).*
 
@@ -17,6 +17,7 @@
 - **Dummy data is restored** in the preview Supabase project (`cquvutwulbtgklqrbamd`): `seed-demo.sql` (14 volunteers, shifts, hours, credentials, messages) is now wired into `supabase/config.toml` and loads on `db reset`.
 - **Notion Feature Requests backlog populated (D4 done, Sean).** Nightly auto-build CI has real "Ready" tasks to pick up.
 - **Before real data goes into prod:** pre-cutover DB hardening is 3 of 4 done — only H2 (leaked-password protection, manual dashboard toggle) remains. See the section at the bottom.
+- **Pricing-page feature audit done (2026-07-12).** Every feature sold on the envolv.app pricing page was audited against this repo; 16 build prompts for the gaps (plan tiers/billing, industry templates, SMS dispatch, kiosk mode, public API, roles, white-label, multi-org, SSO, trust docs, and more) live in `docs/pricing-page-feature-prompts.md`, sized for the Notion AB-### pipeline. Tracked as **Workstream F**.
 
 ## For the agent reading this
 
@@ -72,7 +73,17 @@ Detailed commands in `docs/yakima-production-cutover.md`.
 
 ## Workstream B — envolv.app marketing site 🟡 P1 (second)
 
-- [ ] **B1. `[opus]` Scaffold the site.** New Next.js project (separate repo `envolv-www` or `/marketing` app in volunteerhub repo — decide and document). One-page landing: positioning from the business plan (mobile-first, industry templates, undercuts Volgistics), pricing tiers ($29 Starter / $79 Professional / $199 Enterprise, ~17% annual discount), demo-request email capture (Resend, `noreply@envolv.org`). Acceptance: builds clean, deploys to a new Vercel project.
+- [x] **B1. `[opus]` Scaffold the site.** ✅ 2026-07-12 — **decision: separate repo, `C:\Users\smmcn\Projects\envolv-www`** (rationale in that repo's `DECISIONS.md`). Rejected the `/marketing`-in-volunteerhub option because volunteerhub is still unassessed (C1) and about to be renamed (C2) — the landing page would have been blocked behind both. Separate repo = separate Vercel project = separate failure domain, and B2's DNS cutover points at one thing.
+
+  Built: Next 14 App Router + Tailwind v4 (same stack as `web/`, so nothing new to learn). One page — hero, feature grid, six industry templates, a sourced comparison table, three pricing tiers with a monthly/annual toggle ($29/$79/$199, ~17% off annually), and a demo-request form. Every claim (prices, competitor figures, verticals) lives in `lib/content.ts` and traces to `volunteer-saas-business-plan.pdf` / `industry-targeting-strategy.pdf` — not scattered through JSX.
+
+  Demo capture: server action → Resend → all addresses in `DEMO_NOTIFY_EMAILS`, `reply_to` set to the lead so you can just hit reply. Honeypot field, no third-party form service.
+
+  **Two deliberate choices worth knowing:**
+  - **Nothing here is `NEXT_PUBLIC_*` except the demo URL.** The Resend key and recipient list are read at *request* time, so changing them takes effect without a redeploy. This is a direct reaction to the 2026-07-11 prod login outage — build-time inlining is a trap and this repo shouldn't inherit it.
+  - **A failed send surfaces an error and a fallback address rather than a fake "thanks!".** Until B3 lands there is no database behind this form: if Resend fails and we swallow it, the lead is simply gone.
+
+  ⛔ **Blocked on Sean before it can go live:** (1) the two co-founder addresses for `DEMO_NOTIFY_EMAILS` — deliberately *not* guessed, since the Yakima admin addresses belong to the clinic, not to Envolv; (2) `RESEND_API_KEY`; (3) envolv.org Resend domain verification, without which `noreply@envolv.org` 403s and `onboarding@resend.dev` must be used as the `from`. And `npm install && npm run build` still needs a run on Windows — per `CLAUDE.md`, the sandbox is not trusted to build.
 - [ ] ⛔ **B2. DNS:** point envolv.app (+ www, and envolv.org redirect → envolv.app) at the Vercel project.
 - [ ] **B3. `[sonnet]` Email capture backend:** store signups (Supabase table or Resend audience) — this also closes the "Email list" stub in the Notion Feature Requests DB.
 - [ ] **B4. `[sonnet]` SEO basics:** metadata, OG image, robots.txt, sitemap. Acceptance: Lighthouse SEO ≥ 95.
@@ -138,6 +149,31 @@ Repo: `C:/Users/smmcn/Desktop/volunteerhub` (exists; not yet assessed). Plan: `d
 
   Note the duplicate `AB-00006` across two branches — exactly the hazard CLAUDE.md flags under "Task IDs are free text and not guaranteed unique."
 - [x] **D11. First successful nightly auto-build wave** ✅ 2026-07-11. After the pipeline fixes (`7013d6a` removed the never-clearing `bugs-clear` gate; `f68159f` moved Claude Code auth to the subscription OAuth token and made account-level failures `exit 1` instead of reporting green), the feature agent shipped its first real batch — **6 merged PRs**: AB-00005 edit shift buttons, AB-00006 add/edit status, AB-00007 shift categories, AB-00008 duplicate shifts, AB-00009 shortcodes, AB-00010 view password. `fix/DEV-00010` (category filtering) also merged as PR #7. This is the work the demo was 17 commits behind on — see D8.
+
+## Workstream F — Pricing-page feature parity 🟡 P1–P2 (feeds the nightly AB pipeline)
+
+The envolv.app pricing page sells features this repo doesn't have yet. Full audit + one ready-to-paste build prompt per gap: **`docs/pricing-page-feature-prompts.md`** (2026-07-12). Already built and verified during the audit: self-service portal, PWA, scheduling & hour tracking, standard reporting + CSV export, email notifications, advanced scheduling & approvals, logo branding, geofenced clock-in, multi-location.
+
+Suggested order (dependency-driven; details and rationale in the prompts doc): F1 → F2 → F4 → F3 → F8 → F7 → F6 → F5 → F9 → F12 → F13 → F16 → F10 → F11; F14–F15 any time.
+
+- [ ] **F1. `[opus]` Plan tiers, limits & feature gating** — `web/lib/plan.ts`, org `plan` column, cap enforcement. Prompt 1. *Blocks nearly everything below.*
+- [ ] **F2. `[opus]` Stripe billing & subscriptions** — checkout, portal, webhook → plan sync. Prompt 2.
+- [ ] **F3. `[sonnet]` Industry templates (1/3/all by tier)** — template bundles + Settings applier. Prompt 3.
+- [ ] **F4. `[sonnet]` SMS integration + monthly quota** — Twilio behind `web/lib/sms.ts`; channel exists in UI but is unwired. Prompt 4.
+- [ ] **F5. `[sonnet]` Background check provider integration** (Checkr) — tracking exists, integration doesn't. Prompt 5.
+- [ ] **F6. `[sonnet]` Kiosk mode** — shared-device check-in at `/kiosk`, PIN + token sessions. Prompt 6.
+- [ ] **F7. `[sonnet]` Public API + data exports** — `/api/v1/*`, API keys, server-side CSV. Prompt 7.
+- [ ] **F8. `[opus]` Advanced permissions (roles)** — owner/admin/coordinator/viewer on `admin_users`; keep `requireAdmin()` behavior intact. Prompt 8.
+- [ ] **F9. `[sonnet]` Full white-label branding** — colors, app name, dynamic manifest, branded email, hide-Envolv toggle. Prompt 9.
+- [ ] **F10. `[opus]` Multi-org & network dashboard** — split into 3 Notion tasks (org-resolution refactor / memberships + switcher / network page). Prompt 10.
+- [ ] **F11. `[opus]` SSO / SAML** via Supabase Auth SSO. ⛔ Requires Supabase Pro+ — Sean decides on plan upgrade first. Prompt 11.
+- [ ] **F12. `[sonnet]` CSV import, competitor importers, outbound webhooks.** Prompt 12.
+- [ ] **F13. `[sonnet]` In-app support widget + plan-aware SLA routing.** Prompt 13.
+- [ ] **F14. Support SLA & CSM playbook** (`docs/support-playbook.md`) — document only. Prompt 14.
+- [ ] **F15. Security review pack & DPA drafts** (`docs/security-overview.md`, `docs/dpa-template.md`, questionnaire crib sheet) — documents; DPA needs attorney review ⛔. Prompt 15.
+- [ ] **F16. `[sonnet]` Data retention & deletion** — org delete with grace window, volunteer anonymization, audit log. Prompt 16.
+
+Pipeline note: each F-task that goes to the nightly agent needs its prompt pasted into the Notion `Component/File` field (never blank — see CLAUDE.md), and F1–F12 add migrations, so review agent SQL before merging (`supabase-migrate.yml` auto-applies on merge).
 
 ## Workstream E — Business (Sean only, not for agents)
 

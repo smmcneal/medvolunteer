@@ -117,6 +117,7 @@
   <details class="status" open>
     <summary>Current status &amp; what changed</summary>
     <ul>
+      <li><b>🆕 Workstream F added (2026-07-12) — pricing-page feature parity.</b> The envolv.app pricing page was audited against this repo: portal, PWA, scheduling/hours, reporting+CSV, email, approvals, logo branding, geofenced clock-in are already built; 16 gaps (plan tiers/billing, industry templates, SMS dispatch, kiosk, public API, roles, white-label, multi-org, SSO, trust docs…) are now F1–F16 below, each with a ready-to-paste build prompt in <code>docs/pricing-page-feature-prompts.md</code>.</li>
       <li><b>Prod Supabase live (2026-07-11)</b> — fresh project <code>vopgctgjxbpytntthoxb</code> "Envolv Yakima (prod)": <b>28</b> migrations applied (27 + <code>precutover_hardening</code>; schema = preview), 7 edge functions ACTIVE, clean Yakima org, 39 tables, org + 5 categories + 5 onboarding stages + learning modules seeded. All 3 admins now exist in <code>auth.users</code> + <code>admin_users</code> and can log in (see A5). Remaining: DB password reset + function secrets. Domain <code>yakima.envolv.app</code> deferred.</li>
       <li><b>Preview app live &amp; healthy</b> on Vercel (<code>medvolunteer.vercel.app</code>, team <code>medvolreview</code>) — latest prod deploy READY.</li>
       <li><b>✅ A4 fully closed (2026-07-12).</b> Its last open item — the CI migration secrets — turned out not to be a bad secret at all but a <b>CLI-version mismatch</b>: <code>supabase-migrate.yml</code> resolved <code>version: latest</code> unauthenticated, got rate-limited, and silently fell back to a stale CLI that rejected the token with "Invalid access token format." Now pinned to CLI <code>2.84.2</code> + <code>github-token</code> (<code>3fb950f</code>). Read the comment block in that workflow before touching it.</li>
@@ -171,6 +172,8 @@ const WS = {
      intro:"The real SaaS product (volunteerhub repo); this repo becomes its medical vertical."},
   D:{name:"Pipeline & housekeeping", prio:"P3", color:"var(--p3)", emoji:"🔵",
      intro:"Repo hygiene — run in parallel any time."},
+  F:{name:"Pricing-page feature parity", prio:"P1", color:"var(--teal)", emoji:"💰",
+     intro:"Everything the envolv.app pricing page sells that this repo doesn't have yet. One build prompt per task in docs/pricing-page-feature-prompts.md — paste into the Notion Component/File field for the nightly AB pipeline. Order: F1→F2→F4→F3→F8→F7→F6→F5→F9→F12→F13→F16→F10→F11."},
   E:{name:"Business (Sean only)", prio:"—", color:"var(--pe)", emoji:"🧭",
      intro:"Not for agents."},
   H:{name:"Pre-cutover DB hardening", prio:"P0", color:"var(--ph)", emoji:"🛡️",
@@ -198,8 +201,8 @@ const TASKS = [
   {id:"A7", ws:"A", title:"Client sign-off", blocker:true, done:false,
    detail:"Sign-off with Yakima; deliver credentials securely."},
   // B
-  {id:"B1", ws:"B", title:"Scaffold the marketing site", model:"opus", done:false,
-   detail:"New Next.js project (envolv-www or a /marketing app in volunteerhub — decide & document). One-page landing: positioning + pricing tiers ($29 / $79 / $199, ~17% annual discount), Resend demo-request capture (noreply@envolv.org). Deploys to a new Vercel project."},
+  {id:"B1", ws:"B", title:"Scaffold the marketing site", model:"opus", done:true,
+   detail:"✅ 2026-07-12 — DECIDED: separate repo at C:\\Users\\smmcn\\Projects\\envolv-www (not /marketing in volunteerhub, which is unassessed per C1 and about to be renamed per C2 — the site would have been blocked behind both). Next 14 + Tailwind v4, same stack as web/. One page: hero, features, 6 industry templates, sourced comparison table, pricing toggle ($29/$79/$199, ~17% off annually), demo form → server action → Resend → DEMO_NOTIFY_EMAILS, reply_to = the lead. All claims live in lib/content.ts, traced to the business plan + targeting strategy PDFs. Nothing is NEXT_PUBLIC_* except the demo URL, so the Resend key/recipients change without a redeploy (deliberate reaction to the 07-11 build-time-inlining outage). ⛔ Still needs Sean: the 2 co-founder addresses (NOT guessed — the Yakima admin addresses belong to the clinic), RESEND_API_KEY, envolv.org domain verification, and a Windows `npm install && npm run build`."},
   {id:"B2", ws:"B", title:"DNS", blocker:true, done:false,
    detail:"Point envolv.app (+ www, and envolv.org redirect → envolv.app) at the Vercel project."},
   {id:"B3", ws:"B", title:"Email-capture backend", model:"sonnet", done:false,
@@ -240,6 +243,39 @@ const TASKS = [
    detail:"Origin currently carries 9 non-main branches. The 6 AB branches were SQUASH-merged, so `git branch --merged` does NOT list them — verify against the merged commit, not the merge base, before deleting. SAFE TO DELETE (squash-merged): feat/AB-00005-edit-shift-buttons (95e280f), feat/AB-00006-add-and-edit-status (14a9d5b), feat/AB-00007-category-of-shift (5e45da2), feat/AB-00008-duplicate-shifts (4509b87), feat/AB-00009-shortcodes (dbed62e), feat/AB-00010-view-password (583860e). ⚠️ feat/AB-00006-group-volunteer: NEVER merged and should not be — this is the agent-invented feature from the blank-Component/File incident (see CLAUDE.md); it contains an invented supabase/migrations/*.sql, which would trigger supabase-migrate.yml against PRODUCTION. Delete the branch, and make sure its Notion task is parked in Backlog WITH A REAL DESCRIPTION, not Ready. ⛔ Sean decides on the two remaining stale ones: vercel/install-vercel-web-analytics-h9gqg7 and claude/add-claude-documentation-Oaavt. Note the duplicate AB-00006 task ID across two branches — exactly the hazard CLAUDE.md flags under 'Task IDs are free text and not guaranteed unique'."},
   {id:"D11", ws:"D", title:"First successful nightly auto-build wave", done:true,
    detail:"DONE 2026-07-11. After the pipeline fixes (7013d6a removed the never-clearing `bugs-clear` gate — it required zero dev tasks in Code Review, but Code Review means an open PR awaiting human merge, so it never cleared and no feature was built for weeks; f68159f moved Claude Code auth to the subscription OAuth token and made account-level failures exit 1 instead of reporting green), the feature agent shipped its first real batch: 6 merged PRs — AB-00005 edit shift buttons, AB-00006 add/edit status, AB-00007 shift categories, AB-00008 duplicate shifts, AB-00009 shortcodes, AB-00010 view password. fix/DEV-00010 (category filtering) also merged as PR #7. This is the work the demo was 17 commits behind on — see D8."},
+  // F
+  {id:"F1", ws:"F", title:"Plan tiers, limits & feature gating", model:"opus", done:false,
+   detail:"web/lib/plan.ts + org `plan` column. Caps: 100/1k/5k/unlimited volunteers, 2/5/15/unlimited admin seats, SMS quotas, hasFeature() gates. Enforce at volunteer/admin creation. Existing orgs default to enterprise so nothing breaks. BLOCKS nearly everything below. Prompt 1 in docs/pricing-page-feature-prompts.md."},
+  {id:"F2", ws:"F", title:"Stripe billing & subscriptions", model:"opus", done:false,
+   detail:"Checkout + customer portal + signature-verified webhook syncing organizations.plan. $29/$79/$149 monthly, ~17% off annual; Enterprise sales-led. 14-day past_due grace; never delete data on lapse. Prompt 2."},
+  {id:"F3", ws:"F", title:"Industry templates (1/3/all by tier)", model:"sonnet", done:false,
+   detail:"Template = seed bundle (categories, checklist, doc rules, shift roles, message templates). Ship Medical Clinic, Food Bank, Animal Shelter, Events, Education, Faith-Based. Idempotent applier in Settings, gated 1/3/all by plan. Prompt 3."},
+  {id:"F4", ws:"F", title:"SMS integration + monthly quota", model:"sonnet", done:false,
+   detail:"The sms channel exists in the messages UI/schema but nothing dispatches (comment in dashboard/messages/actions.ts says so). Twilio behind web/lib/sms.ts (no-op without env vars, like Notion), dispatch in sendMessage + the cron route, sms_usage metering vs. plan cap (500/2,500), volunteer opt-in flag. Prompt 4."},
+  {id:"F5", ws:"F", title:"Background check provider integration", model:"sonnet", done:false,
+   detail:"Tracking exists (VolunteerTabs background_check tab); integration doesn't. Checkr behind a provider interface: order from the volunteer detail page, status via signed webhook, manual entry keeps working. Professional+. Prompt 5."},
+  {id:"F6", ws:"F", title:"Kiosk mode", model:"sonnet", done:false,
+   detail:"Shared-tablet check-in at /kiosk: admin-generated location-scoped token sessions + QR, name search or 4-digit PIN, clock in/out with new method:'kiosk', 15s idle reset, revocation in Settings. Scale+. Prompt 6."},
+  {id:"F7", ws:"F", title:"Public API + data exports", model:"sonnet", done:false,
+   detail:"api_keys table + Settings management (show key once), /api/v1/ volunteers|shifts|hours|messages + full CSV exports, Bearer auth, org-scoped, rate-limited, documented in docs/api.md. Scale+. Prompt 7."},
+  {id:"F8", ws:"F", title:"Advanced permissions (roles)", model:"opus", done:false,
+   detail:"owner/admin/coordinator/viewer on admin_users + optional location scoping. requireAdmin() behavior must stay identical; add requireRole(). Guard server actions, not just UI. Role management UI Scale+. Prompt 8."},
+  {id:"F9", ws:"F", title:"Full white-label branding", model:"sonnet", done:false,
+   detail:"Beyond the existing logo_url: brand colors as CSS vars in both shells, custom app name, dynamic PWA manifest, branded email from-name, 'Powered by Envolv' hidden on Scale+, custom-domain TXT verification. Prompt 9."},
+  {id:"F10", ws:"F", title:"Multi-org & network dashboard", model:"opus", done:false,
+   detail:"Org resolution is hardcoded single-org — centralize into web/lib/org.ts FIRST as its own commit. Then org_memberships + Sidebar switcher (server-validated), then /dashboard/network rollup. Split into 3 Notion tasks. Prompt 10."},
+  {id:"F11", ws:"F", title:"SSO / SAML", model:"opus", blocker:true, done:false,
+   detail:"Supabase Auth SAML SSO (don't hand-roll). Domain-based redirect on both login pages, 'require SSO' enforcement that fails closed. ⛔ Requires Supabase Pro+ — Sean decides on the plan upgrade first. Enterprise only. Prompt 11."},
+  {id:"F12", ws:"F", title:"CSV import, competitor importers, webhooks", model:"sonnet", done:false,
+   detail:"Import wizard (map/preview/dry-run/commit, dedupe by email) + preset mappings for Timecounts/SignUpGenius/Galaxy Digital + outbound HMAC-signed webhooks with delivery log and redeliver. Import all plans; webhooks Scale+. Prompt 12."},
+  {id:"F13", ws:"F", title:"In-app support widget + SLA routing", model:"sonnet", done:false,
+   detail:"Help & Support in the Sidebar: docs links + contact form (org/plan/user prefilled, plan-tagged for SLA triage), plan-aware chat/phone visibility behind a pluggable web/lib/support.ts. Volunteer PWA gets 'Contact your coordinator'. Prompt 13."},
+  {id:"F14", ws:"F", title:"Support SLA & CSM playbook (doc)", done:false,
+   detail:"docs/support-playbook.md: the four tiers as sold (48hr / 24hr+chat / priority chat+phone / dedicated CSM), triage flow, escalation, template replies — honest about what a one-person company can sell today. Prompt 14."},
+  {id:"F15", ws:"F", title:"Security review pack & DPA drafts (docs)", blocker:true, done:false,
+   detail:"docs/security-overview.md (architecture, RLS posture, subprocessors, honest gaps — no SOC 2 yet), dpa-template.md (DRAFT, ⛔ attorney review before first use), and a procurement questionnaire crib sheet. Prompt 15."},
+  {id:"F16", ws:"F", title:"Data retention & deletion", model:"sonnet", done:false,
+   detail:"Org delete with 30-day grace + /api/cron/retention purge, volunteer anonymization (right-to-erasure, keeps aggregate hours), export-before-delete, audit_log table. Backs the DPA's promises. Prompt 16."},
   // E
   {id:"E1", ws:"E", title:"Confirm capital contributions", done:false,
    detail:"§5.1 — the 30-day window closed ~May 9."},
