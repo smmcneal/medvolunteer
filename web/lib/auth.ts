@@ -37,6 +37,27 @@ export async function requireAdmin(): Promise<User> {
   return user
 }
 
+/**
+ * Throws unless the caller is an admin with the 'owner' role. Owners are the
+ * only admins who can invite, re-role, or remove other admin users.
+ * Returns the auth user for attribution (e.g. invited_by).
+ */
+export async function requireAdminOwner(): Promise<User> {
+  const user = await getAuthUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('admin_users')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!data) throw new Error('Admin access required')
+  if (data.role !== 'owner') throw new Error('Only owners can manage dashboard users')
+  return user
+}
+
 /** Like requireAdmin() but redirect-friendly: returns null instead of throwing. */
 export async function getAdminUser(): Promise<User | null> {
   const user = await getAuthUser()
