@@ -380,9 +380,16 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
               {mod.title}
             </h2>
           )}
-          {mod.is_required && (
-            <span style={{ ...badgeStyle, background: '#dbeafe', color: '#1e40af' }}>Required</span>
-          )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', flexShrink: 0 }}>
+            <input
+              type="checkbox"
+              checked={mod.is_required}
+              onChange={e => run(() => updateModule(mod.id, { is_required: e.target.checked }))}
+              disabled={isPending}
+              style={{ cursor: 'pointer' }}
+            />
+            <span style={{ ...badgeStyle, background: mod.is_required ? '#dbeafe' : '#f3f4f6', color: mod.is_required ? '#1e40af' : '#6b7280' }}>Required</span>
+          </label>
           <button
             onClick={() => {
               if (!confirm(`Delete module "${mod.title}"? All lessons will be removed.`)) return
