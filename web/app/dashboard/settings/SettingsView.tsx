@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { Building2, MapPin, Plug, LayoutGrid, CalendarDays, Zap, Tag, Flag } from 'lucide-react'
 import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule, Category } from '@/types/database'
 import {
   updateOrgProfile,
@@ -83,19 +84,22 @@ export default function SettingsView({ org, locations: initialLocations, initial
         flexShrink: 0,
       }}>
         {([
-          { key: 'profile',      labelKey: 'org_profile' },
-          { key: 'locations',    labelKey: 'locations_tab' },
-          { key: 'integrations', labelKey: 'integrations_tab' },
-          { key: 'categories',   labelKey: 'categories_tab' },
-          { key: 'holidays',     labelKey: 'holidays_tab' },
-          { key: 'automation',   labelKey: 'automation_tab' },
-          { key: 'tags',         labelKey: 'tags_tab' },
-          { key: 'flags',        labelKey: 'flags_tab' },
-        ] as { key: Tab; labelKey: string }[]).map(tabItem => (
+          { key: 'profile',      labelKey: 'org_profile',      icon: Building2 },
+          { key: 'locations',    labelKey: 'locations_tab',    icon: MapPin },
+          { key: 'integrations', labelKey: 'integrations_tab', icon: Plug },
+          { key: 'categories',   labelKey: 'categories_tab',   icon: LayoutGrid },
+          { key: 'holidays',     labelKey: 'holidays_tab',     icon: CalendarDays },
+          { key: 'automation',   labelKey: 'automation_tab',   icon: Zap },
+          { key: 'tags',         labelKey: 'tags_tab',         icon: Tag },
+          { key: 'flags',        labelKey: 'flags_tab',        icon: Flag },
+        ] as { key: Tab; labelKey: string; icon: React.ElementType }[]).map(tabItem => (
           <button
             key={tabItem.key}
             onClick={() => setTab(tabItem.key)}
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
               padding: '12px 20px',
               fontSize: '13px',
               fontWeight: 600,
@@ -105,7 +109,10 @@ export default function SettingsView({ org, locations: initialLocations, initial
               background: 'transparent',
               color: tab === tabItem.key ? '#1B2A4A' : '#9ca3af',
             }}
-          >{t(tabItem.labelKey)}</button>
+          >
+            <tabItem.icon style={{ width: '15px', height: '15px', flexShrink: 0 }} />
+            {t(tabItem.labelKey)}
+          </button>
         ))}
       </div>
 
