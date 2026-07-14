@@ -4,6 +4,9 @@ import { useState, useTransition, useRef } from 'react'
 import type { ModuleWithLessons, LessonWithQuiz, QuizQuestionRow } from './page'
 import { useAdminT } from '@/lib/admin-lang'
 import {
+  Play, FileText, HelpCircle, BookOpen, Plus, X, Check, ChevronUp, ChevronDown,
+} from 'lucide-react'
+import {
   createModule, updateModule, deleteModule,
   createLesson, updateLesson, deleteLesson, reorderLessons,
   createQuizQuestion, updateQuizQuestion, deleteQuizQuestion,
@@ -23,10 +26,10 @@ const LESSON_TYPE_COLORS: Record<string, string> = {
   text: '#0ea5e9',
   quiz: '#f59e0b',
 }
-const LESSON_TYPE_ICONS: Record<string, string> = {
-  video: '▶',
-  text: '📄',
-  quiz: '❓',
+const LESSON_TYPE_ICONS: Record<string, React.ElementType> = {
+  video: Play,
+  text: FileText,
+  quiz: HelpCircle,
 }
 
 function pluralize(n: number, word: string) {
@@ -176,26 +179,33 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
           style={fieldStyle}
         />
         <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
-          {(['video', 'text', 'quiz'] as const).map(lt => (
-            <button
-              key={lt}
-              onClick={() => setType(lt)}
-              style={{
-                flex: 1,
-                padding: '5px',
-                borderRadius: '6px',
-                fontSize: '11px',
-                fontWeight: 600,
-                border: '1px solid',
-                cursor: 'pointer',
-                background: type === lt ? LESSON_TYPE_COLORS[lt] : 'white',
-                borderColor: type === lt ? LESSON_TYPE_COLORS[lt] : '#d1d5db',
-                color: type === lt ? 'white' : '#6b7280',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}
-            >{LESSON_TYPE_ICONS[lt]} {lt}</button>
-          ))}
+          {(['video', 'text', 'quiz'] as const).map(lt => {
+            const Icon = LESSON_TYPE_ICONS[lt]
+            return (
+              <button
+                key={lt}
+                onClick={() => setType(lt)}
+                style={{
+                  flex: 1,
+                  padding: '5px',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  border: '1px solid',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px',
+                  background: type === lt ? LESSON_TYPE_COLORS[lt] : 'white',
+                  borderColor: type === lt ? LESSON_TYPE_COLORS[lt] : '#d1d5db',
+                  color: type === lt ? 'white' : '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              ><Icon style={{ width: '12px', height: '12px' }} /> {lt}</button>
+            )
+          })}
         </div>
         {type !== 'quiz' && (
           <input
@@ -453,10 +463,11 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                       borderRadius: '6px',
                       background: LESSON_TYPE_COLORS[lesson.type] + '20',
                       color: LESSON_TYPE_COLORS[lesson.type],
-                      fontSize: '12px', fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       flexShrink: 0,
-                    }}>{LESSON_TYPE_ICONS[lesson.type]}</span>
+                    }}>
+                      {(() => { const Icon = LESSON_TYPE_ICONS[lesson.type]; return <Icon style={{ width: '14px', height: '14px' }} /> })()}
+                    </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827', marginBottom: '1px' }}>{lesson.title}</p>
                       <p style={{ fontSize: '11px', color: '#9ca3af' }}>
@@ -470,7 +481,7 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                       <button
                         onClick={e => { e.stopPropagation(); setEditingLessonId(lesson.id) }}
                         style={{ ...ghostBtnSmall, padding: '3px 8px', fontSize: '11px' }}
-                      >Edit</button>
+                      >{t('edit')}</button>
                       <button
                         onClick={e => {
                           e.stopPropagation()
@@ -478,8 +489,8 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                           if (selectedLessonId === lesson.id) setSelectedLessonId(null)
                           run(() => deleteLesson(lesson.id))
                         }}
-                        style={{ ...ghostBtnSmall, padding: '3px 8px', fontSize: '11px', color: '#dc2626', borderColor: '#fca5a5' }}
-                      >✕</button>
+                        style={{ ...ghostBtnSmall, padding: '3px', fontSize: '11px', color: '#dc2626', borderColor: '#fca5a5', display: 'flex', alignItems: 'center' }}
+                      ><X style={{ width: '12px', height: '12px' }} /></button>
                       <button
                         onClick={e => {
                           e.stopPropagation()
@@ -490,8 +501,8 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                           run(() => reorderLessons(swapped))
                         }}
                         disabled={idx === 0}
-                        style={{ ...ghostBtnSmall, padding: '3px 6px', fontSize: '11px', opacity: idx === 0 ? 0.3 : 1 }}
-                      >↑</button>
+                        style={{ ...ghostBtnSmall, padding: '3px', fontSize: '11px', opacity: idx === 0 ? 0.3 : 1, display: 'flex', alignItems: 'center' }}
+                      ><ChevronUp style={{ width: '12px', height: '12px' }} /></button>
                       <button
                         onClick={e => {
                           e.stopPropagation()
@@ -502,8 +513,8 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                           run(() => reorderLessons(swapped))
                         }}
                         disabled={idx === mod.lessons.length - 1}
-                        style={{ ...ghostBtnSmall, padding: '3px 6px', fontSize: '11px', opacity: idx === mod.lessons.length - 1 ? 0.3 : 1 }}
-                      >↓</button>
+                        style={{ ...ghostBtnSmall, padding: '3px', fontSize: '11px', opacity: idx === mod.lessons.length - 1 ? 0.3 : 1, display: 'flex', alignItems: 'center' }}
+                      ><ChevronDown style={{ width: '12px', height: '12px' }} /></button>
                     </div>
                   </div>
 
@@ -527,8 +538,8 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                         </p>
                         <button
                           onClick={() => setShowAddQuestion(true)}
-                          style={{ ...primaryBtnSmall, background: '#f59e0b', borderColor: '#f59e0b', fontSize: '11px', padding: '4px 10px' }}
-                        >+ {t('add_lesson')}</button>
+                          style={{ ...primaryBtnSmall, background: '#f59e0b', borderColor: '#f59e0b', fontSize: '11px', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        ><Plus style={{ width: '11px', height: '11px' }} /> {t('add_lesson')}</button>
                       </div>
                       {lesson.quiz_questions.map((q, qi) => (
                         <div key={q.id} style={{
@@ -554,14 +565,14 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                                   <button
                                     onClick={() => setEditingQuestionId(q.id)}
                                     style={{ ...ghostBtnSmall, padding: '2px 7px', fontSize: '11px' }}
-                                  >Edit</button>
+                                  >{t('edit')}</button>
                                   <button
                                     onClick={() => {
                                       if (!confirm('Delete this question?')) return
                                       run(() => deleteQuizQuestion(q.id))
                                     }}
-                                    style={{ ...ghostBtnSmall, padding: '2px 7px', fontSize: '11px', color: '#dc2626', borderColor: '#fca5a5' }}
-                                  >✕</button>
+                                    style={{ ...ghostBtnSmall, padding: '2px', fontSize: '11px', color: '#dc2626', borderColor: '#fca5a5', display: 'flex', alignItems: 'center' }}
+                                  ><X style={{ width: '11px', height: '11px' }} /></button>
                                 </div>
                               </div>
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
@@ -570,12 +581,15 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                                     padding: '2px 8px',
                                     borderRadius: '99px',
                                     fontSize: '11px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
                                     background: oi === q.correct_answer_index ? '#d1fae5' : '#f3f4f6',
                                     color: oi === q.correct_answer_index ? '#065f46' : '#374151',
                                     fontWeight: oi === q.correct_answer_index ? 600 : 400,
                                     border: oi === q.correct_answer_index ? '1px solid #a7f3d0' : '1px solid transparent',
                                   }}>
-                                    {oi === q.correct_answer_index && '✓ '}{opt}
+                                    {oi === q.correct_answer_index && <Check style={{ width: '11px', height: '11px' }} />}{opt}
                                   </span>
                                 ))}
                               </div>
@@ -611,8 +625,12 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                     fontWeight: 500,
                     cursor: 'pointer',
                     marginTop: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
                   }}
-                >+ {t('add_lesson')}</button>
+                ><Plus style={{ width: '14px', height: '14px' }} /> {t('add_lesson')}</button>
               )}
             </div>
           )}
@@ -679,10 +697,11 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                       borderRadius: '6px',
                       background: LESSON_TYPE_COLORS[lesson.type] + '20',
                       color: LESSON_TYPE_COLORS[lesson.type],
-                      fontSize: '12px',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       flexShrink: 0,
-                    }}>{LESSON_TYPE_ICONS[lesson.type]}</span>
+                    }}>
+                      {(() => { const Icon = LESSON_TYPE_ICONS[lesson.type]; return <Icon style={{ width: '13px', height: '13px' }} /> })()}
+                    </span>
                     <div style={{ flex: 1 }}>
                       <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>{lesson.title}</p>
                       <div style={{ height: '4px', borderRadius: '99px', background: '#f0f0f0', overflow: 'hidden' }}>
@@ -734,16 +753,15 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
           <button
             onClick={() => setShowNewModule(prev => !prev)}
             style={{
-              fontSize: '18px',
-              lineHeight: 1,
               color: '#1B2A4A',
               background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              fontWeight: 700,
-              padding: '0 4px',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '2px',
             }}
-          >+</button>
+          ><Plus style={{ width: '16px', height: '16px' }} /></button>
         </div>
 
         {showNewModule && <NewModuleForm />}
@@ -770,6 +788,7 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                  <BookOpen style={{ width: '13px', height: '13px', color: isSelected ? '#1B2A4A' : '#9ca3af', flexShrink: 0 }} />
                   <p style={{
                     fontSize: '13px',
                     fontWeight: isSelected ? 600 : 500,
@@ -823,7 +842,7 @@ export default function LearningView({ initialModules, totalVolunteers }: Props)
             flexDirection: 'column',
             gap: '8px',
           }}>
-            <span style={{ fontSize: '40px' }}>📚</span>
+            <BookOpen style={{ width: '36px', height: '36px', color: '#d1d5db' }} />
             <p style={{ fontWeight: 500 }}>{modules.length === 0 ? 'Create your first module' : 'Select a module to edit'}</p>
           </div>
         )}
