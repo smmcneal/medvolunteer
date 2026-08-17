@@ -53,6 +53,7 @@ interface OrgSettings {
   category_descriptions?: Record<string, string>
   jotform_api_key?: string
   require_hour_approval?: boolean
+  extended_hours?: boolean
 }
 
 interface Props {
@@ -414,6 +415,7 @@ function LocationForm({
 // ─── Integrations Tab ─────────────────────────────────────────────────────────
 
 function IntegrationsTab({ settings: initialSettings }: { settings: OrgSettings }) {
+  const t = useAdminT()
   const [isPending, startTransition] = useTransition()
   const [saved, setSaved] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -553,6 +555,30 @@ function IntegrationsTab({ settings: initialSettings }: { settings: OrgSettings 
             }}
           >
             {initialSettings.require_hour_approval ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+      </div>
+
+      {/* Extended hours toggle */}
+      <div style={{ marginTop: 12, padding: '16px 20px', background: '#f9fafb', borderRadius: 10, border: '1px solid #f0f0f0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 3 }}>{t('extended_hours_title')}</p>
+            <p style={{ fontSize: 12, color: '#6b7280' }}>
+              {t('extended_hours_desc')}
+            </p>
+          </div>
+          <button
+            disabled={isPending}
+            onClick={() => saveSection('extended_hours', { extended_hours: !initialSettings.extended_hours })}
+            style={{
+              padding: '7px 16px', borderRadius: 7, fontSize: 13, fontWeight: 600,
+              border: '1px solid #e5e7eb', cursor: 'pointer', flexShrink: 0,
+              background: initialSettings.extended_hours ? '#1B2A4A' : '#fff',
+              color: initialSettings.extended_hours ? '#fff' : '#374151',
+            }}
+          >
+            {initialSettings.extended_hours ? t('disable') : t('enable')}
           </button>
         </div>
       </div>

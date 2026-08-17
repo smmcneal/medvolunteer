@@ -431,6 +431,10 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     flags_tab: '🚩 Flags',
     application_form_tab: '📝 Application Form',
     users_tab: '👤 Users',
+    extended_hours_title: 'Extended hours',
+    extended_hours_desc: 'When enabled, the shift calendar’s Day and Week views extend to show shifts scheduled between 9pm and 6am.',
+    enable: 'Enable',
+    disable: 'Disable',
 
     // Application Form builder
     application_form_section: 'Application Form',
@@ -921,6 +925,10 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     flags_tab: '🚩 Marcadores',
     application_form_tab: '📝 Formulario de solicitud',
     users_tab: '👤 Usuarios',
+    extended_hours_title: 'Horario extendido',
+    extended_hours_desc: 'Cuando está habilitado, las vistas de Día y Semana del calendario de turnos se extienden para mostrar turnos programados entre las 9pm y las 6am.',
+    enable: 'Habilitar',
+    disable: 'Deshabilitar',
 
     // Constructor de formulario de solicitud
     application_form_section: 'Formulario de solicitud',

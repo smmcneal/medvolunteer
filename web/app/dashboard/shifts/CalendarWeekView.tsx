@@ -4,13 +4,14 @@ import type { ShiftWithRoster } from './page'
 
 const START_HOUR = 6
 const END_HOUR = 22
-const TOTAL_HOURS = END_HOUR - START_HOUR
+const END_HOUR_EXTENDED = 30 // 6am the following day
 const ROW_H = 56
 
 function timeLabel(h: number) {
-  if (h === 0) return '12am'
-  if (h === 12) return '12pm'
-  return h < 12 ? `${h}am` : `${h - 12}pm`
+  const hh = h % 24
+  if (hh === 0) return '12am'
+  if (hh === 12) return '12pm'
+  return hh < 12 ? `${hh}am` : `${hh - 12}pm`
 }
 
 function dateKey(d: Date) {
@@ -25,11 +26,14 @@ interface Props {
   shifts: ShiftWithRoster[]
   onSelectShift: (id: string) => void
   holidays: { id: string; name: string; date: string; is_recurring: boolean }[]
+  extendedHours?: boolean
 }
 
 const LOC_COLORS = ['#3B82F6', '#00ACC1', '#8B5CF6', '#F59E0B', '#EF4444', '#EC4899']
 
-export default function CalendarWeekView({ weekStart, shifts, onSelectShift, holidays }: Props) {
+export default function CalendarWeekView({ weekStart, shifts, onSelectShift, holidays, extendedHours = false }: Props) {
+  const endHourBound = extendedHours ? END_HOUR_EXTENDED : END_HOUR
+  const totalHours = endHourBound - START_HOUR
   const days: Date[] = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart)
     d.setDate(d.getDate() + i)
@@ -37,7 +41,7 @@ export default function CalendarWeekView({ weekStart, shifts, onSelectShift, hol
   })
 
   const todayKey = dateKey(new Date())
-  const totalRows = TOTAL_HOURS * 2
+  const totalRows = totalHours * 2
 
   const holidayByDay = new Map<string, string>()
   for (const h of holidays) {
@@ -62,9 +66,12 @@ export default function CalendarWeekView({ weekStart, shifts, onSelectShift, hol
     const start = new Date(s.start_time)
     const end = new Date(s.end_time)
     const startHour = start.getHours() + start.getMinutes() / 60
-    const endHour = end.getHours() + end.getMinutes() / 60
-    const clampedStart = Math.max(START_HOUR, Math.min(END_HOUR, startHour))
-    const clampedEnd = Math.max(START_HOUR, Math.min(END_HOUR, endHour))
+    let endHour = end.getHours() + end.getMinutes() / 60
+    if (extendedHours && dateKey(end) !== dateKey(start) && endHour <= startHour) {
+      endHour += 24
+    }
+    const clampedStart = Math.max(START_HOUR, Math.min(endHourBound, startHour))
+    const clampedEnd = Math.max(START_HOUR, Math.min(endHourBound, endHour))
     const span = Math.max(0.5, clampedEnd - clampedStart)
     const rowStart = Math.round((clampedStart - START_HOUR) * 2) + 1
     const rowSpan = Math.max(1, Math.round(span * 2))
@@ -122,7 +129,7 @@ export default function CalendarWeekView({ weekStart, shifts, onSelectShift, hol
       <div style={{ display: 'grid', gridTemplateColumns: '52px repeat(7, 1fr)', maxHeight: '620px', overflowY: 'auto' }}>
         {/* Time gutter */}
         <div style={{ display: 'grid', gridTemplateRows: `repeat(${totalRows}, ${ROW_H / 2}px)` }}>
-          {Array.from({ length: TOTAL_HOURS }, (_, i) => (
+          {Array.from({ length: totalHours }, (_, i) => (
             <div key={i} style={{ gridRow: `${i * 2 + 1} / span 2`, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', paddingRight: '8px', paddingTop: '4px' }}>
               <span style={{ fontSize: '10px', color: '#9ca3af', whiteSpace: 'nowrap' }}>
                 {timeLabel(START_HOUR + i)}
@@ -145,10 +152,10 @@ export default function CalendarWeekView({ weekStart, shifts, onSelectShift, hol
               background: holidayName ? '#fefdf8' : isToday ? 'rgba(0,172,193,0.02)' : 'transparent',
               position: 'relative',
             }}>
-              {Array.from({ length: TOTAL_HOURS }, (_, i) => (
+              {Array.from({ length: totalHours }, (_, i) => (
                 <div key={i} style={{ gridRow: `${i * 2 + 1} / span 2`, borderTop: i > 0 ? '1px solid var(--surface-border-sub)' : 'none', pointerEvents: 'none' }} />
               ))}
-              {Array.from({ length: TOTAL_HOURS }, (_, i) => (
+              {Array.from({ length: totalHours }, (_, i) => (
                 <div key={`h${i}`} style={{ gridRow: `${i * 2 + 2} / span 1`, borderTop: '1px dashed rgba(0,0,0,0.05)', pointerEvents: 'none' }} />
               ))}
 

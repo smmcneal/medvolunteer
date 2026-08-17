@@ -48,7 +48,7 @@ async function fetchShiftsData() {
   rangeEnd.setMonth(rangeEnd.getMonth() + 4)
   rangeEnd.setDate(0)
 
-  const [shiftsRes, locationsRes, volunteersRes, holidaysRes, categoriesRes] = await Promise.all([
+  const [shiftsRes, locationsRes, volunteersRes, holidaysRes, categoriesRes, orgRes] = await Promise.all([
     supabase
       .from('shifts')
       .select(`
@@ -85,6 +85,12 @@ async function fetchShiftsData() {
       .select('id, slug, name')
       .eq('is_archived', false)
       .order('sort_order'),
+
+    supabase
+      .from('organizations')
+      .select('settings')
+      .limit(1)
+      .single(),
   ])
 
   // Fetch time entries for all these shifts
@@ -142,23 +148,26 @@ async function fetchShiftsData() {
       })),
   }))
 
+  const orgSettings = (orgRes.data?.settings ?? {}) as { extended_hours?: boolean }
+
   return {
     shifts,
     locations: (locationsRes.data ?? []) as Pick<Location, 'id' | 'name'>[],
     volunteers: (volunteersRes.data ?? []) as Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'category' | 'status' | 'pipeline_phase'>[],
     holidays: (holidaysRes.data ?? []) as Pick<OrgHoliday, 'id' | 'name' | 'date' | 'is_recurring'>[],
     categories: (categoriesRes.data ?? []) as Pick<Category, 'id' | 'slug' | 'name'>[],
+    extendedHours: orgSettings.extended_hours ?? false,
   }
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function ShiftsPage() {
-  const { shifts, locations, volunteers, holidays, categories } = await fetchShiftsData()
+  const { shifts, locations, volunteers, holidays, categories, extendedHours } = await fetchShiftsData()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <ShiftsView shifts={shifts} locations={locations} volunteers={volunteers} holidays={holidays} categories={categories} />
+      <ShiftsView shifts={shifts} locations={locations} volunteers={volunteers} holidays={holidays} categories={categories} extendedHours={extendedHours} />
     </div>
   )
 }
