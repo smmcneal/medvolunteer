@@ -2,34 +2,65 @@
 
 import { useState } from 'react'
 import { submitApplication } from './actions'
-
-const CATEGORIES = [
-  { value: 'medical_professional', label: 'Medical Professional (MD, NP, PA, RN, etc.)' },
-  { value: 'support_staff',        label: 'Support Staff (Admin, Front Desk, etc.)' },
-  { value: 'trainee',              label: 'Student / Trainee' },
-  { value: 'other',                label: 'Other' },
-]
+import type { ResolvedApplicationField } from './page'
+import type { CommunicationPreference } from '@/types/database'
 
 const NAVY = '#1B2A4A'
 const TEAL = '#00897B'
 
-export default function ApplyForm() {
+const COMM_PREFS: { value: CommunicationPreference; label: string }[] = [
+  { value: 'email', label: 'Email' },
+  { value: 'phone', label: 'Phone' },
+  { value: 'both',  label: 'Either' },
+]
+
+interface Props {
+  categories: { slug: string; name: string }[]
+  customFields: ResolvedApplicationField[]
+}
+
+export default function ApplyForm({ categories, customFields }: Props) {
   const [form, setForm] = useState({
-    first_name: '', last_name: '', email: '', phone: '', category: '', message: '', website: '',
+    first_name: '', last_name: '', email: '', phone: '', message: '', website: '',
   })
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
+  const [commPref, setCommPref] = useState<CommunicationPreference>('email')
+  const [custom, setCustom] = useState<Record<string, string | string[]>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [done, setDone]       = useState(false)
 
-  const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm(f => ({ ...f, [field]: e.target.value }))
+  const set = (field: 'first_name' | 'last_name' | 'email' | 'phone' | 'message') =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setForm(f => ({ ...f, [field]: e.target.value }))
+
+  function toggleCategory(slug: string) {
+    setSelectedCategories(prev => prev.includes(slug) ? prev.filter(c => c !== slug) : [...prev, slug])
+  }
+
+  function setCustomText(fieldId: string, value: string) {
+    setCustom(prev => ({ ...prev, [fieldId]: value }))
+  }
+
+  function toggleCustomCheckbox(fieldId: string, option: string) {
+    setCustom(prev => {
+      const current = Array.isArray(prev[fieldId]) ? prev[fieldId] as string[] : []
+      const next = current.includes(option) ? current.filter(o => o !== option) : [...current, option]
+      return { ...prev, [fieldId]: next }
+    })
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.category) { setError('Please select a volunteer type.'); return }
+    if (selectedCategories.length === 0) { setError('Please select at least one category of interest.'); return }
     setLoading(true)
     setError(null)
-    const result = await submitApplication(form)
+    const result = await submitApplication({
+      ...form,
+      categories: selectedCategories,
+      communication_preference: commPref,
+      custom,
+    })
     setLoading(false)
     if (result.error) { setError(result.error); return }
     setDone(true)
@@ -86,7 +117,7 @@ export default function ApplyForm() {
             type="text"
             name="website"
             value={form.website}
-            onChange={set('website')}
+            onChange={e => setForm(f => ({ ...f, website: e.target.value }))}
             tabIndex={-1}
             autoComplete="off"
             aria-hidden="true"
@@ -111,14 +142,90 @@ export default function ApplyForm() {
             <input type="tel" value={form.phone} onChange={set('phone')} placeholder="(555) 000-0000" style={inputStyle} />
           </Field>
 
-          <Field label="Volunteer type" required style={{ marginBottom: '1rem' }}>
-            <select required value={form.category} onChange={set('category')} style={{ ...inputStyle, color: form.category ? '#1e293b' : '#94a3b8' }}>
-              <option value="" disabled>Select one…</option>
-              {CATEGORIES.map(c => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
+          <Field label="Categories of interest" required style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', marginTop: '.25rem' }}>
+              {categories.map(c => {
+                const checked = selectedCategories.includes(c.slug)
+                return (
+                  <button
+                    key={c.slug}
+                    type="button"
+                    onClick={() => toggleCategory(c.slug)}
+                    style={{
+                      padding: '.4rem .9rem', borderRadius: 20, cursor: 'pointer',
+                      fontSize: '.8125rem', fontWeight: 600, border: '1.5px solid',
+                      borderColor: checked ? TEAL : '#e2e8f0',
+                      background: checked ? `${TEAL}15` : '#fff',
+                      color: checked ? TEAL : '#64748b',
+                      fontFamily: "'Figtree', sans-serif",
+                    }}
+                  >
+                    {c.name}
+                  </button>
+                )
+              })}
+            </div>
           </Field>
+
+          <Field label="How should we reach you?" required style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', gap: '1.25rem', marginTop: '.25rem' }}>
+              {COMM_PREFS.map(p => (
+                <label key={p.value} style={{ display: 'flex', alignItems: 'center', gap: '.4rem', fontSize: '.875rem', color: '#374151', cursor: 'pointer' }}>
+                  <input type="radio" name="communication_preference" checked={commPref === p.value} onChange={() => setCommPref(p.value)} />
+                  {p.label}
+                </label>
+              ))}
+            </div>
+          </Field>
+
+          {customFields.map(field => (
+            <Field key={field.id} label={field.label} required={field.required} style={{ marginBottom: '1rem' }}>
+              {field.field_type === 'text' && (
+                <input
+                  required={field.required}
+                  value={(custom[field.id] as string) ?? ''}
+                  onChange={e => setCustomText(field.id, e.target.value)}
+                  style={inputStyle}
+                />
+              )}
+              {field.field_type === 'dropdown' && (
+                <select
+                  required={field.required}
+                  value={(custom[field.id] as string) ?? ''}
+                  onChange={e => setCustomText(field.id, e.target.value)}
+                  style={{ ...inputStyle, color: custom[field.id] ? '#1e293b' : '#94a3b8' }}
+                >
+                  <option value="" disabled>Select one…</option>
+                  {field.resolvedOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              )}
+              {field.field_type === 'checkbox' && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', marginTop: '.25rem' }}>
+                  {field.resolvedOptions.map(opt => {
+                    const values = (custom[field.id] as string[]) ?? []
+                    const checked = values.includes(opt)
+                    return (
+                      <label key={opt} style={{
+                        display: 'flex', alignItems: 'center', gap: '.4rem',
+                        padding: '.4rem .75rem', borderRadius: 8, border: '1.5px solid',
+                        borderColor: checked ? TEAL : '#e2e8f0',
+                        background: checked ? `${TEAL}15` : '#fff',
+                        fontSize: '.8125rem', color: '#374151', cursor: 'pointer',
+                      }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleCustomCheckbox(field.id, opt)} />
+                        {opt}
+                      </label>
+                    )
+                  })}
+                  {field.resolvedOptions.length === 0 && (
+                    <span style={{ fontSize: '.8125rem', color: '#94a3b8' }}>No options configured.</span>
+                  )}
+                </div>
+              )}
+            </Field>
+          ))}
 
           <Field label="Tell us about yourself" style={{ marginBottom: '1.75rem' }}>
             <textarea
