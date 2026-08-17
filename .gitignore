@@ -8,3 +8,6 @@ node_modules/
 .claude/git-out.log
 .claude/commit-msg.txt
 Heather_Notion_Setup_Guide.docx
+.claude/pr-*.diff
+.claude/merge-branch.txt
+.claude/merge-msg.txt
