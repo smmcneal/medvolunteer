@@ -4,15 +4,15 @@ import { useRef, useState, useTransition, useMemo } from 'react'
 import type { MessageWithRecipients } from './page'
 import type { Volunteer, MessageChannel, MessageTemplate, Category } from '@/types/database'
 import { sendMessage, saveTemplate, deleteTemplate } from './actions'
-import { ChevronLeft, Send, CheckCheck, Eye, Users, Inbox, FileText, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { ChevronLeft, Send, CheckCheck, Eye, Users, Inbox, FileText, ChevronDown, ChevronRight, Trash2, Mail, MessageSquare, Bell, Clock, Pencil } from 'lucide-react'
 import { useAdminT } from '@/lib/admin-lang'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const CHANNEL_CONFIG: Record<MessageChannel, { label: string; icon: string; color: string; bg: string; desc: string }> = {
-  email: { label: 'Email', icon: '✉',  color: '#3b82f6', bg: '#eff6ff', desc: 'Inbox delivery' },
-  sms:   { label: 'SMS',   icon: '💬', color: '#10b981', bg: '#f0fdf4', desc: 'Text message'  },
-  push:  { label: 'Push',  icon: '🔔', color: '#8b5cf6', bg: '#faf5ff', desc: 'App notify'    },
+const CHANNEL_CONFIG: Record<MessageChannel, { label: string; icon: typeof Mail; color: string; bg: string; desc: string }> = {
+  email: { label: 'Email', icon: Mail,          color: '#3b82f6', bg: '#eff6ff', desc: 'Inbox delivery' },
+  sms:   { label: 'SMS',   icon: MessageSquare, color: '#10b981', bg: '#f0fdf4', desc: 'Text message'  },
+  push:  { label: 'Push',  icon: Bell,          color: '#8b5cf6', bg: '#faf5ff', desc: 'App notify'    },
 }
 
 // Recipient merge fields renderTemplate() actually substitutes for admin-composed
@@ -183,6 +183,7 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
   }
 
   const canSend = !!(subject.trim() && body.trim() && recipientIds.length > 0 && !isPending && (!sendLater || scheduledAt))
+  const SelectedChannelIcon = CHANNEL_CONFIG[channel].icon
 
   return (
     <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
@@ -205,7 +206,7 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
               transition: 'background 0.15s, box-shadow 0.15s',
             }}
           >
-            <span style={{ fontSize: '14px' }}>✏</span> {t('compose_new_message')}
+            <Pencil style={{ width: '13px', height: '13px' }} /> {t('compose_new_message')}
           </button>
         </div>
 
@@ -287,13 +288,14 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
                 {/* Channel badge + stats */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
                     padding: '1px 7px', borderRadius: '99px',
                     fontSize: '10px', fontWeight: 700,
                     background: ch.color + '18', color: ch.color,
                     letterSpacing: '0.02em',
-                  }}>{ch.icon} {ch.label}</span>
+                  }}><ch.icon style={{ width: '10px', height: '10px' }} /> {ch.label}</span>
                   {msg.status === 'scheduled'
-                    ? <span style={{ padding: '1px 7px', borderRadius: '99px', fontSize: '10px', fontWeight: 700, background: '#f5f3ff', color: '#7c3aed' }}>⏰ {t('scheduled_badge')}</span>
+                    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '1px 7px', borderRadius: '99px', fontSize: '10px', fontWeight: 700, background: '#f5f3ff', color: '#7c3aed' }}><Clock style={{ width: '10px', height: '10px' }} /> {t('scheduled_badge')}</span>
                     : <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{msg.recipient_count} · {deliveryPct}%</span>
                   }
                 </div>
@@ -445,7 +447,7 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
                         fontFamily: 'inherit',
                       }}
                     >
-                      <div style={{ fontSize: '20px', marginBottom: '4px' }}>{c.icon}</div>
+                      <c.icon style={{ width: '20px', height: '20px', marginBottom: '4px', color: active ? c.color : 'var(--text-muted)' }} />
                       <div style={{ fontSize: '12px', fontWeight: 700, color: active ? c.color : 'var(--text-primary)' }}>{c.label}</div>
                       <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>{c.desc}</div>
                     </button>
@@ -648,11 +650,15 @@ export default function MessagesView({ initialMessages, volunteers, templates, c
                 }}
               >
                 <Send style={{ width: '13px', height: '13px' }} />
-                {isPending
-                  ? t('sending_msg')
-                  : sendLater
-                    ? `${t('send_later')} ${CHANNEL_CONFIG[channel].icon} ${recipientIds.length}`
-                    : `${t('send')} ${CHANNEL_CONFIG[channel].icon} ${recipientIds.length}`}
+                {isPending ? (
+                  t('sending_msg')
+                ) : (
+                  <>
+                    {sendLater ? t('send_later') : t('send')}
+                    <SelectedChannelIcon style={{ width: '13px', height: '13px' }} />
+                    {recipientIds.length}
+                  </>
+                )}
               </button>
               <button
                 onClick={() => { setSavingTemplate(true); setTemplateName(''); setTemplateError(null) }}
@@ -795,11 +801,12 @@ function MessageDetail({ msg, onBack }: { msg: MessageWithRecipients; onBack: ()
             {msg.subject || '(No subject)'}
           </h2>
           <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: '5px',
             padding: '3px 10px', borderRadius: '99px',
             fontSize: '11px', fontWeight: 700,
             background: ch.color + '18', color: ch.color,
             flexShrink: 0, letterSpacing: '0.02em',
-          }}>{ch.icon} {ch.label}</span>
+          }}><ch.icon style={{ width: '12px', height: '12px' }} /> {ch.label}</span>
         </div>
         <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
           {t('sent_prefix')} {formatDate(msg.sent_at ?? msg.created_at ?? '')}
