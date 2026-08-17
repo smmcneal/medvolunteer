@@ -424,6 +424,19 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     automation_tab: '⚡ Automation',
     tags_tab: '🏷 Tags',
     flags_tab: '🚩 Flags',
+    users_tab: '👤 Users',
+
+    // Users & Permissions
+    users_section: 'Dashboard Users',
+    users_desc: 'Admins who can sign in to this dashboard. Owners can invite, re-role, and remove other users.',
+    users_owner_only: 'Only owners can invite or manage other dashboard users.',
+    invite_admin_btn: '+ Invite User',
+    send_invite_btn: 'Send Invite',
+    role_label: 'Role',
+    role_owner: 'Owner',
+    role_admin: 'Admin',
+    you_label: 'you',
+    remove_admin_confirm: 'Remove dashboard access for',
 
     // Learning
     learning_title: 'Learning',
@@ -857,6 +870,19 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     automation_tab: '⚡ Automatización',
     tags_tab: '🏷 Etiquetas',
     flags_tab: '🚩 Marcadores',
+    users_tab: '👤 Usuarios',
+
+    // Usuarios y permisos
+    users_section: 'Usuarios del panel',
+    users_desc: 'Administradores que pueden iniciar sesión en este panel. Los propietarios pueden invitar, cambiar el rol y eliminar a otros usuarios.',
+    users_owner_only: 'Solo los propietarios pueden invitar o administrar a otros usuarios del panel.',
+    invite_admin_btn: '+ Invitar usuario',
+    send_invite_btn: 'Enviar invitación',
+    role_label: 'Rol',
+    role_owner: 'Propietario',
+    role_admin: 'Administrador',
+    you_label: 'tú',
+    remove_admin_confirm: 'Eliminar el acceso al panel de',
 
     // Learning
     learning_title: 'Aprendizaje',

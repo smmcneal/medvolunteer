@@ -1,7 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_noStore as noStore } from 'next/cache'
+import { getAuthUser } from '@/lib/auth'
 import SettingsView from './SettingsView'
-import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule, Category } from '@/types/database'
+import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule, Category, AdminUserRow, AdminRole } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,7 +10,7 @@ async function fetchData() {
   noStore()
   const supabase = createAdminClient()
 
-  const [{ data: org }, { data: locations }, { data: tags }, { data: flags }, { data: holidays }, { data: automationRules }, { data: autoMsgRules }, { data: templates }, { data: catReqs }, { data: coordinators }, { data: activeVols }, { data: docRules }, { data: categoriesData }] = await Promise.all([
+  const [{ data: org }, { data: locations }, { data: tags }, { data: flags }, { data: holidays }, { data: automationRules }, { data: autoMsgRules }, { data: templates }, { data: catReqs }, { data: coordinators }, { data: activeVols }, { data: docRules }, { data: categoriesData }, { data: adminRows }] = await Promise.all([
     supabase.from('organizations').select('*').limit(1).single(),
     supabase.from('locations').select('*').order('created_at', { ascending: true }),
     supabase.from('org_tags').select('*').order('name'),
@@ -23,7 +24,27 @@ async function fetchData() {
     supabase.from('volunteers').select('id, first_name, last_name').eq('status', 'volunteer').order('first_name', { ascending: true }),
     supabase.from('document_automation_rules').select('*').order('created_at', { ascending: true }),
     supabase.from('categories').select('*').order('sort_order'),
+    supabase.from('admin_users').select('*').order('created_at', { ascending: true }),
   ])
+
+  // admin_users only stores user_id + role — email/name live on auth.users,
+  // which requires the service-role admin API to read.
+  const { data: authUsers } = await supabase.auth.admin.listUsers({ page: 1, perPage: 10000 })
+  const adminUsers: AdminUserRow[] = (adminRows ?? []).map(row => {
+    const authUser = authUsers?.users.find(u => u.id === row.user_id)
+    return {
+      user_id: row.user_id,
+      role: row.role as AdminRole,
+      invited_by: row.invited_by,
+      created_at: row.created_at,
+      email: authUser?.email ?? '(unknown)',
+      first_name: (authUser?.user_metadata?.first_name as string | undefined) ?? null,
+      last_name: (authUser?.user_metadata?.last_name as string | undefined) ?? null,
+    }
+  })
+
+  const authUser = await getAuthUser()
+  const myRole = adminUsers.find(a => a.user_id === authUser?.id)?.role ?? null
 
   return {
     org: org as Organization | null,
@@ -39,11 +60,14 @@ async function fetchData() {
     activeVolunteers: (activeVols ?? []) as { id: string; first_name: string; last_name: string }[],
     documentAutomationRules: (docRules ?? []) as DocumentAutomationRule[],
     categories: (categoriesData ?? []) as Category[],
+    adminUsers,
+    currentUserId: authUser?.id ?? '',
+    myRole,
   }
 }
 
 export default async function SettingsPage() {
-  const { org, locations, tags, flags, holidays, automationRules, autoMessageRules, messageTemplates, categoryRequirements, categoryCoordinators, activeVolunteers, documentAutomationRules, categories } = await fetchData()
+  const { org, locations, tags, flags, holidays, automationRules, autoMessageRules, messageTemplates, categoryRequirements, categoryCoordinators, activeVolunteers, documentAutomationRules, categories, adminUsers, currentUserId, myRole } = await fetchData()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -75,6 +99,9 @@ export default async function SettingsPage() {
         activeVolunteers={activeVolunteers}
         initialDocRules={documentAutomationRules}
         categories={categories}
+        initialAdminUsers={adminUsers}
+        currentUserId={currentUserId}
+        myRole={myRole}
       />
     </div>
   )

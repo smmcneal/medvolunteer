@@ -469,3 +469,18 @@ export interface OrgHoliday {
   is_recurring: boolean
   created_at: string
 }
+
+export type AdminRole = 'owner' | 'admin'
+
+export interface AdminUser {
+  user_id: string
+  role: AdminRole
+  invited_by: string | null
+  created_at: string
+}
+
+export interface AdminUserRow extends AdminUser {
+  email: string
+  first_name: string | null
+  last_name: string | null
+}

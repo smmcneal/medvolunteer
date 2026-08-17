@@ -32,9 +32,10 @@ import {
 } from './actions'
 import TagsManager from './TagsManager'
 import FlagsManager from './FlagsManager'
+import UsersManager from './UsersManager'
 import { useAdminT } from '@/lib/admin-lang'
 
-type Tab = 'profile' | 'locations' | 'integrations' | 'categories' | 'holidays' | 'automation' | 'tags' | 'flags'
+type Tab = 'profile' | 'locations' | 'integrations' | 'categories' | 'holidays' | 'automation' | 'tags' | 'flags' | 'users'
 
 
 interface OrgSettings {
@@ -67,9 +68,12 @@ interface Props {
   activeVolunteers: { id: string; first_name: string; last_name: string }[]
   initialDocRules: DocumentAutomationRule[]
   categories: Category[]
+  initialAdminUsers: AdminUserRow[]
+  currentUserId: string
+  myRole: AdminRole | null
 }
 
-export default function SettingsView({ org, locations: initialLocations, initialTags, initialFlags, initialHolidays, initialAutomationRules, initialAutoMessageRules, messageTemplates, initialCategoryRequirements, initialCoordinators, activeVolunteers, initialDocRules, categories }: Props) {
+export default function SettingsView({ org, locations: initialLocations, initialTags, initialFlags, initialHolidays, initialAutomationRules, initialAutoMessageRules, messageTemplates, initialCategoryRequirements, initialCoordinators, activeVolunteers, initialDocRules, categories, initialAdminUsers, currentUserId, myRole }: Props) {
   const t = useAdminT()
   const [tab, setTab] = useState<Tab>('profile')
 
@@ -126,6 +130,7 @@ export default function SettingsView({ org, locations: initialLocations, initial
         {tab === 'automation'  && <AutomationTab initialRules={initialAutomationRules} orgTags={initialTags} orgFlags={initialFlags} initialAutoMessageRules={initialAutoMessageRules} messageTemplates={messageTemplates} initialDocRules={initialDocRules} activeVolunteers={activeVolunteers} categories={categories} />}
         {tab === 'tags'        && <TagsManager initialTags={initialTags} />}
         {tab === 'flags'        && <FlagsManager initialFlags={initialFlags} />}
+        {tab === 'users'        && <UsersManager initialAdminUsers={initialAdminUsers} currentUserId={currentUserId} myRole={myRole} />}
       </div>
     </div>
   )
