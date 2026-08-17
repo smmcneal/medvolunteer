@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, MapPin, Plug, LayoutGrid, CalendarDays, Zap, Tag, Flag } from 'lucide-react'
-import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule, Category } from '@/types/database'
+import { Building2, MapPin, Plug, LayoutGrid, CalendarDays, Zap, Tag, Flag, Users } from 'lucide-react'
+import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule, Category, AdminUserRow, AdminRole } from '@/types/database'
 import {
   updateOrgProfile,
   updateOrgSettings,
@@ -96,6 +96,7 @@ export default function SettingsView({ org, locations: initialLocations, initial
           { key: 'automation',   labelKey: 'automation_tab',   icon: Zap },
           { key: 'tags',         labelKey: 'tags_tab',         icon: Tag },
           { key: 'flags',        labelKey: 'flags_tab',        icon: Flag },
+          { key: 'users',        labelKey: 'users_tab',        icon: Users },
         ] as { key: Tab; labelKey: string; icon: React.ElementType }[]).map(tabItem => (
           <button
             key={tabItem.key}
