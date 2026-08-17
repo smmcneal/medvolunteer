@@ -103,12 +103,14 @@ export default function ShiftsView({
   volunteers,
   holidays = [],
   categories = [],
+  extendedHours = false,
 }: {
   shifts: ShiftWithRoster[]
   locations: Pick<Location, 'id' | 'name'>[]
   volunteers: VolunteerLike[]
   holidays?: { id: string; name: string; date: string; is_recurring: boolean }[]
   categories?: { id: string; slug: string; name: string }[]
+  extendedHours?: boolean
 }) {
   const router = useRouter()
   const t = useAdminT()
@@ -827,6 +829,7 @@ export default function ShiftsView({
                 shifts={shifts}
                 onSelectShift={id => setSelectedId(id)}
                 holidays={holidays ?? []}
+                extendedHours={extendedHours}
               />
             </div>
           )}
@@ -855,6 +858,7 @@ export default function ShiftsView({
                 shifts={shifts}
                 onSelectShift={id => setSelectedId(id)}
                 holidays={holidays ?? []}
+                extendedHours={extendedHours}
               />
             </div>
           )}

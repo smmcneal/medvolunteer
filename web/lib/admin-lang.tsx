@@ -425,6 +425,10 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     tags_tab: '🏷 Tags',
     flags_tab: '🚩 Flags',
     users_tab: '👤 Users',
+    extended_hours_title: 'Extended hours',
+    extended_hours_desc: 'When enabled, the shift calendar’s Day and Week views extend to show shifts scheduled between 9pm and 6am.',
+    enable: 'Enable',
+    disable: 'Disable',
 
     // Users & Permissions
     users_section: 'Dashboard Users',
@@ -871,6 +875,10 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     tags_tab: '🏷 Etiquetas',
     flags_tab: '🚩 Marcadores',
     users_tab: '👤 Usuarios',
+    extended_hours_title: 'Horario extendido',
+    extended_hours_desc: 'Cuando está habilitado, las vistas de Día y Semana del calendario de turnos se extienden para mostrar turnos programados entre las 9pm y las 6am.',
+    enable: 'Habilitar',
+    disable: 'Deshabilitar',
 
     // Usuarios y permisos
     users_section: 'Usuarios del panel',
