@@ -10,6 +10,7 @@ import type {
   Volunteer, Credential, Document, BackgroundCheck,
   TimeEntry, LessonCompletion, Location,
   OrgTag, OrgFlag, VolunteerFlag, VolunteerNote, VolunteerUpload, Category,
+  ApplicationFieldAnswer,
 } from '@/types/database'
 import type { VolunteerDetail, OnboardingStageWithProgress } from './page'
 import PipelinePhaseBar from './PipelinePhaseBar'
@@ -68,6 +69,7 @@ export default function VolunteerTabs({
   orgLocations,
   categories,
   jotformApiKey,
+  applicationResponses,
 }: {
   volunteer: VolunteerDetail
   credentials: Credential[]
@@ -86,6 +88,7 @@ export default function VolunteerTabs({
   orgLocations?: Pick<Location, 'id' | 'name'>[]
   categories?: Category[]
   jotformApiKey?: string | null
+  applicationResponses?: Record<string, ApplicationFieldAnswer> | null
 }) {
   const t = useAdminT()
   const [activeTab, setActiveTab] = useState<Tab>('Info')
@@ -172,7 +175,7 @@ export default function VolunteerTabs({
 
         {/* ── Info ── */}
         {activeTab === 'Info' && (
-          <InfoTab volunteer={volunteer} appliedTags={appliedTags} orgTags={orgTags} orgLocations={orgLocations ?? []} categories={categories ?? []} />
+          <InfoTab volunteer={volunteer} appliedTags={appliedTags} orgTags={orgTags} orgLocations={orgLocations ?? []} categories={categories ?? []} applicationResponses={applicationResponses ?? null} />
         )}
 
         {/* ── Onboarding ── */}

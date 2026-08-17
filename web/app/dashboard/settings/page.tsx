@@ -2,7 +2,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_noStore as noStore } from 'next/cache'
 import { getAuthUser } from '@/lib/auth'
 import SettingsView from './SettingsView'
-import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule, Category, AdminUserRow, AdminRole } from '@/types/database'
+import type { VersionSummary } from './ApplicationFormManager'
+import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule, Category, AdminUserRow, AdminRole, ApplicationFormField, ApplicationFormVersion } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +11,7 @@ async function fetchData() {
   noStore()
   const supabase = createAdminClient()
 
-  const [{ data: org }, { data: locations }, { data: tags }, { data: flags }, { data: holidays }, { data: automationRules }, { data: autoMsgRules }, { data: templates }, { data: catReqs }, { data: coordinators }, { data: activeVols }, { data: docRules }, { data: categoriesData }, { data: adminRows }] = await Promise.all([
+  const [{ data: org }, { data: locations }, { data: tags }, { data: flags }, { data: holidays }, { data: automationRules }, { data: autoMsgRules }, { data: templates }, { data: catReqs }, { data: coordinators }, { data: activeVols }, { data: docRules }, { data: categoriesData }, { data: adminRows }, { data: formVersions }] = await Promise.all([
     supabase.from('organizations').select('*').limit(1).single(),
     supabase.from('locations').select('*').order('created_at', { ascending: true }),
     supabase.from('org_tags').select('*').order('name'),
@@ -25,6 +26,7 @@ async function fetchData() {
     supabase.from('document_automation_rules').select('*').order('created_at', { ascending: true }),
     supabase.from('categories').select('*').order('sort_order'),
     supabase.from('admin_users').select('*').order('created_at', { ascending: true }),
+    supabase.from('application_form_versions').select('*').order('created_at', { ascending: false }).limit(50),
   ])
 
   // admin_users only stores user_id + role — email/name live on auth.users,
@@ -46,6 +48,19 @@ async function fetchData() {
   const authUser = await getAuthUser()
   const myRole = adminUsers.find(a => a.user_id === authUser?.id)?.role ?? null
 
+  const versions = (formVersions ?? []) as ApplicationFormVersion[]
+  const applicationFormFields = versions[0]?.fields ?? []
+  const applicationFormVersions: VersionSummary[] = versions.map(v => ({
+    id: v.id,
+    created_at: v.created_at,
+    created_by_email: (v.created_by && authUsers?.users.find(u => u.id === v.created_by)?.email) || null,
+    field_count: v.fields.length,
+    restored_from: v.restored_from,
+  }))
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const applyUrl = `${siteUrl}/apply`
+
   return {
     org: org as Organization | null,
     locations: (locations ?? []) as Location[],
@@ -63,11 +78,14 @@ async function fetchData() {
     adminUsers,
     currentUserId: authUser?.id ?? '',
     myRole,
+    applicationFormFields: applicationFormFields as ApplicationFormField[],
+    applicationFormVersions,
+    applyUrl,
   }
 }
 
 export default async function SettingsPage() {
-  const { org, locations, tags, flags, holidays, automationRules, autoMessageRules, messageTemplates, categoryRequirements, categoryCoordinators, activeVolunteers, documentAutomationRules, categories, adminUsers, currentUserId, myRole } = await fetchData()
+  const { org, locations, tags, flags, holidays, automationRules, autoMessageRules, messageTemplates, categoryRequirements, categoryCoordinators, activeVolunteers, documentAutomationRules, categories, adminUsers, currentUserId, myRole, applicationFormFields, applicationFormVersions, applyUrl } = await fetchData()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -102,6 +120,9 @@ export default async function SettingsPage() {
         initialAdminUsers={adminUsers}
         currentUserId={currentUserId}
         myRole={myRole}
+        applicationFormFields={applicationFormFields}
+        applicationFormVersions={applicationFormVersions}
+        applyUrl={applyUrl}
       />
     </div>
   )

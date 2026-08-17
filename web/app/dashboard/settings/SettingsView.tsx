@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, MapPin, Plug, LayoutGrid, CalendarDays, Zap, Tag, Flag } from 'lucide-react'
-import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule, Category } from '@/types/database'
+import { Building2, MapPin, Plug, LayoutGrid, CalendarDays, Zap, Tag, Flag, ClipboardList } from 'lucide-react'
+import type { Organization, Location, OrgTag, OrgFlag, OrgHoliday, FormAutomationRule, AutoMessageRule, MessageTemplate, CategoryRequirement, CategoryCoordinator, DocumentAutomationRule, Category, ApplicationFormField, AdminUserRow, AdminRole } from '@/types/database'
 import {
   updateOrgProfile,
   updateOrgSettings,
@@ -33,9 +33,10 @@ import {
 import TagsManager from './TagsManager'
 import FlagsManager from './FlagsManager'
 import UsersManager from './UsersManager'
+import ApplicationFormManager, { type VersionSummary } from './ApplicationFormManager'
 import { useAdminT } from '@/lib/admin-lang'
 
-type Tab = 'profile' | 'locations' | 'integrations' | 'categories' | 'holidays' | 'automation' | 'tags' | 'flags' | 'users'
+type Tab = 'profile' | 'locations' | 'integrations' | 'categories' | 'holidays' | 'automation' | 'tags' | 'flags' | 'application_form' | 'users'
 
 
 interface OrgSettings {
@@ -71,9 +72,12 @@ interface Props {
   initialAdminUsers: AdminUserRow[]
   currentUserId: string
   myRole: AdminRole | null
+  applicationFormFields: ApplicationFormField[]
+  applicationFormVersions: VersionSummary[]
+  applyUrl: string
 }
 
-export default function SettingsView({ org, locations: initialLocations, initialTags, initialFlags, initialHolidays, initialAutomationRules, initialAutoMessageRules, messageTemplates, initialCategoryRequirements, initialCoordinators, activeVolunteers, initialDocRules, categories, initialAdminUsers, currentUserId, myRole }: Props) {
+export default function SettingsView({ org, locations: initialLocations, initialTags, initialFlags, initialHolidays, initialAutomationRules, initialAutoMessageRules, messageTemplates, initialCategoryRequirements, initialCoordinators, activeVolunteers, initialDocRules, categories, initialAdminUsers, currentUserId, myRole, applicationFormFields, applicationFormVersions, applyUrl }: Props) {
   const t = useAdminT()
   const [tab, setTab] = useState<Tab>('profile')
 
@@ -96,6 +100,7 @@ export default function SettingsView({ org, locations: initialLocations, initial
           { key: 'automation',   labelKey: 'automation_tab',   icon: Zap },
           { key: 'tags',         labelKey: 'tags_tab',         icon: Tag },
           { key: 'flags',        labelKey: 'flags_tab',        icon: Flag },
+          { key: 'application_form', labelKey: 'application_form_tab', icon: ClipboardList },
         ] as { key: Tab; labelKey: string; icon: React.ElementType }[]).map(tabItem => (
           <button
             key={tabItem.key}
@@ -130,6 +135,16 @@ export default function SettingsView({ org, locations: initialLocations, initial
         {tab === 'automation'  && <AutomationTab initialRules={initialAutomationRules} orgTags={initialTags} orgFlags={initialFlags} initialAutoMessageRules={initialAutoMessageRules} messageTemplates={messageTemplates} initialDocRules={initialDocRules} activeVolunteers={activeVolunteers} categories={categories} />}
         {tab === 'tags'        && <TagsManager initialTags={initialTags} />}
         {tab === 'flags'        && <FlagsManager initialFlags={initialFlags} />}
+        {tab === 'application_form' && (
+          <ApplicationFormManager
+            initialFields={applicationFormFields}
+            versions={applicationFormVersions}
+            orgTagNames={initialTags.map(tg => tg.name)}
+            categoryNames={categories.filter(c => !c.is_archived).map(c => c.name)}
+            automationValues={Array.from(new Set(initialAutomationRules.map(r => r.field_value)))}
+            applyUrl={applyUrl}
+          />
+        )}
         {tab === 'users'        && <UsersManager initialAdminUsers={initialAdminUsers} currentUserId={currentUserId} myRole={myRole} />}
       </div>
     </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Location, OrgTag, Category } from '@/types/database'
+import type { Location, OrgTag, Category, ApplicationFieldAnswer, CommunicationPreference } from '@/types/database'
 import type { VolunteerDetail } from './page'
 import TagsPanel from './TagsPanel'
 import { updateVolunteerInfo, updateVolunteerLocations } from './actions'
@@ -33,14 +33,20 @@ export default function InfoTab({
   orgTags,
   orgLocations = [],
   categories = [],
+  applicationResponses = null,
 }: {
   volunteer: VolunteerDetail
   appliedTags: OrgTag[]
   orgTags: OrgTag[]
   orgLocations?: Pick<Location, 'id' | 'name'>[]
   categories?: Category[]
+  applicationResponses?: Record<string, ApplicationFieldAnswer> | null
 }) {
   const t = useAdminT()
+
+  function commPrefLabel(pref: CommunicationPreference): string {
+    return t(`comm_pref_${pref}`)
+  }
   // Local copy of mutable fields so saves reflect immediately
   const [v, setV] = useState(initialVolunteer)
 
@@ -284,6 +290,7 @@ export default function InfoTab({
             { label: t('last_name'),         value: v.last_name },
             { label: t('email'),             value: v.email },
             { label: t('phone'),             value: v.phone ?? '—' },
+            { label: t('communication_preference'), value: commPrefLabel(v.communication_preference) },
             { label: t('status_field'),      value: STATUS_LABELS[v.status] ?? v.status },
             { label: t('emergency_contact'), value: v.emergency_contact_name ?? '—' },
             { label: t('emergency_phone'),   value: v.emergency_contact_phone ?? '—' },
@@ -339,6 +346,25 @@ export default function InfoTab({
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Application Responses ── */}
+      {applicationResponses && Object.keys(applicationResponses).length > 0 && (
+        <div>
+          <p style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
+            {t('application_responses_label')}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {Object.values(applicationResponses).map((answer, i) => (
+              <div key={i} style={{ padding: '12px 14px', background: '#fafafa', borderRadius: '8px', border: '1px solid #f3f4f6' }}>
+                <p style={{ fontSize: '11px', fontWeight: 500, color: '#9ca3af', marginBottom: '4px' }}>{answer.label}</p>
+                <p style={{ fontSize: '14px', color: '#111827', fontWeight: 500 }}>
+                  {Array.isArray(answer.value) ? answer.value.join(', ') : answer.value}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       )}

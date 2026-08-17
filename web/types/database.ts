@@ -30,6 +30,49 @@ export type PipelinePhase =
 
 export type FlagSeverity = 'info' | 'warning' | 'critical'
 
+export type CommunicationPreference = 'email' | 'phone' | 'both'
+
+export type ApplicationFieldType = 'text' | 'dropdown' | 'checkbox'
+export type ApplicationOptionSource = 'manual' | 'tags' | 'categories' | 'automations'
+
+/** One custom field in an application_form_versions.fields snapshot. */
+export interface ApplicationFormField {
+  id: string
+  label: string
+  field_type: ApplicationFieldType
+  option_source: ApplicationOptionSource
+  /** Manual choices; ignored when option_source !== 'manual'. */
+  options: string[]
+  required: boolean
+  sort_order: number
+}
+
+export interface ApplicationFormVersion {
+  id: string
+  org_id: string
+  fields: ApplicationFormField[]
+  created_at: string
+  created_by: string | null
+  restored_from: string | null
+}
+
+/** Answer to one custom field, self-describing so history survives field edits/removal. */
+export interface ApplicationFieldAnswer {
+  label: string
+  field_type: ApplicationFieldType
+  value: string | string[]
+}
+
+export interface ApplicationSubmission {
+  id: string
+  org_id: string
+  volunteer_id: string
+  form_version_id: string | null
+  responses: Record<string, ApplicationFieldAnswer>
+  ip_address: string | null
+  created_at: string
+}
+
 export type StageType =
   | 'document_sign'
   | 'background_check'
@@ -78,6 +121,7 @@ export interface Volunteer {
   photo_url: string | null
   category: VolunteerCategory
   volunteer_categories: VolunteerCategory[]
+  communication_preference: CommunicationPreference
   status: VolunteerStatus
   pipeline_phase: PipelinePhase
   onboarding_workflow_id: string | null
