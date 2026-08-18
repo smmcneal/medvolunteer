@@ -1,0 +1,122 @@
+name: Auto Answer Mysteries
+
+# QA_Twilight Zone items are questions ("where does X go?", "does Y work on the
+# app?") — not build specs. This workflow investigates the codebase and writes
+# an answer back onto the Notion task, then moves it to Testing for human
+# review. It never edits files, never touches git branches, never opens PRs.
+
+on:
+  schedule:
+    - cron: '0 4 * * *'   # nightly 4am UTC (after bug 2am + feature 3am workflows)
+  workflow_dispatch:
+    inputs:
+      max_tasks:
+        description: 'Max mysteries to investigate this run (default: 3)'
+        default: '3'
+        required: false
+
+jobs:
+  auto-answer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read   # read-only by design — investigations must not be able to push
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Investigate mysteries
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_QA_DB_ID: ${{ secrets.NOTION_QA_DB_ID }}
+          # Authenticates Claude Code against the Claude subscription (Pro/Max) quota,
+          # NOT pay-as-you-go API credit. Minted with `claude setup-token` (valid ~1 year).
+          # Do not add ANTHROPIC_API_KEY here — if both are set the API key wins and the
+          # run fails with "Credit balance is too low".
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          MAX_TASKS: ${{ github.event.inputs.max_tasks || '3' }}
+        run: |
+          set -euo pipefail
+
+          # Fetch eligible mysteries (Ready, or Backlog with a non-empty spec)
+          node scripts/notion-sync.cjs list-ready-mysteries --max "$MAX_TASKS" > /tmp/mysteries.json
+          TASK_COUNT=$(node -pe "JSON.parse(require('fs').readFileSync('/tmp/mysteries.json','utf8')).length")
+          echo "Mysteries to investigate: $TASK_COUNT"
+
+          if [ "$TASK_COUNT" -eq 0 ]; then
+            echo "No eligible mysteries — nothing to do."
+            exit 0
+          fi
+
+          for i in $(seq 0 $((TASK_COUNT - 1))); do
+            # PAGE_ID is the stable identity. Task IDs are free text in Notion and may
+            # collide — never look up by them.
+            PAGE_ID=$(node -pe    "JSON.parse(require('fs').readFileSync('/tmp/mysteries.json','utf8'))[$i].pageId || ''")
+            TASK_ID=$(node -pe    "JSON.parse(require('fs').readFileSync('/tmp/mysteries.json','utf8'))[$i].taskId || ''")
+            TITLE=$(node -pe      "JSON.parse(require('fs').readFileSync('/tmp/mysteries.json','utf8'))[$i].title || ''")
+            DESCRIPTION=$(node -pe "JSON.parse(require('fs').readFileSync('/tmp/mysteries.json','utf8'))[$i].description || ''")
+
+            if [ -z "$PAGE_ID" ] || [ -z "$TASK_ID" ] || [ -z "$TITLE" ]; then
+              echo "Skipping mystery $i — missing pageId, taskId or title"
+              continue
+            fi
+
+            echo ""
+            echo "=== [$((i+1))/$TASK_COUNT] $TASK_ID: $TITLE ==="
+
+            # Mark In Progress in QA_Twilight Zone DB
+            node scripts/notion-sync.cjs mystery-status "$PAGE_ID" "In Progress"
+
+            # Build prompt file (avoids heredoc-in-YAML quoting issues)
+            PROMPT_FILE=$(mktemp /tmp/prompt-XXXXXX.txt)
+            printf '%s\n' \
+              "You are investigating a QA question about the MedVolunteer codebase (Next.js app in web/, Supabase schema in supabase/)." \
+              "" \
+              "Question ID: $TASK_ID" \
+              "Question: $TITLE" \
+              "Details: $DESCRIPTION" \
+              "" \
+              "Instructions:" \
+              "1. Read CLAUDE.md first for project structure, then search the codebase to answer the question." \
+              "2. Do NOT modify any files, and do NOT run git or npm commands — this is a read-only investigation." \
+              "3. Write the answer for a non-developer: plain language first, then cite the relevant file paths / routes so a developer can verify." \
+              "4. If the answer is 'this feature does not exist yet', say so plainly and note where it would naturally live." \
+              "5. Your final message IS the answer that gets posted to the Notion task — make it complete and self-contained, no preamble." \
+              > "$PROMPT_FILE"
+
+            # stdout (the final answer) and stderr are captured separately: the
+            # answer file must contain only the answer text.
+            set +e
+            claude -p "$(cat "$PROMPT_FILE")" --dangerously-skip-permissions > /tmp/answer.txt 2> /tmp/claude-err.txt
+            CLAUDE_EXIT=$?
+            set -e
+            rm -f "$PROMPT_FILE"
+            echo "--- answer ---"; cat /tmp/answer.txt; echo "--- stderr ---"; cat /tmp/claude-err.txt
+
+            # Account-level failures will hit every remaining task identically —
+            # abort the whole run rather than silently reverting all of them to Ready.
+            if cat /tmp/answer.txt /tmp/claude-err.txt | grep -qiE 'credit balance is too low|invalid x-api-key|authentication_error|oauth token|token (has )?expired|unauthorized|rate limit|usage limit'; then
+              echo "::error::$TASK_ID: Claude Code could not run — $(cat /tmp/answer.txt /tmp/claude-err.txt | grep -ioE 'credit balance is too low|invalid x-api-key|authentication_error|oauth token[^.]*|token (has )?expired|unauthorized|rate limit|usage limit' | head -1). Re-mint CLAUDE_CODE_OAUTH_TOKEN with 'claude setup-token', or wait out the usage window."
+              node scripts/notion-sync.cjs mystery-status "$PAGE_ID" "Ready"
+              exit 1
+            fi
+
+            if [ "$CLAUDE_EXIT" -ne 0 ] || [ ! -s /tmp/answer.txt ]; then
+              echo "::warning::$TASK_ID: no answer produced (exit $CLAUDE_EXIT) — reverting to Ready"
+              node scripts/notion-sync.cjs mystery-status "$PAGE_ID" "Ready"
+              continue
+            fi
+
+            # Post the answer to the Notion page and move it to Testing
+            node scripts/notion-sync.cjs answer "$PAGE_ID" /tmp/answer.txt
+            echo "$TASK_ID: answered ✓"
+          done

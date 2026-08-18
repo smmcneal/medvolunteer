@@ -2,9 +2,10 @@
 /**
  * notion-sync.cjs — Notion ↔ MedVolunteer automation helper
  *
- * Two databases:
- *   Dev Tasks & QA   (NOTION_DEV_TASKS_DB_ID)         — bugs / dev tasks, IDs look like DEV-00010
- *   Feature Requests (NOTION_FEATURE_REQUESTS_DB_ID)  — features,         IDs look like AB-00009
+ * Three databases:
+ *   Dev Tasks & Bugs  (NOTION_DEV_TASKS_DB_ID)         — bugs / dev tasks, IDs look like DEV-00010
+ *   Feature Requests  (NOTION_FEATURE_REQUESTS_DB_ID)  — features,         IDs look like AB-00009
+ *   QA_Twilight Zone  (NOTION_QA_DB_ID)                — mysteries,        IDs look like MYSTRY-00004
  *
  * Uses:
  *   node scripts/notion-sync.cjs find    DEV-00010
@@ -14,19 +15,34 @@
  *   node scripts/notion-sync.cjs deploy  DEV-00010 "https://medvolunteer-abc123.vercel.app"
  *   node scripts/notion-sync.cjs hook    (PostToolUse stdin mode — called by Claude Code)
  *   node scripts/notion-sync.cjs branch  (auto-detect branch, set "In Progress")
- *   node scripts/notion-sync.cjs list-ready          [--max 3]
- *   node scripts/notion-sync.cjs list-ready-features [--max 3]
+ *   node scripts/notion-sync.cjs list-ready           [--max 3]
+ *   node scripts/notion-sync.cjs list-ready-features  [--max 3]
+ *   node scripts/notion-sync.cjs list-ready-mysteries [--max 3]
  *   node scripts/notion-sync.cjs feature-status <AB-00009|pageId> "In Progress"
  *   node scripts/notion-sync.cjs feature-pr     <AB-00009|pageId> <url>
+ *   node scripts/notion-sync.cjs mystery-status <MYSTRY-00004|pageId> "In Progress"
+ *   node scripts/notion-sync.cjs answer         <MYSTRY-00004|pageId> <answer-file>
  *
  * Every "task selector" argument accepts either a human task ID (AB-00009) or a
  * raw Notion page ID (UUID). Prefer the page ID in automation: task IDs are free
  * text in Notion and are not guaranteed unique.
  *
+ * Nightly pickup policy (list-ready / list-ready-features / list-ready-mysteries):
+ *   Ready        — always eligible
+ *   Backlog      — eligible only with a non-empty Component/File spec (empty specs
+ *                  stay parked; an empty spec makes the agent invent the feature)
+ *   Code Review  — eligible only when the task's PR is dead (closed without merge,
+ *                  or no PR Link at all). Open PRs are a human's to merge; merged
+ *                  PRs mean the status is just stale. Requires GH_TOKEN to verify —
+ *                  without it Code Review tasks are skipped, never rebuilt blind.
+ *                  (Mysteries never carry PRs, so this rule is moot there.)
+ *
  * Required env vars:
  *   NOTION_TOKEN                   — Notion integration secret
- *   NOTION_DEV_TASKS_DB_ID         — Dev Tasks & QA database ID
+ *   NOTION_DEV_TASKS_DB_ID         — Dev Tasks & Bugs database ID
  *   NOTION_FEATURE_REQUESTS_DB_ID  — Feature Requests database ID (feature commands only)
+ *   NOTION_QA_DB_ID                — QA_Twilight Zone database ID (mystery commands only)
+ *   GH_TOKEN / GITHUB_TOKEN        — optional; enables the dead-PR check for Code Review
  */
 'use strict';
 
@@ -57,6 +73,15 @@ function featureDb() {
   const id = process.env.NOTION_FEATURE_REQUESTS_DB_ID;
   if (!id) {
     console.error('[notion-sync] Missing NOTION_FEATURE_REQUESTS_DB_ID env var.');
+    process.exit(1);
+  }
+  return id;
+}
+
+function qaDb() {
+  const id = process.env.NOTION_QA_DB_ID;
+  if (!id) {
+    console.error('[notion-sync] Missing NOTION_QA_DB_ID env var.');
     process.exit(1);
   }
   return id;
@@ -103,6 +128,13 @@ async function statusFilter(dbId, value) {
     throw new Error(`"Status" property is type "${type}" — expected select or status.`);
   }
   return { property: 'Status', [type]: { equals: value } };
+}
+
+/** OR-filter over several Status values. */
+async function statusOrFilter(dbId, values) {
+  const filters = [];
+  for (const v of values) filters.push(await statusFilter(dbId, v));
+  return filters.length === 1 ? filters[0] : { or: filters };
 }
 
 /** True if `name` is a valid option for the Status property. */
@@ -205,13 +237,57 @@ async function setLink(dbId, pageId, field, url) {
   return res.json();
 }
 
-/** Query a database for Ready tasks, priority-triaged, oldest first. */
-async function listReady(dbId, max) {
+/** Read a link-ish property's value regardless of url vs rich_text typing. */
+function readLink(page, field) {
+  const prop = page.properties[field];
+  if (!prop) return '';
+  if (prop.type === 'url') return prop.url ?? '';
+  if (prop.type === 'rich_text') return (prop.rich_text ?? []).map(t => t.plain_text).join('').trim();
+  return '';
+}
+
+/**
+ * Is this PR dead (closed without merge)?
+ * Returns true (dead), false (open or merged — leave the task alone), or
+ * null (cannot verify: bad URL, no token, or API error).
+ */
+async function prIsDead(prUrl) {
+  const m = String(prUrl).match(/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/);
+  if (!m) return null;
+  const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+  if (!token) return null;
+  const res = await fetch(`https://api.github.com/repos/${m[1]}/${m[2]}/pulls/${m[3]}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'User-Agent': 'notion-sync',
+    },
+  });
+  if (!res.ok) return null;
+  const pr = await res.json();
+  if (pr.state === 'open') return false;
+  return pr.merged_at ? false : true;
+}
+
+/**
+ * Query a database for tasks the nightly agent may pick up, priority-triaged,
+ * oldest first. Eligible statuses and their guards (see header):
+ *   Ready        — always
+ *   Backlog      — only with a non-empty Component/File spec
+ *   Code Review  — only when the PR is verifiably dead (closed without merge),
+ *                  or the task has no PR Link at all
+ * Pass `statuses` to narrow (e.g. mysteries have no Code Review pickup).
+ * With `requireSpec` (the default — used by the code-building DBs), tasks with an
+ * empty Component/File are skipped in EVERY status, not just Backlog: an empty
+ * spec is how AB-00006 got invented from a Ready task. Mysteries pass false —
+ * a title alone can be a perfectly good question.
+ */
+async function listReady(dbId, max, statuses = ['Ready', 'Backlog', 'Code Review'], requireSpec = true) {
   const res = await fetch(`${NOTION_BASE}/databases/${dbId}/query`, {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify({
-      filter: await statusFilter(dbId, 'Ready'),
+      filter: await statusOrFilter(dbId, statuses),
       sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
     }),
   });
@@ -230,28 +306,61 @@ async function listReady(dbId, max) {
     return pa - pb;
   });
 
-  return pages.slice(0, max).map(page => {
+  const picked = [];
+  for (const page of pages) {
+    if (picked.length >= max) break;
+
     const fullTitle = (page.properties['Task ID']?.title ?? [])
       .map(t => t.plain_text).join('');
     const taskId = extractTaskId(fullTitle) ?? '';
-    const title = fullTitle.replace(/^(?:DEV|AB)-\d+:\s*/i, '').trim();
+    const title = fullTitle.replace(/^(?:DEV|AB|MYSTRY)-\d+:\s*/i, '').trim();
     const description = (page.properties['Component/File']?.rich_text ?? [])
       .map(t => t.plain_text).join('').trim();
-    return { pageId: page.id, taskId, title, description };
-  }).filter(t => t.taskId !== '' && t.title !== '');
+    if (taskId === '' || title === '') continue;
+
+    const statusProp = page.properties['Status'];
+    const status = statusProp?.select?.name ?? statusProp?.status?.name ?? '';
+
+    if (description === '' && (requireSpec || status === 'Backlog')) {
+      console.error(`[notion-sync] ${taskId}: empty Component/File spec (status: ${status}) — skipping; an empty spec makes the agent invent the work.`);
+      continue;
+    }
+
+    if (status === 'Code Review') {
+      const prLink = readLink(page, 'PR Link');
+      if (prLink) {
+        const dead = await prIsDead(prLink);
+        if (dead === false) {
+          console.error(`[notion-sync] ${taskId}: PR is open or merged — leaving it alone.`);
+          continue;
+        }
+        if (dead === null) {
+          console.error(`[notion-sync] ${taskId}: cannot verify PR state (${prLink}) — skipping, not rebuilding blind.`);
+          continue;
+        }
+        console.error(`[notion-sync] ${taskId}: PR closed without merge — re-queuing.`);
+      }
+      // No PR Link: nothing to protect — eligible.
+    }
+
+    picked.push({ pageId: page.id, taskId, title, description, status });
+  }
+  return picked;
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-/** Extract DEV-### or AB-##### from a string (branch name, PR title, commit message) */
+/** Extract DEV-###, AB-### or MYSTRY-### from a string (branch name, PR title, commit message) */
 function extractTaskId(str = '') {
-  const match = str.match(/(?:DEV|AB)-\d+/i);
+  const match = str.match(/(?:DEV|AB|MYSTRY)-\d+/i);
   return match ? match[0].toUpperCase() : null;
 }
 
 /** Which database does this task ID live in? */
 function dbForTaskId(taskId) {
-  return /^AB-/i.test(taskId) ? featureDb() : devDb();
+  if (/^AB-/i.test(taskId)) return featureDb();
+  if (/^MYSTRY-/i.test(taskId)) return qaDb();
+  return devDb();
 }
 
 /** Get current git branch name */
@@ -281,16 +390,18 @@ async function main() {
     }
 
     case 'status':
-    case 'feature-status': {
+    case 'feature-status':
+    case 'mystery-status': {
       const [selector, status] = args;
       if (!selector || !status) {
         console.error('Usage: notion-sync.cjs status <DEV-00010|pageId> "In Progress"');
         process.exit(1);
       }
-      // `status` defaults to Dev Tasks, `feature-status` to Feature Requests, but an
-      // explicit DEV-/AB- prefix always wins so callers cannot route to the wrong DB.
+      // `status` defaults to Dev Tasks, `feature-status` to Feature Requests,
+      // `mystery-status` to QA_Twilight Zone, but an explicit DEV-/AB-/MYSTRY-
+      // prefix always wins so callers cannot route to the wrong DB.
       const dbId = UUID_RE.test(selector)
-        ? (cmd === 'feature-status' ? featureDb() : devDb())
+        ? (cmd === 'feature-status' ? featureDb() : cmd === 'mystery-status' ? qaDb() : devDb())
         : dbForTaskId(selector);
       const pageId = await resolvePageId(dbId, selector);
       if (!pageId) { console.error(`Task not found: ${selector}`); process.exit(1); }
@@ -331,7 +442,7 @@ async function main() {
       const branch = getCurrentBranch();
       if (!branch) { console.log('[notion-sync] Could not detect git branch.'); process.exit(0); }
       const taskId = extractTaskId(branch);
-      if (!taskId) { console.log(`[notion-sync] No DEV-###/AB-### in branch "${branch}", skipping.`); process.exit(0); }
+      if (!taskId) { console.log(`[notion-sync] No DEV-###/AB-###/MYSTRY-### in branch "${branch}", skipping.`); process.exit(0); }
       const dbId = dbForTaskId(taskId);
       const page = await findTask(dbId, taskId);
       if (!page) { console.log(`[notion-sync] ${taskId} not found in Notion.`); process.exit(0); }
@@ -372,9 +483,9 @@ async function main() {
       // Silently try — never block Claude Code on Notion errors
       try {
         if (!process.env.NOTION_TOKEN) process.exit(0);
-        const isFeature = /^AB-/i.test(taskId);
-        if (isFeature && !process.env.NOTION_FEATURE_REQUESTS_DB_ID) process.exit(0);
-        if (!isFeature && !process.env.NOTION_DEV_TASKS_DB_ID) process.exit(0);
+        if (/^AB-/i.test(taskId) && !process.env.NOTION_FEATURE_REQUESTS_DB_ID) process.exit(0);
+        if (/^MYSTRY-/i.test(taskId) && !process.env.NOTION_QA_DB_ID) process.exit(0);
+        if (/^DEV-/i.test(taskId) && !process.env.NOTION_DEV_TASKS_DB_ID) process.exit(0);
 
         const dbId = dbForTaskId(taskId);
         const page = await findTask(dbId, taskId);
@@ -403,6 +514,60 @@ async function main() {
       const maxIdx = args.indexOf('--max');
       const max = maxIdx >= 0 ? parseInt(args[maxIdx + 1], 10) : 3;
       console.log(JSON.stringify(await listReady(featureDb(), max), null, 2));
+      break;
+    }
+
+    case 'list-ready-mysteries': {
+      // Mysteries never carry PRs, so Code Review pickup does not apply.
+      const maxIdx = args.indexOf('--max');
+      const max = maxIdx >= 0 ? parseInt(args[maxIdx + 1], 10) : 3;
+      console.log(JSON.stringify(await listReady(qaDb(), max, ['Ready', 'Backlog'], false), null, 2));
+      break;
+    }
+
+    case 'answer': {
+      // Append an investigation answer to a QA_Twilight Zone page, then move it
+      // to Testing for human review. Answer text is read from a file to avoid
+      // shell-quoting mangling of multi-line agent output.
+      const [selector, file] = args;
+      if (!selector || !file) {
+        console.error('Usage: notion-sync.cjs answer <MYSTRY-00004|pageId> <answer-file>');
+        process.exit(1);
+      }
+      const text = require('fs').readFileSync(file, 'utf8').trim();
+      if (!text) { console.error('[notion-sync] Answer file is empty — nothing to post.'); process.exit(1); }
+
+      const dbId = UUID_RE.test(selector) ? qaDb() : dbForTaskId(selector);
+      const pageId = await resolvePageId(dbId, selector);
+      if (!pageId) { console.error(`Task not found: ${selector}`); process.exit(1); }
+
+      // Notion caps rich_text at 2000 chars per block and 100 blocks per append.
+      const stamp = new Date().toISOString().slice(0, 10);
+      const blocks = [{
+        object: 'block',
+        type: 'heading_3',
+        heading_3: { rich_text: [{ type: 'text', text: { content: `🤖 Investigation — ${stamp}` } }] },
+      }];
+      for (const para of text.split(/\n{2,}/)) {
+        for (let i = 0; i < para.length; i += 2000) {
+          if (blocks.length >= 100) break;
+          blocks.push({
+            object: 'block',
+            type: 'paragraph',
+            paragraph: { rich_text: [{ type: 'text', text: { content: para.slice(i, i + 2000) } }] },
+          });
+        }
+      }
+      const res = await fetch(`${NOTION_BASE}/blocks/${pageId}/children`, {
+        method: 'PATCH',
+        headers: headers(),
+        body: JSON.stringify({ children: blocks }),
+      });
+      if (!res.ok) {
+        throw new Error(`Notion answer append failed (${res.status}): ${await res.text()}`);
+      }
+      await setStatus(dbId, pageId, 'Testing');
+      console.log(`[notion-sync] ${selector} → answer posted (${blocks.length - 1} block(s)), Status: Testing`);
       break;
     }
 
@@ -441,22 +606,28 @@ async function main() {
       console.log(`
 notion-sync.cjs — Notion ↔ MedVolunteer sync
 
-Task selectors accept a task ID (DEV-00010 / AB-00009) or a Notion page ID (UUID).
-Prefer page IDs in automation — task IDs are free text and may collide.
+Task selectors accept a task ID (DEV-00010 / AB-00009 / MYSTRY-00004) or a Notion
+page ID (UUID). Prefer page IDs in automation — task IDs are free text and may collide.
 
 Commands:
   find    DEV-00010                       Find task in Notion
-  status  <selector> "In Progress"        Update status (DB inferred from DEV-/AB- prefix)
+  status  <selector> "In Progress"        Update status (DB inferred from DEV-/AB-/MYSTRY- prefix)
   pr      <selector> <pr-url>             Set PR Link
   gh      <selector> <issue-url>          Set GitHub Link
   deploy  <selector> <preview-url>        Set deploy preview URL (GitHub Link field)
   branch                                  Auto-detect branch → set In Progress
   hook                                    PostToolUse stdin mode (Claude Code hook)
-  list-ready [--max 3]                    Ready tasks from Dev Tasks DB, Priority-triaged, JSON
-  list-ready-features [--max 3]           Ready tasks from Feature Requests DB, JSON
+  list-ready [--max 3]                    Eligible tasks from Dev Tasks DB, Priority-triaged, JSON
+  list-ready-features [--max 3]           Eligible tasks from Feature Requests DB, JSON
+  list-ready-mysteries [--max 3]          Eligible mysteries from QA_Twilight Zone DB, JSON
   feature-status <selector> <status>      Update status in Feature Requests DB
+  mystery-status <selector> <status>      Update status in QA_Twilight Zone DB
+  answer  <selector> <answer-file>        Append investigation answer to a mystery → Testing
   feature-pr     <selector> <pr-url>      Set PR Link in Feature Requests DB
   bugs-clear                              Diagnostic: exit 1 if any dev task is in flight
+
+Eligible = Ready, Backlog with a non-empty Component/File spec, or (dev/feature
+only) Code Review whose PR is closed-without-merge or missing.
 
 Status values: Backlog | Ready | In Progress | Code Review | Testing | Done
       `.trim());

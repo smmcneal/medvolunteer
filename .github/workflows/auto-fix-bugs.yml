@@ -59,18 +59,21 @@ jobs:
           echo "Tasks to process: $TASK_COUNT"
 
           if [ "$TASK_COUNT" -eq 0 ]; then
-            echo "No Ready tasks — nothing to do."
+            echo "No eligible tasks (Ready / specced Backlog / dead-PR Code Review) — nothing to do."
             exit 0
           fi
 
           for i in $(seq 0 $((TASK_COUNT - 1))); do
+            # PAGE_ID is the stable identity. Task IDs are free text in Notion and may
+            # collide — never look up by them.
+            PAGE_ID=$(node -pe    "JSON.parse(require('fs').readFileSync('/tmp/tasks.json','utf8'))[$i].pageId || ''")
             TASK_ID=$(node -pe    "JSON.parse(require('fs').readFileSync('/tmp/tasks.json','utf8'))[$i].taskId || ''")
             TITLE=$(node -pe      "JSON.parse(require('fs').readFileSync('/tmp/tasks.json','utf8'))[$i].title || ''")
             DESCRIPTION=$(node -pe "JSON.parse(require('fs').readFileSync('/tmp/tasks.json','utf8'))[$i].description || ''")
 
-            # Skip tasks with no valid task ID or title (should not happen after list-ready filters, but guard anyway)
-            if [ -z "$TASK_ID" ] || [ -z "$TITLE" ]; then
-              echo "Skipping task $i — missing taskId or title"
+            # Skip tasks with no valid IDs or title (should not happen after list-ready filters, but guard anyway)
+            if [ -z "$PAGE_ID" ] || [ -z "$TASK_ID" ] || [ -z "$TITLE" ]; then
+              echo "Skipping task $i — missing pageId, taskId or title"
               continue
             fi
 
@@ -95,7 +98,7 @@ jobs:
             git branch -D "$BRANCH" 2>/dev/null || true
 
             # Mark In Progress in Notion
-            node scripts/notion-sync.cjs status "$TASK_ID" "In Progress"
+            node scripts/notion-sync.cjs status "$PAGE_ID" "In Progress"
 
             # Create branch
             git checkout -b "$BRANCH"
@@ -130,7 +133,7 @@ jobs:
               echo "::error::$TASK_ID: Claude Code could not run — $(grep -ioE 'credit balance is too low|invalid x-api-key|authentication_error|oauth token[^.]*|token (has )?expired|unauthorized|rate limit|usage limit' /tmp/claude-out.txt | head -1). Re-mint CLAUDE_CODE_OAUTH_TOKEN with 'claude setup-token', or wait out the usage window."
               git checkout main
               git branch -D "$BRANCH" 2>/dev/null || true
-              node scripts/notion-sync.cjs status "$TASK_ID" "Ready"
+              node scripts/notion-sync.cjs status "$PAGE_ID" "Ready"
               exit 1
             fi
 
@@ -143,7 +146,7 @@ jobs:
               echo "$TASK_ID: No changes made — reverting to Ready"
               git checkout main
               git branch -D "$BRANCH"
-              node scripts/notion-sync.cjs status "$TASK_ID" "Ready"
+              node scripts/notion-sync.cjs status "$PAGE_ID" "Ready"
               continue
             fi
 
@@ -163,7 +166,7 @@ jobs:
                 --head "$BRANCH"; then
               echo "$TASK_ID: PR creation failed — reverting to Ready"
               git checkout main
-              node scripts/notion-sync.cjs status "$TASK_ID" "Ready"
+              node scripts/notion-sync.cjs status "$PAGE_ID" "Ready"
               continue
             fi
 

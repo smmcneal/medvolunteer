@@ -73,6 +73,7 @@ Copy `web/.env.example` → `web/.env.local` for local dev. Key split:
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | `.env.local` | Email sending |
 | `NOTION_TOKEN` / `NOTION_DEV_TASKS_DB_ID` | `.env.local` + GitHub Secrets | Notion automation |
 | `NOTION_FEATURE_REQUESTS_DB_ID` | GitHub Secrets only | Feature Requests DB (AB-### tasks). Read by `auto-build-features.yml` **and** `notion-pr-sync.yml` — a PR on a `feat/AB-###` branch cannot sync without it |
+| `NOTION_QA_DB_ID` | GitHub Secrets only | QA_Twilight Zone DB (MYSTRY-### questions). Read by `auto-answer-mysteries.yml` — the Notion integration behind `NOTION_TOKEN` must also be connected to this database or every query 404s |
 | `CLAUDE_CODE_OAUTH_TOKEN` | GitHub Secrets only | Authenticates the Claude Code CLI in `auto-fix-bugs.yml` / `auto-build-features.yml` against the **Claude subscription quota** — not pay-as-you-go API credit. Mint with `claude setup-token` (valid ~1 year). **Do not also set `ANTHROPIC_API_KEY` in those workflows**: if both are present the API key takes precedence, and with an empty API balance every run dies with `Credit balance is too low` while still reporting green. Subscription usage limits still apply — a large `max_tasks` run can exhaust the 5-hour window |
 | `VERCEL_WEBHOOK_SECRET` | `.env.local` | Webhook signature verification |
 | `CRON_SECRET` | Vercel env + `.env.local` + **GitHub Secrets** | Protects `/api/cron/*` routes. The GitHub Secrets copy is what `cron-scheduled-messages.yml` authenticates with — **the two must match**, or every scheduled-message dispatch 401s |
@@ -94,6 +95,7 @@ scripts/      notion-sync.cjs — Notion API helper used by hooks/CI
               notion-pr-sync.yml — PR events → Notion status + PR link. Routes DEV-### to Dev Tasks DB and AB-### to Feature Requests DB.
               auto-fix-bugs.yml — nightly (2am UTC) Claude Code agent: reads "Ready" tasks from Notion Dev Tasks DB, opens PRs. Branch names follow fix/DEV-###-slug.
               auto-build-features.yml — nightly (3am UTC) Claude Code agent: reads "Ready" tasks from Notion Feature Requests DB, opens PRs. Branch names follow feat/AB-###-slug. Requires ANTHROPIC_API_KEY, NOTION_FEATURE_REQUESTS_DB_ID, GH_PAT secrets.
+              auto-answer-mysteries.yml — nightly (4am UTC) Claude Code agent: investigates QA_Twilight Zone questions read-only, posts the answer onto the Notion page, moves it to Testing. No branches, no PRs. Requires NOTION_QA_DB_ID.
               cron-scheduled-messages.yml — every 30 min: calls /api/cron/send-auto-messages?mode=scheduled. Exists because Vercel Hobby caps cron at one run/day. See the API routes table.
 ```
 
@@ -239,14 +241,22 @@ async function run(fn: () => Promise<void>) {
 
 ### Notion Automation Pipeline
 
-Two Notion databases feed the pipeline, distinguished by task ID prefix:
+Three Notion databases feed the pipeline, distinguished by task ID prefix:
 
-| Prefix | Database | Env var | Built by | Branch prefix |
-|--------|----------|---------|----------|---------------|
-| `DEV-###` | Dev Tasks & QA | `NOTION_DEV_TASKS_DB_ID` | `auto-fix-bugs.yml` (2am UTC) | `fix/` |
+| Prefix | Database | Env var | Handled by | Branch prefix |
+|--------|----------|---------|------------|---------------|
+| `DEV-###` | Dev Tasks & Bugs | `NOTION_DEV_TASKS_DB_ID` | `auto-fix-bugs.yml` (2am UTC) | `fix/` |
 | `AB-###` | Feature Requests | `NOTION_FEATURE_REQUESTS_DB_ID` | `auto-build-features.yml` (3am UTC) | `feat/` |
+| `MYSTRY-###` | QA_Twilight Zone | `NOTION_QA_DB_ID` | `auto-answer-mysteries.yml` (4am UTC) | — (no branches/PRs; answers are posted to the Notion page and the task moves to Testing) |
 
-Anything sitting in **Ready** is picked up by the nightly agent, which opens a PR. From there:
+**Nightly pickup policy** (implemented in `notion-sync.cjs list-ready*` — the workflows just consume the JSON; changed 2026-08-18):
+
+- **Ready** — eligible.
+- **Backlog** — eligible. ⚠️ Corollary: Backlog is no longer a safe parking lot for *specced* tasks — a Backlog task with anything in `Component/File` **will be built**. To park a specced task, blank its `Component/File`.
+- **Code Review** — eligible **only when the task's PR is dead**: closed without merge, or no PR Link at all. Open and merged PRs are left strictly alone. The check calls the GitHub API with `GH_TOKEN`; if the state can't be verified (no token, API error, mangled URL) the task is **skipped, never rebuilt blind**. This un-strands tasks whose conflicted PR was closed (see below).
+- **Empty-spec guard (all of the above):** for the two code-building DBs, a task with an empty `Component/File` is skipped in *every* status — an empty spec is how AB-00006 got invented from a Ready task. Mysteries are exempt in Ready (a title alone can be a valid question) but still need a spec to leave Backlog.
+
+The bug/feature agents open PRs for what they pick up. From there:
 
 1. **PostToolUse hook** (`.claude/settings.local.json`) — git commit/push → marks task "In Progress"
 2. **`notion-pr-sync.yml`** — PR opened/merged/closed → updates status + PR link in the DB matching the prefix
@@ -262,9 +272,9 @@ Anything sitting in **Ready** is picked up by the nightly agent, which opens a P
 
 #### Operating the pipeline — traps learned the hard way (2026-07-11)
 
-**A blank `Component/File` means the agent invents the feature.** The task's `Component/File` rich-text field is the *entire* spec handed to Claude Code — the title alone is not enough. `AB-00006 "Group Volunteer"` was marked Ready with an empty description; the agent guessed it meant group shift signup and produced 13 files across admin + volunteer + i18n **including a new `supabase/migrations/*.sql`**. That path is exactly the trigger for `supabase-migrate.yml`, so merging it would have applied an agent-invented schema to production. **Never move a task to Ready without a real description.** Park under-specified tasks in Backlog.
+**A blank `Component/File` means the agent invents the feature.** The task's `Component/File` rich-text field is the *entire* spec handed to Claude Code — the title alone is not enough. `AB-00006 "Group Volunteer"` was marked Ready with an empty description; the agent guessed it meant group shift signup and produced 13 files across admin + volunteer + i18n **including a new `supabase/migrations/*.sql`**. That path is exactly the trigger for `supabase-migrate.yml`, so merging it would have applied an agent-invented schema to production. **Never move a task to Ready without a real description.** Park under-specified tasks in Backlog. (Since 2026-08-18 this is also enforced in code: `list-ready`/`list-ready-features` skip any task with an empty `Component/File`, whatever its status — the skip is logged to stderr in the workflow run.)
 
-**Closing a *conflicted* PR does not reset its Notion task.** `notion-pr-sync.yml` runs on `pull_request`, which GitHub dispatches against the merge ref (`refs/pull/N/merge`). A PR with conflicts has no valid merge ref, so **no workflow run fires at all** — including the `closed → Ready` step. The task is stranded in Code Review and the nightly agent will never pick it up again. After closing a conflicted PR, set the task back to Ready in Notion by hand. (For cleanly-mergeable PRs the `closed → Ready` path works — verified.)
+**Closing a *conflicted* PR does not reset its Notion task.** `notion-pr-sync.yml` runs on `pull_request`, which GitHub dispatches against the merge ref (`refs/pull/N/merge`). A PR with conflicts has no valid merge ref, so **no workflow run fires at all** — including the `closed → Ready` step. The task is stranded in Code Review. (For cleanly-mergeable PRs the `closed → Ready` path works — verified.) **Since 2026-08-18 this self-heals:** the nightly pickup includes Code Review tasks whose PR is closed-without-merge, so a stranded task gets rebuilt the next night without manual re-triage.
 
 **Prefer regeneration over hand-merging conflicts.** Every feature in a single run is branched from the same `main`, so once you merge the first PR, any other PR touching the same file conflicts. These branches are cheap and disposable: close the conflicted PR, set the task back to Ready, and re-run the workflow — the agent rebuilds against the new `main` and integrates with what just landed, rather than fighting it. (`AB-00005` conflicted with the merged `AB-00008` in `ShiftsView.tsx` across 5 hunks; a rebuild produced a clean, richer PR in ~3 minutes.) The workflow deletes any stale remote branch of the same name on the next run, so no cleanup is needed.
 
