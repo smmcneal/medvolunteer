@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useMemo, useTransition } from 'react'
+import { useState, useMemo, useEffect, useRef, useTransition } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Download, TrendingUp, Clock, ShieldCheck, AlertTriangle, UserX, Filter, X } from 'lucide-react'
-import type { HoursRow, OnboardingRow, PipelinePhaseCount, VolunteerOnboardingRow, BgCheckRow, CredentialExpiryRow, ActiveVolunteerActivity, FilterParams } from './page'
-import { bulkMarkInactive, approveHoursEntry, rejectHoursEntry } from './actions'
+import type { HoursRow, OnboardingRow, PipelinePhaseCount, VolunteerOnboardingRow, BgCheckRow, CredentialExpiryRow, ActiveVolunteerActivity, FilterParams, SavedReport } from './page'
+import { bulkMarkInactive, approveHoursEntry, rejectHoursEntry, createSavedReport } from './actions'
 import type { Category } from '@/types/database'
 import { useAdminT } from '@/lib/admin-lang'
+
+const SAVED_REPORT_STORAGE_KEY = 'medvolunteer_selected_saved_report'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -193,6 +195,111 @@ function GlobalFilterBar({ allCategories, allStatuses, appliedFilters, categorie
   )
 }
 
+function SavedReportsBar({
+  savedReports,
+  activeTab,
+  appliedFilters,
+  selectedSavedReportId,
+  onApply,
+  onClear,
+}: {
+  savedReports: SavedReport[]
+  activeTab: Tab
+  appliedFilters: FilterParams
+  selectedSavedReportId: string | null
+  onApply: (report: SavedReport) => void
+  onClear: () => void
+}) {
+  const t = useAdminT()
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [saving, setSaving] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const id = e.target.value
+    if (!id) { onClear(); return }
+    const report = savedReports.find(r => r.id === id)
+    if (report) onApply(report)
+  }
+
+  function handleSave() {
+    const name = saveName.trim()
+    if (!name) return
+    setError(null)
+    startTransition(async () => {
+      const result = await createSavedReport({ name, reportType: activeTab, filters: appliedFilters })
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setSaveName('')
+      setSaving(false)
+      if (result.id) {
+        onApply({ id: result.id, name, report_type: activeTab, filters: appliedFilters })
+      }
+      router.refresh()
+    })
+  }
+
+  const selectStyleLocal: React.CSSProperties = {
+    padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: '8px',
+    fontSize: '13px', color: '#374151', background: 'white',
+    cursor: 'pointer', fontFamily: 'inherit',
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>{t('saved_reports_label')}</span>
+      <select value={selectedSavedReportId ?? ''} onChange={handleSelectChange} style={selectStyleLocal}>
+        <option value="">{t('saved_reports_placeholder')}</option>
+        {savedReports.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+      </select>
+      {selectedSavedReportId && (
+        <button
+          onClick={onClear}
+          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: '7px', fontSize: '13px', background: 'white', color: '#6b7280', border: '1px solid #e5e7eb', cursor: 'pointer', fontFamily: 'inherit' }}
+        >
+          <X size={12} /> {t('clear')}
+        </button>
+      )}
+      {!saving ? (
+        <button
+          onClick={() => setSaving(true)}
+          style={{ padding: '6px 14px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, background: 'white', color: NAVY, border: `1px solid ${NAVY}`, cursor: 'pointer', fontFamily: 'inherit' }}
+        >
+          {t('save_report_btn')}
+        </button>
+      ) : (
+        <>
+          <input
+            value={saveName}
+            onChange={e => setSaveName(e.target.value)}
+            placeholder={t('saved_report_name_placeholder')}
+            autoFocus
+            style={{ padding: '6px 10px', borderRadius: '7px', border: '1px solid #e5e7eb', fontSize: '13px', color: '#374151', outline: 'none', background: 'white' }}
+          />
+          <button
+            onClick={handleSave}
+            disabled={pending || !saveName.trim()}
+            style={{ padding: '6px 14px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, background: NAVY, color: 'white', border: 'none', cursor: pending || !saveName.trim() ? 'default' : 'pointer', opacity: pending ? 0.6 : 1, fontFamily: 'inherit' }}
+          >
+            {pending ? t('saving') : t('save_label')}
+          </button>
+          <button
+            onClick={() => { setSaving(false); setSaveName(''); setError(null) }}
+            style={{ padding: '6px 14px', borderRadius: '7px', fontSize: '13px', background: 'white', color: '#6b7280', border: '1px solid #e5e7eb', cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            {t('cancel')}
+          </button>
+        </>
+      )}
+      {error && <span style={{ fontSize: '12px', color: '#dc2626' }}>{error}</span>}
+    </div>
+  )
+}
+
 interface PendingHoursEntry {
   id: string
   volunteer_name: string
@@ -275,6 +382,7 @@ export default function ReportsView({
   requireHourApproval = false,
   pendingHours = [],
   categories = [],
+  savedReports = [],
 }: {
   hoursRows: HoursRow[]
   onboardingRows: OnboardingRow[]
@@ -289,6 +397,7 @@ export default function ReportsView({
   requireHourApproval?: boolean
   pendingHours?: PendingHoursEntry[]
   categories?: Category[]
+  savedReports?: SavedReport[]
 }) {
   const t = useAdminT()
   function getCatLabel(slug: string) {
@@ -300,10 +409,48 @@ export default function ReportsView({
     return PALETTE[idx % 8]
   }
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const initialTab = (searchParams.get('tab') as Tab | null) ?? 'hours'
   const [activeTab, setActiveTab] = useState<Tab>(
     TABS.some(t => t.key === initialTab) ? initialTab : 'hours'
   )
+
+  // Saved reports
+  const [selectedSavedReportId, setSelectedSavedReportId] = useState<string | null>(null)
+
+  function applySavedReport(report: SavedReport) {
+    setSelectedSavedReportId(report.id)
+    setActiveTab(TABS.some(tb => tb.key === report.report_type) ? (report.report_type as Tab) : 'hours')
+    localStorage.setItem(SAVED_REPORT_STORAGE_KEY, report.id)
+    const params = new URLSearchParams()
+    if (report.filters.status)        params.set('status', report.filters.status)
+    if (report.filters.category)      params.set('category', report.filters.category)
+    if (report.filters.dateFrom)      params.set('dateFrom', report.filters.dateFrom)
+    if (report.filters.dateTo)        params.set('dateTo', report.filters.dateTo)
+    if (report.filters.pipelinePhase) params.set('pipelinePhase', report.filters.pipelinePhase)
+    params.set('tab', report.report_type)
+    router.push(`${pathname}?${params.toString()}`)
+  }
+
+  function clearSavedReport() {
+    setSelectedSavedReportId(null)
+    localStorage.removeItem(SAVED_REPORT_STORAGE_KEY)
+  }
+
+  const restoredSavedReportRef = useRef(false)
+  useEffect(() => {
+    if (restoredSavedReportRef.current) return
+    restoredSavedReportRef.current = true
+    const stored = localStorage.getItem(SAVED_REPORT_STORAGE_KEY)
+    if (!stored) return
+    const hasUrlFilters = ['status', 'category', 'dateFrom', 'dateTo', 'pipelinePhase', 'tab'].some(k => searchParams.get(k))
+    if (hasUrlFilters) return
+    const saved = savedReports.find(r => r.id === stored)
+    if (!saved) { localStorage.removeItem(SAVED_REPORT_STORAGE_KEY); return }
+    applySavedReport(saved)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedReports, searchParams])
 
   // Hours filters
   const [hoursSearch, setHoursSearch]     = useState('')
@@ -372,8 +519,24 @@ export default function ReportsView({
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
 
+      {/* Saved Reports */}
+      <SavedReportsBar
+        savedReports={savedReports}
+        activeTab={activeTab}
+        appliedFilters={appliedFilters}
+        selectedSavedReportId={selectedSavedReportId}
+        onApply={applySavedReport}
+        onClear={clearSavedReport}
+      />
+
       {/* Global Filters */}
-      <GlobalFilterBar allCategories={allCategories} allStatuses={allStatuses} appliedFilters={appliedFilters} categories={categories} />
+      <GlobalFilterBar
+        key={JSON.stringify(appliedFilters)}
+        allCategories={allCategories}
+        allStatuses={allStatuses}
+        appliedFilters={appliedFilters}
+        categories={categories}
+      />
 
       {/* Pending Hours */}
       {requireHourApproval && (

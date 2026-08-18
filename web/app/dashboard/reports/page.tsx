@@ -71,6 +71,13 @@ export interface FilterParams {
   pipelinePhase?: string
 }
 
+export interface SavedReport {
+  id: string
+  name: string
+  report_type: string
+  filters: FilterParams
+}
+
 // ─── Data fetchers ────────────────────────────────────────────────────────────
 
 async function fetchReportsData(filters: FilterParams = {}) {
@@ -322,6 +329,12 @@ export default async function ReportsPage({
   const { data: orgData } = await supabase.from('organizations').select('settings').limit(1).single()
   const requireHourApproval = !!(orgData?.settings as Record<string, unknown>)?.require_hour_approval
 
+  const { data: savedReportsData } = await supabase
+    .from('saved_reports')
+    .select('id, name, report_type, filters')
+    .order('created_at', { ascending: false })
+  const savedReports = (savedReportsData ?? []) as SavedReport[]
+
   let pendingHours: { id: string; volunteer_name: string; clock_in: string; clock_out: string; hours: number }[] = []
   if (requireHourApproval) {
     const volIds = volunteers.map((v: { id: string }) => v.id)
@@ -368,6 +381,7 @@ export default async function ReportsPage({
           requireHourApproval={requireHourApproval}
           pendingHours={pendingHours}
           categories={categories}
+          savedReports={savedReports}
         />
       </Suspense>
     </div>
