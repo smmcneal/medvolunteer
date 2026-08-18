@@ -1332,50 +1332,6 @@ export default function ShiftsView({
                 </div>
               </div>
 
-              <div>
-                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('required_volunteers')}</label>
-                <input style={inputStyle} type="number" min="1" value={createForm.required_count} onChange={e => setCreateForm(f => ({ ...f, required_count: e.target.value }))} />
-              </div>
-
-              {categories.length > 0 && (
-                <div>
-                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    {t('categories')} <span style={{ fontWeight: 400, textTransform: 'none' }}>(leave empty for all)</span>
-                  </label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {categories.map(c => {
-                      const checked = createForm.required_categories.includes(c.slug)
-                      return (
-                        <button
-                          key={c.slug}
-                          type="button"
-                          onClick={() => setCreateForm(f => ({
-                            ...f,
-                            required_categories: checked
-                              ? f.required_categories.filter(s => s !== c.slug)
-                              : [...f.required_categories, c.slug],
-                          }))}
-                          style={{
-                            fontSize: '12px', fontWeight: 500,
-                            padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
-                            border: `1.5px solid ${checked ? (CAT_COLORS[c.slug] ?? TEAL) : 'var(--surface-border)'}`,
-                            background: checked ? `${(CAT_COLORS[c.slug] ?? TEAL)}22` : 'transparent',
-                            color: checked ? (CAT_COLORS[c.slug] ?? TEAL) : 'var(--text-secondary)',
-                          }}
-                        >
-                          {c.name}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('shift_notes')}</label>
-                <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '56px', lineHeight: 1.5 }} value={createForm.notes} onChange={e => setCreateForm(f => ({ ...f, notes: e.target.value }))} placeholder={t('shift_notes')} />
-              </div>
-
               {/* Repeat toggle */}
               <div style={{ borderTop: '1px solid var(--surface-border-sub)', paddingTop: '14px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: isRecurring ? '10px' : 0 }}>
@@ -1421,6 +1377,32 @@ export default function ShiftsView({
                     </div>
                   </div>
                 )}
+              </div>
+
+              {categories.length > 0 && (
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {t('categories')}
+                  </label>
+                  <select
+                    style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
+                    value={createForm.required_categories[0] ?? ''}
+                    onChange={e => setCreateForm(f => ({ ...f, required_categories: e.target.value ? [e.target.value] : [] }))}
+                  >
+                    <option value="">{t('all_categories')}</option>
+                    {categories.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('required_volunteers')}</label>
+                <input style={inputStyle} type="number" min="1" value={createForm.required_count} onChange={e => setCreateForm(f => ({ ...f, required_count: e.target.value }))} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('shift_notes')}</label>
+                <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '56px', lineHeight: 1.5 }} value={createForm.notes} onChange={e => setCreateForm(f => ({ ...f, notes: e.target.value }))} placeholder={t('shift_notes')} />
               </div>
 
               {/* Volunteer picker */}
@@ -1524,7 +1506,7 @@ export default function ShiftsView({
                 </p>
               )}
               <button className="shift-new-btn" style={btnPrimary} onClick={handleCreate} disabled={!createForm.name || !createForm.start_date || !createForm.start_time || !createForm.end_date || !createForm.end_time || isPending}>
-                {isRecurring ? t('recurring_shift') : t('create_shift')}
+                {t('create_shift')}
               </button>
               <button style={btnSecondary} onClick={() => { setShowCreate(false); setCreateForm(EMPTY_CREATE); setCreateVolunteerIds(new Set()); setCreateVolSearch(''); setIsRecurring(false); setRecurFrequency('weekly'); setRecurEndDate('') }}>
                 {t('cancel')}
@@ -1593,46 +1575,27 @@ export default function ShiftsView({
                 </div>
               </div>
 
+              {categories.length > 0 && (
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {t('categories')}
+                  </label>
+                  <select
+                    style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', cursor: selected.recurrence_group_id ? 'not-allowed' : 'pointer', opacity: selected.recurrence_group_id ? 0.6 : 1 }}
+                    value={editForm.required_categories[0] ?? ''}
+                    disabled={!!selected.recurrence_group_id}
+                    onChange={e => setEditForm(f => ({ ...f, required_categories: e.target.value ? [e.target.value] : [] }))}
+                  >
+                    <option value="">{t('all_categories')}</option>
+                    {categories.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('required_volunteers')}</label>
                 <input style={inputStyle} type="number" min="1" value={editForm.required_count} onChange={e => setEditForm(f => ({ ...f, required_count: e.target.value }))} />
               </div>
-
-              {categories.length > 0 && (
-                <div>
-                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    {t('categories')} <span style={{ fontWeight: 400, textTransform: 'none' }}>(leave empty for all)</span>
-                  </label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {categories.map(c => {
-                      const checked = editForm.required_categories.includes(c.slug)
-                      return (
-                        <button
-                          key={c.slug}
-                          type="button"
-                          disabled={!!selected.recurrence_group_id}
-                          onClick={() => setEditForm(f => ({
-                            ...f,
-                            required_categories: checked
-                              ? f.required_categories.filter(s => s !== c.slug)
-                              : [...f.required_categories, c.slug],
-                          }))}
-                          style={{
-                            fontSize: '12px', fontWeight: 500,
-                            padding: '4px 10px', borderRadius: '6px', cursor: selected.recurrence_group_id ? 'not-allowed' : 'pointer',
-                            border: `1.5px solid ${checked ? (CAT_COLORS[c.slug] ?? TEAL) : 'var(--surface-border)'}`,
-                            background: checked ? `${(CAT_COLORS[c.slug] ?? TEAL)}22` : 'transparent',
-                            color: checked ? (CAT_COLORS[c.slug] ?? TEAL) : 'var(--text-secondary)',
-                            opacity: selected.recurrence_group_id ? 0.6 : 1,
-                          }}
-                        >
-                          {c.name}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
 
               <div>
                 <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-faint)', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('shift_notes')}</label>
