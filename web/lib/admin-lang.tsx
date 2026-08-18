@@ -339,6 +339,10 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     days_left_col: 'Days Left',
     urgency_col: 'Urgency',
     never_label: 'Never',
+    saved_reports_label: 'Saved Reports',
+    saved_reports_placeholder: 'Select a saved report…',
+    saved_report_name_placeholder: 'Report name',
+    save_report_btn: 'Save Report',
 
     // Messages
     messages_title: 'Messages',
@@ -833,6 +837,10 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     days_left_col: 'Días restantes',
     urgency_col: 'Urgencia',
     never_label: 'Nunca',
+    saved_reports_label: 'Informes guardados',
+    saved_reports_placeholder: 'Selecciona un informe guardado…',
+    saved_report_name_placeholder: 'Nombre del informe',
+    save_report_btn: 'Guardar informe',
 
     // Messages
     messages_title: 'Mensajes',
