@@ -366,9 +366,26 @@ export default function ShiftsView({
   }
 
   function handleDuplicate(id: string) {
+    const source = shifts.find(s => s.id === id)
     run(async () => {
       const { shiftId } = await duplicateShift(id)
       setSelectedId(shiftId)
+      if (source) {
+        const start = new Date(source.start_time)
+        const end = new Date(source.end_time)
+        setEditForm({
+          name: `${source.name} Copy`,
+          location_id: source.location_id ?? '',
+          start_date: dateKey(start),
+          start_time: start.toTimeString().slice(0, 5),
+          end_date: dateKey(end),
+          end_time: end.toTimeString().slice(0, 5),
+          required_count: String(source.required_count),
+          required_categories: source.required_categories,
+          notes: source.notes ?? '',
+        })
+      }
+      setShowEdit(true)
     })
   }
 

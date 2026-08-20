@@ -203,23 +203,27 @@ export async function duplicateShift(id: string): Promise<{ shiftId: string }> {
 
   const { data: shift, error: fetchError } = await admin
     .from('shifts')
-    .select('org_id, name, location_id, start_time, end_time, required_count, required_categories, notes')
+    .select('org_id, name, location_id, start_time, end_time, required_count, required_categories, notes, recurrence_rule, recurrence_end_date')
     .eq('id', id)
     .single()
   if (fetchError || !shift) throw new Error(fetchError?.message ?? 'Shift not found')
 
-  // Standalone copy — no recurrence linkage, no carried-over assignments
+  // Standalone copy — no group linkage (so it's never touched by the source
+  // series' bulk edit/delete) or carried-over assignments, but the Repeat
+  // settings themselves (frequency + end date) are preserved.
   const { data: newShift, error } = await admin
     .from('shifts')
     .insert({
       org_id: shift.org_id,
-      name: shift.name,
+      name: `${shift.name} Copy`,
       location_id: shift.location_id,
       start_time: shift.start_time,
       end_time: shift.end_time,
       required_count: shift.required_count,
       required_categories: shift.required_categories,
       notes: shift.notes,
+      recurrence_rule: shift.recurrence_rule,
+      recurrence_end_date: shift.recurrence_end_date,
     })
     .select('id')
     .single()
