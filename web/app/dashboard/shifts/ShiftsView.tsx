@@ -128,6 +128,10 @@ export default function ShiftsView({
   const [selectedDayView, setSelectedDayView] = useState<Date>(() =>
     new Date(today.getFullYear(), today.getMonth(), today.getDate())
   )
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [pickerYear, setPickerYear] = useState(today.getFullYear())
+  const [pickerMonth, setPickerMonth] = useState(today.getMonth())
   const [selectedId, setSelectedId]     = useState<string | null>(null)
   const [showCreate, setShowCreate]     = useState(false)
   const [createForm, setCreateForm]     = useState<CreateForm>(EMPTY_CREATE)
@@ -191,6 +195,7 @@ export default function ShiftsView({
   // ── Calendar data ──────────────────────────────────────────────
 
   const cells = useMemo(() => getCalendarCells(calYear, calMonth), [calYear, calMonth])
+  const pickerCells = useMemo(() => getCalendarCells(pickerYear, pickerMonth), [pickerYear, pickerMonth])
 
   const shiftsByDate = useMemo(() => {
     const map: Record<string, ShiftWithRoster[]> = {}
@@ -224,6 +229,38 @@ export default function ShiftsView({
   function nextMonth() {
     if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0) }
     else setCalMonth(m => m + 1)
+  }
+
+  function openDatePicker() {
+    setPickerYear(selectedDayView.getFullYear())
+    setPickerMonth(selectedDayView.getMonth())
+    setShowDatePicker(true)
+  }
+  function prevPickerMonth() {
+    if (pickerMonth === 0) { setPickerYear(y => y - 1); setPickerMonth(11) }
+    else setPickerMonth(m => m - 1)
+  }
+  function nextPickerMonth() {
+    if (pickerMonth === 11) { setPickerYear(y => y + 1); setPickerMonth(0) }
+    else setPickerMonth(m => m + 1)
+  }
+  function jumpToDate(d: Date) {
+    setSelectedDayView(d)
+    setShowDatePicker(false)
+  }
+
+  function openDayView(d: Date) {
+    setSelectedDayView(d)
+    setView('day')
+  }
+
+  function toggleExpandedDay(key: string) {
+    setExpandedDays(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   // ── List data ──────────────────────────────────────────────────
@@ -570,6 +607,9 @@ export default function ShiftsView({
                   const isToday = cell.toDateString() === today.toDateString()
                   const isPast = cell < today && !isToday
                   const holidayName = holidayByDay.get(key) ?? null
+                  const isExpanded = expandedDays.has(key)
+                  const visibleShifts = isExpanded ? dayShifts : dayShifts.slice(0, 2)
+                  const hiddenCount = dayShifts.length - visibleShifts.length
 
                   return (
                     <div key={i} className="shift-cal-cell" style={{
@@ -577,17 +617,21 @@ export default function ShiftsView({
                       minHeight: '100px', padding: '7px 6px',
                       position: 'relative',
                     }}>
-                      <div style={{
-                        width: '24px', height: '24px', borderRadius: '50%',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        marginBottom: '3px',
-                        background: isToday ? TEAL : 'transparent',
-                        color: isToday ? 'white' : isPast ? 'var(--text-faint)' : 'var(--text-secondary)',
-                        fontSize: '12px', fontWeight: isToday ? 700 : 500,
-                        boxShadow: isToday ? '0 2px 8px rgba(0,172,193,0.3)' : 'none',
-                      }}>
+                      <button
+                        onClick={() => openDayView(cell)}
+                        title={t('day_view')}
+                        style={{
+                          width: '24px', height: '24px', borderRadius: '50%',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          marginBottom: '3px', border: 'none', padding: 0, cursor: 'pointer',
+                          background: isToday ? TEAL : 'transparent',
+                          color: isToday ? 'white' : isPast ? 'var(--text-faint)' : 'var(--text-secondary)',
+                          fontSize: '12px', fontWeight: isToday ? 700 : 500,
+                          boxShadow: isToday ? '0 2px 8px rgba(0,172,193,0.3)' : 'none',
+                        }}
+                      >
                         {cell.getDate()}
-                      </div>
+                      </button>
 
                       {holidayName && (
                         <div style={{
@@ -600,11 +644,13 @@ export default function ShiftsView({
                         </div>
                       )}
 
-                      {dayShifts.slice(0, 2).map(s => {
+                      {visibleShifts.map(s => {
                         const color = locationColor(s.location_id, locations)
                         const filled = s.assignments.length
                         const needed = s.required_count
                         const isSelected = selectedId === s.id
+                        const primaryCategory = s.required_categories[0] ?? null
+                        const catColor = primaryCategory ? (CAT_COLORS[primaryCategory] ?? '#6b7280') : null
                         return (
                           <div
                             key={s.id}
@@ -623,13 +669,31 @@ export default function ShiftsView({
                             <p style={{ fontSize: '10px', color: isSelected ? 'rgba(255,255,255,0.65)' : 'var(--text-muted)' }}>
                               {fmtTime(s.start_time)} · {filled}/{needed}
                             </p>
+                            {primaryCategory && (
+                              <span style={{
+                                display: 'inline-block', marginTop: '2px',
+                                fontSize: '9px', fontWeight: 700, padding: '1px 5px', borderRadius: '99px',
+                                background: isSelected ? 'rgba(255,255,255,0.18)' : `${catColor}18`,
+                                color: isSelected ? 'white' : catColor ?? undefined,
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%',
+                              }}>
+                                {categoryBySlug[primaryCategory] ?? primaryCategory}
+                                {s.required_categories.length > 1 ? ` +${s.required_categories.length - 1}` : ''}
+                              </span>
+                            )}
                           </div>
                         )
                       })}
                       {dayShifts.length > 2 && (
-                        <p style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 600, paddingLeft: '4px', opacity: 0.8 }}>
-                          +{dayShifts.length - 2} more
-                        </p>
+                        <button
+                          onClick={() => toggleExpandedDay(key)}
+                          style={{
+                            fontSize: '10px', color: 'var(--teal)', fontWeight: 600, paddingLeft: '4px', opacity: 0.8,
+                            background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+                          }}
+                        >
+                          {hiddenCount > 0 ? `+${hiddenCount} ${t('more_shifts')}` : t('show_less')}
+                        </button>
                       )}
                     </div>
                   )
@@ -848,6 +912,77 @@ export default function ShiftsView({
                   <button onClick={() => { const d = new Date(selectedDayView); d.setDate(d.getDate() + 1); setSelectedDayView(d) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', cursor: 'pointer', color: 'var(--text-secondary)' }}>
                     <ChevronRight style={{ width: '14px', height: '14px' }} />
                   </button>
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      onClick={() => showDatePicker ? setShowDatePicker(false) : openDatePicker()}
+                      title={t('jump_to_date')}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                        fontSize: '12px', fontWeight: 600, padding: '4px 10px',
+                        border: '1px solid var(--surface-border)', borderRadius: '6px',
+                        background: showDatePicker ? NAVY : 'white',
+                        color: showDatePicker ? 'white' : 'var(--text-secondary)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Calendar style={{ width: '13px', height: '13px' }} />
+                      {t('month_view')}
+                    </button>
+                    {showDatePicker && (
+                      <>
+                        <div onClick={() => setShowDatePicker(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                        <div style={{
+                          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50,
+                          width: '220px', background: 'var(--surface-card)',
+                          border: '1px solid var(--surface-border)', borderRadius: '10px',
+                          boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 10px 6px' }}>
+                            <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.1px' }}>
+                              {MONTHS[pickerMonth]} {pickerYear}
+                            </span>
+                            <div style={{ display: 'flex', gap: '2px' }}>
+                              <button onClick={prevPickerMonth} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', border: 'none', borderRadius: '4px', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                                <ChevronLeft style={{ width: '12px', height: '12px' }} />
+                              </button>
+                              <button onClick={nextPickerMonth} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', border: 'none', borderRadius: '4px', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                                <ChevronRight style={{ width: '12px', height: '12px' }} />
+                              </button>
+                            </div>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', padding: '0 8px' }}>
+                            {DAYS.map(d => (
+                              <div key={d} style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-faint)', textAlign: 'center', padding: '2px 0' }}>
+                                {d[0]}
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', padding: '2px 8px 10px' }}>
+                            {pickerCells.map((cell, i) => {
+                              if (!cell) return <div key={i} />
+                              const isSelected = cell.toDateString() === selectedDayView.toDateString()
+                              const isToday = cell.toDateString() === today.toDateString()
+                              return (
+                                <button
+                                  key={i}
+                                  onClick={() => jumpToDate(cell)}
+                                  style={{
+                                    width: '26px', height: '26px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto',
+                                    background: isSelected ? NAVY : isToday ? 'rgba(0,172,193,0.12)' : 'transparent',
+                                    color: isSelected ? 'white' : isToday ? TEAL : 'var(--text-secondary)',
+                                    fontSize: '11px', fontWeight: isSelected || isToday ? 700 : 500,
+                                  }}
+                                >
+                                  {cell.getDate()}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <button onClick={() => { const now = new Date(); setSelectedDayView(new Date(now.getFullYear(), now.getMonth(), now.getDate())) }} style={{ fontSize: '12px', fontWeight: 600, padding: '4px 10px', border: '1px solid var(--surface-border)', borderRadius: '6px', background: 'white', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                   {t('today')}

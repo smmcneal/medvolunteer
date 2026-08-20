@@ -260,6 +260,9 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     select_mentor: 'Select a mentor for',
     trainee_label: 'Trainee',
     no_eligible_mentors: 'No eligible mentors found.',
+    more_shifts: 'more',
+    show_less: 'Show less',
+    jump_to_date: 'Jump to date',
 
     // Edit recurring modal
     edit_recurring_title: 'Edit recurring shift',
@@ -758,6 +761,9 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     select_mentor: 'Selecciona un mentor para',
     trainee_label: 'Aprendiz',
     no_eligible_mentors: 'No se encontraron mentores elegibles.',
+    more_shifts: 'más',
+    show_less: 'Mostrar menos',
+    jump_to_date: 'Ir a una fecha',
 
     // Edit recurring modal
     edit_recurring_title: 'Editar turno recurrente',
