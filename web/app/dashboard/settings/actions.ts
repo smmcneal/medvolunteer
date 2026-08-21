@@ -336,6 +336,19 @@ export async function updateCategoryDescription(
   return {}
 }
 
+export async function updateCategoryColor(
+  id: string,
+  color: string,
+): Promise<{ error?: string }> {
+  await requireAdmin()
+  const admin = createAdminClient()
+  const { error } = await admin.from('categories').update({ color }).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/settings')
+  revalidatePath('/dashboard/shifts')
+  return {}
+}
+
 export async function archiveCategory(id: string): Promise<{ error?: string }> {
   await requireAdmin()
   const admin = createAdminClient()

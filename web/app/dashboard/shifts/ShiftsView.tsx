@@ -19,6 +19,7 @@ import {
 } from './actions'
 import type { ShiftWithRoster } from './page'
 import type { Location, Volunteer } from '@/types/database'
+import { DEFAULT_CATEGORY_COLOR } from '@/lib/categoryColors'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -28,14 +29,6 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
 const LOC_COLORS = ['#3B82F6','#00ACC1','#8B5CF6','#F59E0B','#EF4444','#EC4899','#06B6D4']
-
-const CAT_COLORS: Record<string, string> = {
-  medical_professional: '#00ACC1',
-  support_staff: '#3B82F6',
-  admin: '#8B5CF6',
-  trainee: '#F59E0B',
-  other: '#6B7280',
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -109,7 +102,7 @@ export default function ShiftsView({
   locations: Pick<Location, 'id' | 'name'>[]
   volunteers: VolunteerLike[]
   holidays?: { id: string; name: string; date: string; is_recurring: boolean }[]
-  categories?: { id: string; slug: string; name: string }[]
+  categories?: { id: string; slug: string; name: string; color: string }[]
   extendedHours?: boolean
 }) {
   const router = useRouter()
@@ -176,6 +169,13 @@ export default function ShiftsView({
   const categoryBySlug = useMemo(() => {
     const map: Record<string, string> = {}
     for (const c of categories) map[c.slug] = c.name
+    return map
+  }, [categories])
+
+  // Build a category color lookup map (slug -> color) for coloring shifts on the calendar
+  const categoryColorBySlug = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const c of categories) map[c.slug] = c.color ?? DEFAULT_CATEGORY_COLOR
     return map
   }, [categories])
 
@@ -667,7 +667,7 @@ export default function ShiftsView({
                         const needed = s.required_count
                         const isSelected = selectedId === s.id
                         const primaryCategory = s.required_categories[0] ?? null
-                        const catColor = primaryCategory ? (CAT_COLORS[primaryCategory] ?? '#6b7280') : null
+                        const catColor = primaryCategory ? (categoryColorBySlug[primaryCategory] ?? '#6b7280') : null
                         return (
                           <div
                             key={s.id}
@@ -758,7 +758,7 @@ export default function ShiftsView({
                         className="shift-view-toggle-btn"
                         style={{
                           padding: '6px 14px', borderRadius: '7px', cursor: 'pointer',
-                          background: listCategoryFilter === cat.slug ? (CAT_COLORS[cat.slug] ?? NAVY) : 'var(--surface-card)',
+                          background: listCategoryFilter === cat.slug ? (categoryColorBySlug[cat.slug] ?? NAVY) : 'var(--surface-card)',
                           color: listCategoryFilter === cat.slug ? 'white' : 'var(--text-secondary)',
                           border: listCategoryFilter === cat.slug ? 'none' : '1px solid var(--surface-border)',
                           fontSize: '12px', fontWeight: 600,
@@ -845,7 +845,7 @@ export default function ShiftsView({
                                   {s.required_categories.map(slug => (
                                     <span key={slug} style={{
                                       fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: '99px',
-                                      background: `${CAT_COLORS[slug] ?? '#6b7280'}18`, color: CAT_COLORS[slug] ?? '#6b7280',
+                                      background: `${categoryColorBySlug[slug] ?? '#6b7280'}18`, color: categoryColorBySlug[slug] ?? '#6b7280',
                                     }}>
                                       {categoryBySlug[slug] ?? slug}
                                     </span>
@@ -1063,7 +1063,7 @@ export default function ShiftsView({
                     {selected.required_categories.map(slug => (
                       <span key={slug} style={{
                         fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px',
-                        background: `${CAT_COLORS[slug] ?? '#6b7280'}18`, color: CAT_COLORS[slug] ?? '#6b7280',
+                        background: `${categoryColorBySlug[slug] ?? '#6b7280'}18`, color: categoryColorBySlug[slug] ?? '#6b7280',
                       }}>
                         {categoryBySlug[slug] ?? slug}
                       </span>
@@ -1133,9 +1133,9 @@ export default function ShiftsView({
                         >
                           <div style={{
                             width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
-                            background: `${CAT_COLORS[v.category] ?? '#6b7280'}18`,
+                            background: `${categoryColorBySlug[v.category] ?? '#6b7280'}18`,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '10px', fontWeight: 700, color: CAT_COLORS[v.category] ?? '#6b7280',
+                            fontSize: '10px', fontWeight: 700, color: categoryColorBySlug[v.category] ?? '#6b7280',
                           }}>
                             {initials(v.first_name, v.last_name)}
                           </div>
@@ -1199,9 +1199,9 @@ export default function ShiftsView({
                       >
                         <div style={{
                           width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
-                          background: `${CAT_COLORS[v.category] ?? '#6b7280'}18`,
+                          background: `${categoryColorBySlug[v.category] ?? '#6b7280'}18`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '10px', fontWeight: 700, color: CAT_COLORS[v.category] ?? '#6b7280',
+                          fontSize: '10px', fontWeight: 700, color: categoryColorBySlug[v.category] ?? '#6b7280',
                         }}>
                           {initials(v.first_name, v.last_name)}
                         </div>
@@ -1229,7 +1229,7 @@ export default function ShiftsView({
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                   {selected.assignments.map(a => {
-                    const color = CAT_COLORS[a.volunteer.category] ?? '#6b7280'
+                    const color = categoryColorBySlug[a.volunteer.category] ?? '#6b7280'
                     const te = a.time_entry
                     const isClockedIn  = te && !te.clock_out
                     const isClockedOut = te && te.clock_out
@@ -1629,8 +1629,8 @@ export default function ShiftsView({
                       >
                         <span style={{
                           width: '26px', height: '26px', borderRadius: '50%',
-                          background: CAT_COLORS[v.category] + '22',
-                          color: CAT_COLORS[v.category] ?? '#6b7280',
+                          background: `${categoryColorBySlug[v.category] ?? '#6b7280'}22`,
+                          color: categoryColorBySlug[v.category] ?? '#6b7280',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: '10px', fontWeight: 700, flexShrink: 0,
                         }}>
