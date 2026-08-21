@@ -9,6 +9,7 @@ export interface Category {
   slug: string
   name: string
   description: string | null
+  color: string
   is_archived: boolean
   sort_order: number
   created_at: string

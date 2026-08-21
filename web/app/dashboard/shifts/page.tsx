@@ -82,7 +82,7 @@ async function fetchShiftsData() {
 
     supabase
       .from('categories')
-      .select('id, slug, name')
+      .select('id, slug, name, color')
       .eq('is_archived', false)
       .order('sort_order'),
 
@@ -155,7 +155,7 @@ async function fetchShiftsData() {
     locations: (locationsRes.data ?? []) as Pick<Location, 'id' | 'name'>[],
     volunteers: (volunteersRes.data ?? []) as Pick<Volunteer, 'id' | 'first_name' | 'last_name' | 'category' | 'status' | 'pipeline_phase'>[],
     holidays: (holidaysRes.data ?? []) as Pick<OrgHoliday, 'id' | 'name' | 'date' | 'is_recurring'>[],
-    categories: (categoriesRes.data ?? []) as Pick<Category, 'id' | 'slug' | 'name'>[],
+    categories: (categoriesRes.data ?? []) as Pick<Category, 'id' | 'slug' | 'name' | 'color'>[],
     extendedHours: orgSettings.extended_hours ?? false,
   }
 }

@@ -27,6 +27,7 @@ import {
   deleteDocumentAutomationRule,
   addCategory,
   updateCategoryName,
+  updateCategoryColor,
   archiveCategory,
   restoreCategory,
 } from './actions'
@@ -35,6 +36,7 @@ import FlagsManager from './FlagsManager'
 import UsersManager from './UsersManager'
 import ApplicationFormManager, { type VersionSummary } from './ApplicationFormManager'
 import { useAdminT } from '@/lib/admin-lang'
+import { CATEGORY_COLOR_SWATCHES, DEFAULT_CATEGORY_COLOR } from '@/lib/categoryColors'
 
 type Tab = 'profile' | 'locations' | 'integrations' | 'categories' | 'holidays' | 'automation' | 'tags' | 'flags' | 'application_form' | 'users'
 
@@ -1247,6 +1249,7 @@ function HolidaysTab({ initialHolidays }: { initialHolidays: OrgHoliday[] }) {
 
 function CategoriesTab({ descriptions: initial, requirements: initialRequirements, coordinators: initialCoordinators, activeVolunteers, categories: initialCategories }: { descriptions: Record<string, string>; requirements: CategoryRequirement[]; coordinators: CategoryCoordinator[]; activeVolunteers: { id: string; first_name: string; last_name: string }[]; categories: Category[] }) {
   const router = useRouter()
+  const t = useAdminT()
   const [descriptions, setDescriptions] = useState<Record<string, string>>(initial)
   const [isPending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
@@ -1282,6 +1285,11 @@ function CategoriesTab({ descriptions: initial, requirements: initialRequirement
     setCategories(prev => prev.map(c => c.id === id ? { ...c, name: trimmed } : c))
     setEditingCatId(null)
     await updateCategoryName(id, trimmed)
+  }
+
+  function handleSetCategoryColor(id: string, color: string) {
+    setCategories(prev => prev.map(c => c.id === id ? { ...c, color } : c))
+    startCatTransition(() => { void updateCategoryColor(id, color) })
   }
 
   // Coordinators
@@ -1447,6 +1455,30 @@ function CategoriesTab({ descriptions: initial, requirements: initialRequirement
               placeholder={`Describe the ${cat.name} role…`}
               style={fieldStyle}
             />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+              <span style={{ fontSize: '12px', color: '#6b7280' }}>{t('category_color_label')}</span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {CATEGORY_COLOR_SWATCHES.map(swatch => {
+                  const isSelected = (cat.color ?? DEFAULT_CATEGORY_COLOR).toLowerCase() === swatch.toLowerCase()
+                  return (
+                    <button
+                      key={swatch}
+                      type="button"
+                      onClick={() => handleSetCategoryColor(cat.id, swatch)}
+                      aria-label={swatch}
+                      aria-pressed={isSelected}
+                      title={swatch}
+                      style={{
+                        width: '20px', height: '20px', borderRadius: '50%',
+                        background: swatch, cursor: 'pointer', padding: 0,
+                        border: isSelected ? '2px solid #1B2A4A' : '2px solid transparent',
+                        boxShadow: isSelected ? `0 0 0 2px white, 0 0 0 3px ${swatch}` : 'none',
+                      }}
+                    />
+                  )
+                })}
+              </div>
+            </div>
           </div>
         ))}
       </div>

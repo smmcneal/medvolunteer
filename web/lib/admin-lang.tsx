@@ -504,6 +504,9 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     lesson_title: 'Lesson Title',
     lesson_type: 'Type',
     save_module: 'Save Module',
+
+    // Category color picker
+    category_color_label: 'Color',
   },
 
   es: {
@@ -1005,6 +1008,9 @@ export const ADMIN_TRANSLATIONS: Record<AdminLang, Record<string, string>> = {
     lesson_title: 'Título de la lección',
     lesson_type: 'Tipo',
     save_module: 'Guardar módulo',
+
+    // Category color picker
+    category_color_label: 'Color',
   },
 }
 
